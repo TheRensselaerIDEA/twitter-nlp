@@ -1,6 +1,9 @@
 # covid19_tweet_ids
 Tweet IDs for COVID-19-related Twitter posts (starting March 2020)
 
+## Project overview
+See [project overview slides](https://docs.google.com/presentation/d/1iXgehix_hE_sg2qoOrDjCVfGvFRE5lFXISznNnNdklg/edit?usp=sharing)
+
 ## Data Format
 Coming Soon...
 
