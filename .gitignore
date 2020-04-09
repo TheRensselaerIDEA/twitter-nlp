@@ -3,3 +3,4 @@ analysis/.Rhistory
 analysis/.RData
 twitter_monitor/api_creds.txt
 twitter_monitor/tmlog.txt
+.vscode/launch.json

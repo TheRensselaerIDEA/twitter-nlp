@@ -1,0 +1,6 @@
+{
+    "py/object": "config.Config",
+    "elasticsearch_host": "localhost",
+    "elasticsearch_verify_certs": false,
+    "elasticsearch_index_name": "coronavirus-data2"
+}
