@@ -1,17 +1,4 @@
 
-```{r setup, include=FALSE}
-
-
-if (!require("knitr")) {
-   install.packages("knitr")
-   library(knitr)
-}
-
-if (!require("rmarkdown")) {
-  install.packages("rmarkdown")
-  library(rmarkdown)
-}
-
 if (!require("elastic")) {
   install.packages("elastic")
   library(elastic)
@@ -22,25 +9,33 @@ if (!require("lubridate")) {
   library(lubridate)
 }
 
-knitr::opts_chunk$set(echo = TRUE)
+########################################################################################
+# Demo script for querying a dataframe of twitter data from Elasticsearch by date range.
+# Configure here and run!
 
-```
-
-
-```{r}
-####################################################################
+# URL to Elasticsearch instance
 ideavmelasticsearch <- "http://localhost:9200"
-indexname <- "coronavirus-data"
+
+# Elasticsearch index name
+indexname <- "coronavirus-data2"
+
+# query start date/time (inclusive)
 rangestart <- ymd_hms("2020-04-08 00:00:00")
+
+# query end date/time (exclusive)
 rangeend <- ymd_hms("2020-04-08 01:00:00")
+
+# number of results to return (max 10,000)
 resultsize <- 50
+
+# fields to include in results
 resultfields <- '"id_str", "created_at", "user.id_str", "user.screen_name",
             "in_reply_to_status_id_str", "favorite_count", "text", "extended_tweet.full_text",
             "source", "retweeted", "in_reply_to_screen_name", "in_reply_to_user_id_str",
-            "retweet_count", "favorited", "entities.hashtags", "extended_entities.hashtags",
-            "entities.urls", "extended_entities.urls"'
+            "retweet_count", "favorited", "entities.hashtags", "extended_tweet.entities.hashtags",
+            "entities.urls", "extended_tweet.entities.urls"'
 
-####################################################################
+########################################################################################
 
 conn <- connect(es_host = ideavmelasticsearch,
         es_path = "", 
@@ -88,11 +83,13 @@ results.total <- results$hits$total$value
 results.df <- results$hits$hits[,6:ncol(results$hits$hits)]
 #fix column names
 colnames(results.df) <- sub("_source.", "", colnames(results.df))
+colnames(results.df) <- sub("extended_tweet.entities.", "extended_tweet.entities.full_", colnames(results.df))
 colnames(results.df) <- sub("extended_tweet.", "", colnames(results.df))
 colnames(results.df) <- sub("entities.", "", colnames(results.df))
-colnames(results.df) <- sub("extended_tweet.", "", colnames(results.df))
 colnames(results.df) <- sub("user.", "user_", colnames(results.df))
 #merge 'text' and 'full_text'
 results.df$full_text <- ifelse(is.na(results.df$full_text), results.df$text, results.df$full_text)
 
-```
+#TODO: drop original 'text' column
+#TODO: merge 'hashtags' and 'full_hashtags', merge 'urls' and 'full_urls'
+#TODO: drop original 'hashtags' and 'urls' columns
