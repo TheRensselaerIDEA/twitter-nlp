@@ -1,0 +1,130 @@
+
+```{r setup, include=FALSE}
+# Required R package installation:
+# These will install packages if they are not already installed
+# Set the correct default repository
+r = getOption("repos")
+r["CRAN"] = "http://cran.rstudio.com"
+options(repos = r)
+
+
+if (!require("ggplot2")) {
+  install.packages("ggplot2")
+  library(ggplot2)
+}
+if (!require("knitr")) {
+  install.packages("knitr")
+  library(knitr)
+}
+
+if (!require("ggbiplot")) {
+   devtools::install_git("https://github.com/vqv/ggbiplot.git")
+   library(ggbiplot)
+}
+
+if (!require("scatterplot3d")) {
+  install.packages("scatterplot3d")
+  library(scatterplot3d)
+}
+
+if (!require("gplots")) {
+  install.packages("gplots")
+  library(gplots)
+}
+
+if (!require('fields')) {
+  install.packages("fields")
+  library(fields)
+}
+
+if (!require('dplyr')) {
+  install.packages("dplyr")
+  library(dplyr)
+}
+
+if(!require('stringr')) {
+  install.packages("stringr")
+  library(stringr)
+}
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+tweet.vectors.df <-read.csv("tweet_vectors.csv")
+tweet.vectors.matrix <- as.matrix(tweet.vectors.df[,6:ncol(tweet.vectors.df)])
+```
+
+```{r}
+wssplot <- function(data, fc=1, nc=40, seed=20){
+  wss <- data.frame(cluster=fc:nc, quality=c(0))
+  for (i in fc:nc){
+    set.seed(seed)
+    wss[i-fc+1,2] <- sum(kmeans(data, centers=i, iter.max=30)$withinss)}
+  ggplot(data=wss,aes(x=cluster,y=quality)) + 
+    geom_line() + 
+    ggtitle("Quality of k-means by Cluster")
+}
+# Generate the plot
+wssplot(tweet.vectors.matrix)
+```
+
+```{r}
+# Final model:
+set.seed(300)
+k <- 18
+km <- kmeans(tweet.vectors.matrix, centers=k, iter.max=30)
+
+tweet.vectors.df$cluster <- as.factor(km$cluster)
+
+#append cluster centers to dataset for visualization
+centers.df <- as.data.frame(km$centers)
+centers.df$tweets_text <- paste("Cluster (", rownames(km$centers), ") Center", sep="")
+centers.df$tweets_user_name <- "[N/A]"
+centers.df$tweets_user_verified = "[N/A]"
+centers.df$tweets_location <- "[N/A]"
+centers.df$tweets_location_type <- "[N/A]"
+centers.df$cluster <- as.factor(rownames(km$centers))
+
+tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
+
+```
+
+```{r}
+# Subclustering
+tweet.vectors.df$subcluster <- c(0)
+
+for (i in 1:k){
+ print(paste("Subclustering cluster ", i, "..."))
+ cluster.df <- tweet.vectors.df[tweet.vectors.df$cluster == i,]
+ cluster.matrix <- as.matrix(cluster.df[,6:ncol(cluster.df)])
+ set.seed(500)
+ cluster.k <- 5
+ cluster.km <- kmeans(cluster.matrix, centers=cluster.k, iter.max=30)
+ tweet.vectors.df[rownames(cluster.df), ncol(tweet.vectors.df)] <- cluster.km$cluster
+ 
+ #append subcluster centers to dataset for visualization
+ centers.df <- as.data.frame(cluster.km$centers)
+ centers.df$tweets_text <- paste("Subcluster (", rownames(cluster.km$centers), ") Center", sep="")
+ centers.df$tweets_user_name <- "[N/A]"
+ centers.df$tweets_user_verified = "[N/A]"
+ centers.df$tweets_location <- "[N/A]"
+ centers.df$tweets_location_type <- "[N/A]"
+ centers.df$cluster <- as.factor(i)
+ centers.df$subcluster <- rownames(cluster.km$centers)
+ 
+ tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
+}
+tweet.vectors.df$subcluster <- as.factor(tweet.vectors.df$subcluster)
+```
+
+```{r}
+tweet.vectors.df$cluster_str <- paste("(", tweet.vectors.df$cluster, ")", sep="")
+tweet.vectors.df$subcluster_str <- paste("(", tweet.vectors.df$subcluster, ")", sep="")
+
+metadata_cols <- c("tweets_text", "tweets_user_name", "tweets_user_verified", "tweets_location", "tweets_location_type", "cluster_str", "subcluster_str")
+data_cols <- setdiff(colnames(tweet.vectors.df), c(metadata_cols, "cluster", "subcluster"))
+write.table(tweet.vectors.df[,metadata_cols], "clustered_tweet_labels.tsv", sep='\t', row.names = FALSE)
+write.table(tweet.vectors.df[,data_cols], "clustered_tweet_vectors.tsv", sep='\t', row.names = FALSE, col.names = FALSE)
+```
