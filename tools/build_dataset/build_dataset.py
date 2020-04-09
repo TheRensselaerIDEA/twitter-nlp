@@ -40,23 +40,17 @@ es = Elasticsearch(hosts=[config.elasticsearch_host],
 #------------------------------------------------------------------
 
 s = Search(using=es, index=config.elasticsearch_index_name)
-query = {"query": {"bool": {"filter": [
-  {
+query = {
+  "query": {
     "bool": {
       "must_not": {
-        "bool": {
-          "should": [
-            {
-              "exists": {
-                "field": "retweeted_status.id"
-              }
-            }
-          ]
+        "exists": {
+          "field": "retweeted_status.id"
         }
       }
     }
   }
-]}}}
+}
 if args.randomsample:
   s = s.params(preserve_order=True)
   query = {"query": {

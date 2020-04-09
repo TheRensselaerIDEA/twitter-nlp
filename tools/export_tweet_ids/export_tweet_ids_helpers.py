@@ -20,19 +20,16 @@ def get_query(mode, range_start, range_end):
             }
         },
         "sort": [
-            { "created_at": "asc" }
+            { "created_at": "asc" },
+            { "_id": "asc"}
         ]
     }
     if mode == "originals-only":
         query["query"]["bool"]["filter"].append({
             "bool": {
                 "must_not": {
-                    "bool": {
-                        "should": [
-                            {
-                                "exists": { "field": "retweeted_status.id" }
-                            }
-                        ]
+                    "exists": { 
+                        "field": "retweeted_status.id" 
                     }
                 }
             }

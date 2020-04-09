@@ -54,15 +54,24 @@ while current_time < enddate + timedelta(days=1):
   s.update_from_dict(query)
 
   hour_file = os.path.join(month_dir, "tweet-ids-{0}.txt".format(current_range_start.strftime("%Y-%m-%d-%H")))
-  with open(hour_file, "w", encoding="utf-8") as file:
-    for i,hit in enumerate(s.scan()):
-      total_count += 1
-      tweet_id = hit.meta["id"]
-      if (i > 0):
-        file.write('\n')
-      file.write(tweet_id)
+  file = None
+  for i,hit in enumerate(s.scan()):
+    total_count += 1
+    tweet_id = hit.meta["id"]
+    if (i == 0):
+      file = open(hour_file, "w", encoding="utf-8")
+    else:
+      file.write('\n')
+    file.write(tweet_id)
 
-  print("Exported range ({0} <= t < {1}). Cumulative total so far: {2}".format(current_range_start, current_range_end, total_count))
+  if file is not None:
+    file.close()
+
+  print("{0} range ({1} <= t < {2}). Cumulative total so far: {3}".format(
+    "Exported" if file is not None else "Nothing in",
+    current_range_start, 
+    current_range_end, 
+    total_count))
 
   #increment the range by an hour
   current_time += timedelta(hours=1)
