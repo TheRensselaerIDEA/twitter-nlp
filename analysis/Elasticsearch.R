@@ -13,17 +13,20 @@ if (!require("lubridate")) {
 # Demo script for querying a dataframe of twitter data from Elasticsearch by date range.
 # Configure here and run!
 
-# URL to Elasticsearch instance
-ideavmelasticsearch <- "http://localhost:9200"
+# Elasticsearch instance info
+elasticsearch_host <- ""
+elasticsearch_path <- "elasticsearch"
+elasticsearch_port <- 443
+elasticsearch_schema <- "https"
 
 # Elasticsearch index name
-indexname <- "coronavirus-data2"
+indexname <- "coronavirus-data"
 
 # query start date/time (inclusive)
-rangestart <- ymd_hms("2020-04-08 00:00:00")
+rangestart <- ymd_hms("2020-03-26 00:00:00")
 
 # query end date/time (exclusive)
-rangeend <- ymd_hms("2020-04-08 01:00:00")
+rangeend <- ymd_hms("2020-03-26 01:00:00")
 
 # number of results to return (max 10,000)
 resultsize <- 50
@@ -37,11 +40,11 @@ resultfields <- '"id_str", "created_at", "user.id_str", "user.screen_name",
 
 ########################################################################################
 
-conn <- connect(es_host = ideavmelasticsearch,
-        es_path = "", 
-        es_port = 443, 
-        es_transport_schema = "https",
-        errors="complete")
+conn <- connect(host = elasticsearch_host,
+                path = elasticsearch_path, 
+                port = elasticsearch_port, 
+                transport_schema = elasticsearch_schema,
+                errors="complete")
 
 gte_str = format(rangestart, "%Y-%m-%dT%H:%M:%S")
 lt_str = format(rangeend, "%Y-%m-%dT%H:%M:%S")
