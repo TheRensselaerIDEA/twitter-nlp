@@ -54,15 +54,15 @@ def verify_or_setup_index(config):
         }
     else:
         #dense_vector not supported until ES 7
-        mappings["properties"]["embedding.use_large"] = {
+        mappings["properties"]["embedding.use_large.primary"] = {
             "type": "dense_vector",
             "dims": 512
         }
-        mappings["properties"]["embedding.quoted.use_large"] = {
+        mappings["properties"]["embedding.use_large.quoted"] = {
             "type": "dense_vector",
             "dims": 512
         }
-        mappings["properties"]["embedding.quoted_concat.use_large"] = {
+        mappings["properties"]["embedding.use_large.quoted_concat"] = {
             "type": "dense_vector",
             "dims": 512
         }

@@ -102,20 +102,18 @@ while True:
                 "_id": hit_id,
                 "doc": {
                     "embedding": {
-                        "use_large": vecs[i].tolist()
+                        "use_large": {
+                            "primary": vecs[i].tolist()
+                        }
                     }
                 }
             }
             i += 1
             if i < len(embed_ids) and embed_ids[i] == hit_id:
-                action["doc"]["embedding"]["quoted"] = {
-                    "use_large": vecs[i].tolist()
-                }
+                action["doc"]["embedding"]["use_large"]["quoted"] = vecs[i].tolist()
                 i += 1
             if i < len(embed_ids) and embed_ids[i] == hit_id:
-                action["doc"]["embedding"]["quoted_concat"] = {
-                    "use_large": vecs[i].tolist()
-                }
+                action["doc"]["embedding"]["use_large"]["quoted_concat"] = vecs[i].tolist()
                 i += 1
             updates.append(action)
         

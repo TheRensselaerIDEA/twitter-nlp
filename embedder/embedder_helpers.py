@@ -13,7 +13,7 @@ def get_query():
             "bool": {
                 "must_not": {
                 "exists": {
-                    "field": "embedding.use_large"
+                    "field": "embedding.use_large.primary"
                   }
                 }
               }
