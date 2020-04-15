@@ -1,11 +1,11 @@
 """
-Config class containing all the settings for running build_dataset tool
+Config class containing all the settings for running embedder tool
 """
 
 import jsonpickle
 
 class Config(object):
-    """Container for build_dataset tool settings.
+    """Container for embedder tool settings.
 
     """
     def __init__(self):
@@ -15,6 +15,16 @@ class Config(object):
         self.elasticsearch_host = ""
         self.elasticsearch_verify_certs = False
         self.elasticsearch_index_name = ""
+        self.elasticsearch_batch_size = 1024
+
+        #Embedding settings
+        self.use_large_tfhub_url = ""
+        self.use_large_batch_size = 128
+
+        #Processing settings
+        self.sleep_idle_secs = 5
+        self.sleep_not_idle_secs = 0.01
+        self.log_level = "ERROR"
 
     @staticmethod
     def load(filepath):

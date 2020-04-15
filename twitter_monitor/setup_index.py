@@ -58,6 +58,14 @@ def verify_or_setup_index(config):
             "type": "dense_vector",
             "dims": 512
         }
+        mappings["properties"]["embedding.quoted.use_large"] = {
+            "type": "dense_vector",
+            "dims": 512
+        }
+        mappings["properties"]["embedding.quoted_concat.use_large"] = {
+            "type": "dense_vector",
+            "dims": 512
+        }
 
     es.indices.create(config.elasticsearch_index_name, {
         "mappings": mappings

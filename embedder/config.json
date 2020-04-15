@@ -1,0 +1,13 @@
+{
+    "py/object": "config.Config",
+    "elasticsearch_host": "localhost",
+    "elasticsearch_verify_certs": false,
+    "elasticsearch_index_name": "corona-test2",
+    "elasticsearch_batch_size": 1024,
+    "use_large_tfhub_url": "https://tfhub.dev/google/universal-sentence-encoder-large/5",
+    "use_large_batch_size": 128,
+    "sleep_idle_secs": 5,
+    "sleep_not_idle_secs": 0.01,
+    "log_level": "WARNING"
+
+}
