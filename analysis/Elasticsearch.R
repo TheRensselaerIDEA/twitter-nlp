@@ -9,9 +9,23 @@ if (!require("lubridate")) {
   library(lubridate)
 }
 
+if (!require("httr")) {
+  install.packages("httr")
+  library(httr)
+}
+
+if (!require("jsonlite")) {
+  install.packages("jsonlite")
+  library(jsonlite)
+}
+
 ########################################################################################
-# Demo script for querying a dataframe of twitter data from Elasticsearch by date range.
+# Demo script for querying a dataframe of twitter data from Elasticsearch by date range
+# and semantic similarity phrase.
 # Configure here and run!
+
+# Embedding server info
+embed_use_large_url <- "http://localhost:8080/embed/use_large/"
 
 # Elasticsearch instance info
 elasticsearch_host <- ""
@@ -20,13 +34,16 @@ elasticsearch_port <- 443
 elasticsearch_schema <- "https"
 
 # Elasticsearch index name
-indexname <- "coronavirus-data"
+indexname <- "coronavirus-data-all"
 
 # query start date/time (inclusive)
-rangestart <- ymd_hms("2020-03-26 00:00:00")
+rangestart <- ymd_hms("2020-03-18 00:00:00")
 
 # query end date/time (exclusive)
-rangeend <- ymd_hms("2020-03-26 01:00:00")
+rangeend <- ymd_hms("2020-03-19 00:00:00")
+
+# query semantic similarity phrase
+semantic_phrase <- ""
 
 # number of results to return (max 10,000)
 resultsize <- 50
@@ -40,6 +57,14 @@ resultfields <- '"id_str", "created_at", "user.id_str", "user.screen_name",
 
 ########################################################################################
 
+embed_use_large <- function(text) {
+  req <- paste(embed_use_large_url, URLencode(text, reserved=TRUE), sep="")
+  res <- GET(req)
+  res.text <- content(res, "text", encoding="UTF-8")
+  res.json <- fromJSON(res.text)
+  text_embedding <- res.json$use_large
+}
+
 conn <- connect(host = elasticsearch_host,
                 path = elasticsearch_path, 
                 port = elasticsearch_port, 
@@ -49,41 +74,82 @@ conn <- connect(host = elasticsearch_host,
 gte_str = format(rangestart, "%Y-%m-%dT%H:%M:%S")
 lt_str = format(rangeend, "%Y-%m-%dT%H:%M:%S")
 
-query <- sprintf('{
-  "sort" : [
-    { "created_at" : "asc" }
-  ],
-  "_source": [%s],
-  "query": {
-    "bool": {
-      "filter": [
-        {
-          "range" : {
-            "created_at" : {
-              "gte": "%s",
-              "lt": "%s",
-              "format": "strict_date_hour_minute_second",
-              "time_zone": "+00:00"
+if (semantic_phrase == "") {
+  query <- sprintf('{
+    "sort" : [
+      { "created_at" : "asc" }
+    ],
+    "_source": [%s],
+    "query": {
+      "bool": {
+        "filter": [
+          {
+            "range" : {
+              "created_at" : {
+                "gte": "%s",
+                "lt": "%s",
+                "format": "strict_date_hour_minute_second",
+                "time_zone": "+00:00"
+              }
             }
-          }
-        },
-        {
-          "bool": {
-            "must_not": {
-              "exists": {
-                "field": "retweeted_status.id"
+          },
+          {
+            "bool": {
+              "must_not": {
+                "exists": {
+                  "field": "retweeted_status.id"
+                }
               }
             }
           }
-        }
-      ]
+        ]
+      }
     }
-  }
-}', resultfields, gte_str, lt_str)
+  }', resultfields, gte_str, lt_str)
+} else {
+  text_embedding <- embed_use_large(semantic_phrase)
+  query <- sprintf('{
+    "_source": [%s],
+    "query": {
+      "script_score": {
+        "query": {
+          "bool": {
+            "filter": [
+              {
+                "range" : {
+                  "created_at" : {
+                    "gte": "%s",
+                    "lt": "%s",
+                    "format": "strict_date_hour_minute_second",
+                    "time_zone": "+00:00"
+                  }
+                }
+              },
+              {
+                "exists": { "field": "embedding.use_large" }
+              }
+            ]
+          }
+        },
+        "script": {
+          "source": "cosineSimilarity(params.query_vector, doc[\'embedding.use_large\']) + 1.0",
+          "params": {"query_vector": %s}
+        }
+      }
+    }
+  }', resultfields, gte_str, lt_str, toJSON(text_embedding))
+}
 
 results <- Search(conn, index=indexname, body=query, size=resultsize, asdf=TRUE)
 results.total <- results$hits$total$value
-results.df <- results$hits$hits[,6:ncol(results$hits$hits)]
+results.df <- results$hits$hits[,c(4, 6:ncol(results$hits$hits))]
+
+#fix score for semantic search
+if (semantic_phrase != "") {
+  results.df$`_score` <- results.df$`_score` - 1.0
+  colnames(results.df)[1] <- "cosine_similarity"
+}
+
 #fix column names
 colnames(results.df) <- sub("_source.", "", colnames(results.df))
 colnames(results.df) <- sub("extended_tweet.entities.", "extended_tweet.entities.full_", colnames(results.df))
