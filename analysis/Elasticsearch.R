@@ -126,13 +126,13 @@ if (semantic_phrase == "") {
                 }
               },
               {
-                "exists": { "field": "embedding.use_large" }
+                "exists": { "field": "embedding.use_large.primary" }
               }
             ]
           }
         },
         "script": {
-          "source": "cosineSimilarity(params.query_vector, doc[\'embedding.use_large\']) + 1.0",
+          "source": "cosineSimilarity(params.query_vector, doc[\'embedding.use_large.primary\']) + 1.0",
           "params": {"query_vector": %s}
         }
       }
