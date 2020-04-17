@@ -5,6 +5,7 @@ import argparse
 import time
 import tweepy
 import logging
+from elasticsearch import Elasticsearch
 from setup_index import verify_or_setup_index
 from config import Config
 from tm_stream_listener import TwitterMonitorStreamListener
@@ -25,7 +26,11 @@ print("Logging level set to {0}...".format(config.log_level))
 print()
 
 #Verify or setup the elasticsearch index
-index_result = verify_or_setup_index(config)
+es = Elasticsearch(hosts=[config.elasticsearch_host], 
+                   verify_certs=config.elasticsearch_verify_certs,
+                   timeout=config.elasticsearch_timeout_secs)
+
+index_result = verify_or_setup_index(es, config)
 logging.info(index_result)
 print(index_result)
 print()
@@ -40,7 +45,7 @@ api = tweepy.API(auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True)
 restart_attempts = 0
 while True:
     try:
-        streamListener = TwitterMonitorStreamListener(config)
+        streamListener = TwitterMonitorStreamListener(es, config)
         stream = tweepy.Stream(auth=api.auth, listener=streamListener)
         print("Listening for tweets...")
         print()

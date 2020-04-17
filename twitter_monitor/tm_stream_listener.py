@@ -5,7 +5,7 @@ ElasticSearch.
 import tweepy
 import logging
 from config import Config
-from elasticsearch import Elasticsearch
+from elasticsearch.helpers import bulk
 
 
 class TwitterMonitorStreamListener(tweepy.StreamListener):
@@ -14,14 +14,14 @@ class TwitterMonitorStreamListener(tweepy.StreamListener):
     https://developer.twitter.com/en/docs/tweets/data-dictionary/overview/tweet-object.html
     '''
     
-    def __init__(self, config):
+    def __init__(self, es, config):
         super(TwitterMonitorStreamListener, self).__init__()
         
+        self.es = es
         self.config = config
+        self.batch = []
+        self.batch_ids = set()
         self.received_data = False
-            
-        self.es = Elasticsearch(hosts=[self.config.elasticsearch_host], 
-                                verify_certs=self.config.elasticsearch_verify_certs)
 
     def on_status(self, status):
         '''
@@ -49,15 +49,24 @@ class TwitterMonitorStreamListener(tweepy.StreamListener):
             #pull original out into its own dict (this will be persisted to ES separately)
             json_dict = json_dict["retweeted_status"]
 
-
-        self.es.index(index=self.config.elasticsearch_index_name, doc_type="_doc", body=json_dict, id=json_dict["id_str"])
-        logging.info("Ingested tweet [id={0}]: \"{1}\"".format(json_dict["id_str"], json_dict["text"]))
+        tweet_id = json_dict["id_str"]
+        if tweet_id not in self.batch_ids:
+            self.batch.append({"_op_type": "index", "_id": tweet_id, "_source": json_dict})
+            self.batch_ids.add(tweet_id)
+            logging.info("Queued tweet [id={0}]: \"{1}\"".format(tweet_id, json_dict["text"]))
 
         if retweet_json_dict is not None:
-            self.es.index(index=self.config.elasticsearch_index_name, doc_type="_doc", body=retweet_json_dict, id=retweet_json_dict["id_str"])
-            logging.info("Ingested retweet [id={0}] for original tweet id: {1}".format(
-                retweet_json_dict["id_str"], retweet_json_dict["retweeted_status"]["id_str"]))
+            retweet_id = retweet_json_dict["id_str"]
+            if retweet_id not in self.batch_ids:
+                self.batch.append({"_op_type": "index", "_id": retweet_id, "_source": retweet_json_dict})
+                self.batch_ids.add(retweet_id)
+                logging.info("Queued retweet [id={0}] for original tweet id: {1}".format(retweet_id, tweet_id))
     
+        if len(self.batch) >= self.config.elasticsearch_batch_size:
+            bulk(self.es, self.batch, index=self.config.elasticsearch_index_name, chunk_size=len(self.batch))
+            self.batch.clear()
+            self.batch_ids.clear()
+
         if not self.received_data:
             self.received_data = True
 

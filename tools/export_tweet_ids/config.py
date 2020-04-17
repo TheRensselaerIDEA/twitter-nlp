@@ -15,6 +15,7 @@ class Config(object):
         self.elasticsearch_host = ""
         self.elasticsearch_verify_certs = False
         self.elasticsearch_index_name = ""
+        self.elasticsearch_timeout_secs = 30
 
     @staticmethod
     def load(filepath):

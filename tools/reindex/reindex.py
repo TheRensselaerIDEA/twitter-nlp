@@ -25,7 +25,8 @@ print("Using '{0}' as source index and '{1}' as target index.".format(args.sourc
 print()
 
 es = Elasticsearch(hosts=[config.elasticsearch_host], 
-                    verify_certs=config.elasticsearch_verify_certs)
+                    verify_certs=config.elasticsearch_verify_certs,
+                    timeout=config.elasticsearch_timeout_secs)
 
 if args.verify:
     #verifying the data

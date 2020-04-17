@@ -36,7 +36,8 @@ use_large = hub.load(config.use_large_tfhub_url)
 
 #Initialize elasticsearch settings
 es = Elasticsearch(hosts=[config.elasticsearch_host], 
-                   verify_certs=config.elasticsearch_verify_certs)
+                   verify_certs=config.elasticsearch_verify_certs,
+                   timeout=config.elasticsearch_timeout_secs)
 
 #Poll for docs that need embedding
 print("Polling for unembedded docs in Elasticsearch...")
@@ -98,7 +99,6 @@ while True:
             hit_id = embed_ids[i]
             action = {
                 "_op_type": "update",
-                "_index": config.elasticsearch_index_name,
                 "_id": hit_id,
                 "doc": {
                     "embedding": {
@@ -123,7 +123,7 @@ while True:
 
         #Issue the bulk update request
         logging.info("Making bulk request to Elasticsearch with {0} update actions...".format(len(updates)))
-        bulk(es, updates)
+        bulk(es, updates, index=config.elasticsearch_index_name, chunk_size=len(updates))
 
         #Sleep - not idle
         logging.info("Updates completed successfully. Going to sleep (not idle)...")

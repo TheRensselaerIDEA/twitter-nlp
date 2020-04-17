@@ -8,6 +8,8 @@
     "elasticsearch_verify_certs": false,
     "elasticsearch_index_name": "coronavirus-data2",
     "elasticsearch_compat_mode": false,
+    "elasticsearch_batch_size": 500,
+    "elasticsearch_timeout_secs": 30,
     "log_level": "WARNING",
     "restart_attempts": -1,
     "restart_wait_secs": 10,

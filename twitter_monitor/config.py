@@ -22,6 +22,8 @@ class Config(object):
         self.elasticsearch_verify_certs = False
         self.elasticsearch_index_name = ""
         self.elasticsearch_compat_mode = False
+        self.elasticsearch_batch_size = 500
+        self.elasticsearch_timeout_secs = 30
 
         #logging and error handling settings
         self.log_level = "ERROR"

@@ -34,7 +34,8 @@ if startdate > enddate:
   raise ValueError("--enddate must be greater than or equal to --startdate.")
 
 es = Elasticsearch(hosts=[config.elasticsearch_host], 
-                     verify_certs=config.elasticsearch_verify_certs)
+                     verify_certs=config.elasticsearch_verify_certs,
+                     timeout=config.elasticsearch_timeout_secs)
 
 total_count = 0
 current_time = startdate

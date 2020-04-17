@@ -1,10 +1,6 @@
 from config import Config
-from elasticsearch import Elasticsearch
 
-def verify_or_setup_index(config):
-    es = Elasticsearch(hosts=[config.elasticsearch_host], 
-                   verify_certs=config.elasticsearch_verify_certs)
-    
+def verify_or_setup_index(es, config):    
     index_exists = es.indices.exists(config.elasticsearch_index_name)
     #Do nothing if the index exists
     if index_exists:

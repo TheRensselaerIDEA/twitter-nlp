@@ -15,7 +15,8 @@ class Config(object):
         self.elasticsearch_host = ""
         self.elasticsearch_verify_certs = False
         self.elasticsearch_index_name = ""
-        self.elasticsearch_batch_size = 1024
+        self.elasticsearch_batch_size = 500
+        self.elasticsearch_timeout_secs = 30
 
         #Embedding settings
         self.use_large_tfhub_url = ""
