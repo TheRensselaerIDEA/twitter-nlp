@@ -37,4 +37,4 @@ class Embedding(Resource):
             }
 
 api.add_resource(Embedding, "/embed/<string:model>/<string:text>")
-app.run(debug=False, port=args.port)
+app.run(debug=False, port=args.port, host="0.0.0.0")
