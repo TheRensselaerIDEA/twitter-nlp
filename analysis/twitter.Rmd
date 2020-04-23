@@ -61,6 +61,10 @@ resultsize <- 10000
 ```
 
 ```{r, echo=FALSE}
+###############################################################################
+# Get the tweets from Elasticsearch using the search parameters defined above
+###############################################################################
+
 results <- do_search(indexname="coronavirus-data-all", 
                      rangestart=rangestart,
                      rangeend=rangeend,
@@ -72,12 +76,19 @@ results <- do_search(indexname="coronavirus-data-all",
                      elasticsearch_port=443,
                      elasticsearch_schema="https")
 
+# this dataframe contains the tweet text and other metadata
 tweet.vectors.df <- results$df[,c("full_text", "user_screen_name", "user_verified", "user_location", "place.country", "place.full_name")]
+
+# this matrix contains the embedding vectors for every tweet in tweet.vectors.df
 tweet.vectors.matrix <- t(simplify2array(results$df[,"embedding.use_large.primary"]))
 ```
 
 ```{r, echo=FALSE}
-#Clean up metadata text
+###############################################################################
+# Clean the tweet and user location text, and set up tweet.vectors.df 
+# the way we want it by consolidating the location field and computing
+# location type
+###############################################################################
 
 tweet.vectors.df$user_location <- ifelse(is.na(tweet.vectors.df$place.full_name), tweet.vectors.df$user_location, paste(tweet.vectors.df$place.full_name, tweet.vectors.df$place.country, sep=", "))
 tweet.vectors.df$user_location[is.na(tweet.vectors.df$user_location)] <- ""
@@ -112,7 +123,10 @@ tweet.vectors.df$user_location <- sapply(tweet.vectors.df$user_location, clean_t
 ```
 
 ```{r, echo=FALSE}
-# Final model:
+###############################################################################
+# Run K-means on all the tweet embedding vectors
+###############################################################################
+
 set.seed(300)
 k <- 5
 km <- kmeans(tweet.vectors.matrix, centers=k, iter.max=30)
@@ -131,7 +145,11 @@ tweet.vectors.matrix <- rbind(tweet.vectors.matrix, km$centers)
 ```
 
 ```{r, echo=FALSE}
-# Subclustering
+###############################################################################
+# Run K-means again on all the tweet embedding vectors in each cluster
+# to create subclusters of tweets
+###############################################################################
+
 tweet.vectors.df$subcluster <- c(0)
 
 for (i in 1:k){
@@ -168,6 +186,12 @@ tweet.vectors.df$subcluster <- as.factor(tweet.vectors.df$subcluster)
 ```
 
 ```{r, echo=FALSE}
+###############################################################################
+# Run T-SNE on all the tweets and then again on each cluster to get
+# plot coordinates for each tweet. We output a master plot with all clusters
+# and a cluster plot with all subclusters for each cluster.
+###############################################################################
+
 set.seed(700)
 tsne <- Rtsne(tweet.vectors.matrix, dims=2, perplexity=25, max_iter=750, check_duplicates=FALSE)
 tsne.plot <- cbind(tsne$Y, tweet.vectors.df)
