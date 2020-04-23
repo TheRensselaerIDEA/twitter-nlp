@@ -7,39 +7,14 @@ r = getOption("repos")
 r["CRAN"] = "http://cran.rstudio.com"
 options(repos = r)
 
-
 if (!require("ggplot2")) {
   install.packages("ggplot2")
   library(ggplot2)
 }
+
 if (!require("knitr")) {
   install.packages("knitr")
   library(knitr)
-}
-
-if (!require("ggbiplot")) {
-   devtools::install_git("https://github.com/vqv/ggbiplot.git")
-   library(ggbiplot)
-}
-
-if (!require("scatterplot3d")) {
-  install.packages("scatterplot3d")
-  library(scatterplot3d)
-}
-
-if (!require("gplots")) {
-  install.packages("gplots")
-  library(gplots)
-}
-
-if (!require('fields')) {
-  install.packages("fields")
-  library(fields)
-}
-
-if (!require('dplyr')) {
-  install.packages("dplyr")
-  library(dplyr)
 }
 
 if(!require('stringr')) {
@@ -47,84 +22,203 @@ if(!require('stringr')) {
   library(stringr)
 }
 
-knitr::opts_chunk$set(echo = TRUE)
-```
-
-
-```{r}
-tweet.vectors.df <-read.csv("tweet_vectors.csv")
-tweet.vectors.matrix <- as.matrix(tweet.vectors.df[,6:ncol(tweet.vectors.df)])
-```
-
-```{r}
-wssplot <- function(data, fc=1, nc=40, seed=20){
-  wss <- data.frame(cluster=fc:nc, quality=c(0))
-  for (i in fc:nc){
-    set.seed(seed)
-    wss[i-fc+1,2] <- sum(kmeans(data, centers=i, iter.max=30)$withinss)}
-  ggplot(data=wss,aes(x=cluster,y=quality)) + 
-    geom_line() + 
-    ggtitle("Quality of k-means by Cluster")
+if(!require('Rtsne')) {
+  install.packages("Rtsne")
+  library(Rtsne)
 }
-# Generate the plot
-wssplot(tweet.vectors.matrix)
+
+if(!require('plotly')) {
+  install.packages("plotly")
+  library(plotly)
+}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+source("Elasticsearch.R")
 ```
 
+### Configure the search parameters here - set date range and semantic phrase:
+
+Note: large date ranges can take some time to process on initial search due to the sheer volume of data we have collected. Subsequent searches using the same date range should run quickly due to Elasticsearch caching.
+
 ```{r}
+# query start date/time (inclusive)
+rangestart <- "2020-03-30 00:00:00"
+
+# query end date/time (exclusive)
+rangeend <- "2020-04-04 00:00:00"
+
+# query semantic similarity phrase (choose one of these examples or enter your own)
+#semantic_phrase <- "Elementary school students are not coping well with distance learning."
+#semantic_phrase <- "How do you stay at home when you are homeless?"
+#semantic_phrase <- "My wedding has been postponed due to the coronavirus."
+#semantic_phrase <- "I lost my job because of COVID-19. How am I going to be able to make rent?"
+semantic_phrase <- "I am diabetic and out of work because of coronavirus. I am worried I won't be able to get insulin without insurance."
+#semantic_phrase <- "There is going to be a COVID-19 baby boom..."
+
+# number of results to return (max 10,000)
+resultsize <- 10000
+```
+
+```{r, echo=FALSE}
+results <- do_search(indexname="coronavirus-data-all", 
+                     rangestart=rangestart,
+                     rangeend=rangeend,
+                     semantic_phrase=semantic_phrase,
+                     resultsize=resultsize,
+                     resultfields='"user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "extended_tweet.full_text", "embedding.use_large.primary"',
+                     elasticsearch_host="",
+                     elasticsearch_path="elasticsearch",
+                     elasticsearch_port=443,
+                     elasticsearch_schema="https")
+
+tweet.vectors.df <- results$df[,c("full_text", "user_screen_name", "user_verified", "user_location", "place.country", "place.full_name")]
+tweet.vectors.matrix <- t(simplify2array(results$df[,"embedding.use_large.primary"]))
+```
+
+```{r, echo=FALSE}
+#Clean up metadata text
+
+tweet.vectors.df$user_location <- ifelse(is.na(tweet.vectors.df$place.full_name), tweet.vectors.df$user_location, paste(tweet.vectors.df$place.full_name, tweet.vectors.df$place.country, sep=", "))
+tweet.vectors.df$user_location[is.na(tweet.vectors.df$user_location)] <- ""
+tweet.vectors.df$user_location_type <- ifelse(is.na(tweet.vectors.df$place.full_name), "User", "Place")
+tweet.vectors.df <- tweet.vectors.df[, c("full_text", "user_screen_name", "user_verified", "user_location", "user_location_type")]
+
+clean_text <- function(text) {
+  text <- str_replace_all(text, "[\\s]+", " ")
+  text <- str_replace_all(text, "http\\S+", "")
+  text <- str_replace_all(text, "[^a-zA-Z1-9 `~!@#$%^&*()-_=+\\[\\];:'\",./?’]", "")
+  text <- str_replace_all(text, " +", " ")
+  text <- trimws(text)
+}
+tweet.vectors.df$full_text <- sapply(tweet.vectors.df$full_text, clean_text)
+tweet.vectors.df$user_location <- sapply(tweet.vectors.df$user_location, clean_text)
+```
+
+```{r, echo=FALSE}
+##UNCOMMENT TO GENERATE ELBOW PLOT
+
+#wssplot <- function(data, fc=1, nc=40, seed=20){
+#  wss <- data.frame(cluster=fc:nc, quality=c(0))
+#  for (i in fc:nc){
+#    set.seed(seed)
+#    wss[i-fc+1,2] <- sum(kmeans(data, centers=i, iter.max=30)$withinss)}
+#  ggplot(data=wss,aes(x=cluster,y=quality)) + 
+#    geom_line() + 
+#    ggtitle("Quality of k-means by Cluster")
+#}
+# Generate the plot
+#wssplot(tweet.vectors.matrix)
+```
+
+```{r, echo=FALSE}
 # Final model:
 set.seed(300)
-k <- 18
+k <- 5
 km <- kmeans(tweet.vectors.matrix, centers=k, iter.max=30)
 
 tweet.vectors.df$cluster <- as.factor(km$cluster)
 
 #append cluster centers to dataset for visualization
-centers.df <- as.data.frame(km$centers)
-centers.df$tweets_text <- paste("Cluster (", rownames(km$centers), ") Center", sep="")
-centers.df$tweets_user_name <- "[N/A]"
-centers.df$tweets_user_verified = "[N/A]"
-centers.df$tweets_location <- "[N/A]"
-centers.df$tweets_location_type <- "[N/A]"
-centers.df$cluster <- as.factor(rownames(km$centers))
-
+centers.df <- data.frame(full_text=paste("Cluster (", rownames(km$centers), ") Center", sep=""),
+                         user_screen_name="[N/A]",
+                         user_verified="[N/A]",
+                         user_location="[N/A]",
+                         user_location_type = "[N/A]",
+                         cluster=as.factor(rownames(km$centers)))
 tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
-
+tweet.vectors.matrix <- rbind(tweet.vectors.matrix, km$centers)
 ```
 
-```{r}
+```{r, echo=FALSE}
 # Subclustering
 tweet.vectors.df$subcluster <- c(0)
 
 for (i in 1:k){
- print(paste("Subclustering cluster ", i, "..."))
- cluster.df <- tweet.vectors.df[tweet.vectors.df$cluster == i,]
- cluster.matrix <- as.matrix(cluster.df[,6:ncol(cluster.df)])
+ print(paste("Subclustering cluster", i, "..."))
+ cluster.matrix <- tweet.vectors.matrix[tweet.vectors.df$cluster == i,]
  set.seed(500)
  cluster.k <- 5
  cluster.km <- kmeans(cluster.matrix, centers=cluster.k, iter.max=30)
- tweet.vectors.df[rownames(cluster.df), ncol(tweet.vectors.df)] <- cluster.km$cluster
+ tweet.vectors.df[tweet.vectors.df$cluster == i, "subcluster"] <- cluster.km$cluster
  
  #append subcluster centers to dataset for visualization
- centers.df <- as.data.frame(cluster.km$centers)
- centers.df$tweets_text <- paste("Subcluster (", rownames(cluster.km$centers), ") Center", sep="")
- centers.df$tweets_user_name <- "[N/A]"
- centers.df$tweets_user_verified = "[N/A]"
- centers.df$tweets_location <- "[N/A]"
- centers.df$tweets_location_type <- "[N/A]"
- centers.df$cluster <- as.factor(i)
- centers.df$subcluster <- rownames(cluster.km$centers)
- 
+ centers.df <- data.frame(full_text=paste("Subcluster (", rownames(cluster.km$centers), ") Center", sep=""),
+                         user_screen_name="[N/A]",
+                         user_verified="[N/A]",
+                         user_location="[N/A]",
+                         user_location_type = "[N/A]",
+                         cluster=as.factor(i),
+                         subcluster=rownames(cluster.km$centers))
  tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
+ tweet.vectors.matrix <- rbind(tweet.vectors.matrix, cluster.km$centers)
 }
 tweet.vectors.df$subcluster <- as.factor(tweet.vectors.df$subcluster)
 ```
 
-```{r}
-tweet.vectors.df$cluster_str <- paste("(", tweet.vectors.df$cluster, ")", sep="")
-tweet.vectors.df$subcluster_str <- paste("(", tweet.vectors.df$subcluster, ")", sep="")
+```{r, echo=FALSE}
+##UNCOMMENT TO OUTPUT FILES FOR TENSORBOARD
 
-metadata_cols <- c("tweets_text", "tweets_user_name", "tweets_user_verified", "tweets_location", "tweets_location_type", "cluster_str", "subcluster_str")
-data_cols <- setdiff(colnames(tweet.vectors.df), c(metadata_cols, "cluster", "subcluster"))
-write.table(tweet.vectors.df[,metadata_cols], "clustered_tweet_labels.tsv", sep='\t', row.names = FALSE)
-write.table(tweet.vectors.df[,data_cols], "clustered_tweet_vectors.tsv", sep='\t', row.names = FALSE, col.names = FALSE)
+#tweet.vectors.df$cluster_str <- paste("(", tweet.vectors.df$cluster, ")", sep="")
+#tweet.vectors.df$subcluster_str <- paste("(", tweet.vectors.df$subcluster, ")", sep="")
+
+#metadata_cols <- setdiff(colnames(tweet.vectors.df), c("cluster", "subcluster"))
+#write.table(tweet.vectors.df[,metadata_cols], "clustered_tweet_labels.tsv", sep='\t', row.names = FALSE)
+#write.table(tweet.vectors.matrix, "clustered_tweet_vectors.tsv", sep='\t', row.names = FALSE, col.names = FALSE)
+```
+
+```{r, echo=FALSE}
+set.seed(700)
+tsne <- Rtsne(tweet.vectors.matrix, dims=2, perplexity=25, max_iter=750, check_duplicates=FALSE)
+tsne.plot <- cbind(tsne$Y, tweet.vectors.df)
+colnames(tsne.plot)[1:2] <- c("X", "Y")
+tsne.plot$full_text <- sapply(tsne.plot$full_text, function(t) paste(strwrap(t ,width=60), collapse="<br>"))
+
+taglist <- htmltools::tagList()
+
+#Master high level plot
+fig <- plot_ly(tsne.plot, x=~X, y=~Y, 
+               text=~paste("Cluster:", cluster, "<br>Text:", full_text), 
+               color=~cluster, type="scatter", mode="markers")
+fig <- fig %>% layout(title="Master Plot (high level clusters)", 
+                        yaxis=list(zeroline=FALSE), 
+                        xaxis=list(zeroline=FALSE))
+fig <- fig %>% toWebGL()
+taglist[[1]] <- fig
+
+#Cluster plots
+plot_index <- 2
+for (i in 1:k) {
+  print(paste("Plotting cluster", i, "..."))
+  cluster.matrix <- tweet.vectors.matrix[tsne.plot$cluster == i,]
+  
+  set.seed(900)
+  cluster.tsne <- Rtsne(cluster.matrix, dims=2, perplexity=12, max_iter=500, check_duplicates=FALSE)
+  cluster.tsne.plot <- cbind(cluster.tsne$Y, tsne.plot[tsne.plot$cluster == i,])
+  colnames(cluster.tsne.plot)[1:2] <- c("cluster.X", "cluster.Y")
+  
+  #Cluster plot with original positions
+  fig <- plot_ly(cluster.tsne.plot, x=~X, y=~Y, 
+                 text=~paste("Subcluster:", subcluster, "<br>Text:", full_text), 
+                 color=~subcluster, type="scatter", mode="markers")
+  fig <- fig %>% layout(title=paste('Cluster', i, "(as positioned in master plot)"), 
+                        yaxis=list(zeroline=FALSE), 
+                        xaxis=list(zeroline=FALSE))
+  #fig <- fig %>% toWebGL()
+  taglist[[plot_index]] <- fig
+  plot_index <- plot_index + 1
+  
+  #Cluster plot with regrouped positions by subcluster
+  fig <- plot_ly(cluster.tsne.plot, x=~cluster.X, y=~cluster.Y, 
+                 text=~paste("Subcluster:", subcluster, "<br>Text:", full_text), 
+                 color=~subcluster, type="scatter", mode="markers")
+  fig <- fig %>% layout(title=paste('Cluster', i, "(regrouped by subcluster)"), 
+                        yaxis=list(zeroline=FALSE), 
+                        xaxis=list(zeroline=FALSE))
+  #fig <- fig %>% toWebGL()
+  taglist[[plot_index]] <- fig
+  plot_index <- plot_index + 1
+}
+
+taglist
 ```
