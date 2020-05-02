@@ -1,12 +1,16 @@
-query_by_date_range <- function(resultfields, gte_str, lt_str) {
-  query <- sprintf('{
-    "sort" : [
-      { "created_at" : "asc" }
-    ],
-    "_source": [%s],
-    "query": {
+query_by_date_range <- function(resultfields, gte_str, lt_str, must_have_embedding, random_sample) {
+  if (isTRUE(must_have_embedding)) {
+    embedding_clause <- '{
+      "exists": { "field": "embedding.use_large.primary" }
+    },'
+  } else {
+    embedding_clause <- ''
+  }
+  
+  filter_clause <- sprintf('{
       "bool": {
         "filter": [
+          %s
           {
             "range" : {
               "created_at" : {
@@ -14,22 +18,42 @@ query_by_date_range <- function(resultfields, gte_str, lt_str) {
                 "lt": "%s",
                 "format": "strict_date_hour_minute_second",
                 "time_zone": "+00:00"
+                }
               }
-            }
-          },
-          {
+            },
+            {
             "bool": {
               "must_not": {
                 "exists": {
-                  "field": "retweeted_status.id"
+                "field": "retweeted_status.id"
                 }
               }
             }
           }
         ]
       }
-    }
-  }', resultfields, gte_str, lt_str)
+    }', embedding_clause, gte_str, lt_str)
+  
+  if (isTRUE(random_sample)) {
+    query <- sprintf('{
+       "_source": [%s],
+       "query": {
+         "function_score": {
+            "query": %s,
+            "random_score": {},
+            "boost_mode": "replace"
+         }
+      }
+    }', resultfields, filter_clause)
+  } else {
+    query <- sprintf('{
+      "sort" : [
+        { "created_at" : "asc" }
+      ],
+      "_source": [%s],
+      "query": %s
+    }', resultfields, filter_clause)
+  }
   
   return(query)
 }

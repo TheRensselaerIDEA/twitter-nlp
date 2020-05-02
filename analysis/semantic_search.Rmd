@@ -30,18 +30,19 @@ Note: large date ranges can take some time to process on initial search due to t
 
 ```{r}
 # query start date/time (inclusive)
-rangestart <- "2020-03-30 00:00:00"
+rangestart <- "2020-04-01 00:00:00"
 
 # query end date/time (exclusive)
-rangeend <- "2020-04-04 00:00:00"
+rangeend <- "2020-04-16 00:00:00"
 
 # query semantic similarity phrase (choose one of these examples or enter your own)
 #semantic_phrase <- "Elementary school students are not coping well with distance learning."
 #semantic_phrase <- "How do you stay at home when you are homeless?"
 #semantic_phrase <- "My wedding has been postponed due to the coronavirus."
 #semantic_phrase <- "I lost my job because of COVID-19. How am I going to be able to make rent?"
-semantic_phrase <- "I am diabetic and out of work because of coronavirus. I am worried I won't be able to get insulin without insurance."
+#semantic_phrase <- "I am diabetic and out of work because of coronavirus. I am worried I won't be able to get insulin without insurance."
 #semantic_phrase <- "There is going to be a COVID-19 baby boom..."
+semantic_phrase <- "There is no way schools can reopen in May."
 
 # number of results to return (max 10,000)
 resultsize <- 50
@@ -54,6 +55,7 @@ results <- do_search(indexname="coronavirus-data-all",
                      rangestart=rangestart,
                      rangeend=rangeend,
                      semantic_phrase=semantic_phrase,
+                     must_have_embedding=TRUE,
                      resultsize=resultsize,
                      resultfields='"created_at", "user.screen_name", "text", "extended_tweet.full_text"',
                      elasticsearch_host="",

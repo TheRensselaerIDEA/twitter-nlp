@@ -17,6 +17,11 @@ if (!require("knitr")) {
   library(knitr)
 }
 
+if(!require('dplyr')) {
+  install.packages("dplyr")
+  library(dplyr)
+}
+
 if(!require('stringr')) {
   install.packages("stringr")
   library(stringr)
@@ -27,9 +32,19 @@ if(!require('Rtsne')) {
   library(Rtsne)
 }
 
+if(!require('stopwords')) {
+  install.packages("stopwords")
+  library(stopwords)
+}
+
 if(!require('plotly')) {
   install.packages("plotly")
   library(plotly)
+}
+
+if (!require("kableExtra")) {
+  install.packages("kableExtra")
+  library(kableExtra)
 }
 
 knitr::opts_chunk$set(echo = TRUE)
@@ -56,6 +71,9 @@ rangeend <- "2020-04-04 00:00:00"
 semantic_phrase <- "I am diabetic and out of work because of coronavirus. I am worried I won't be able to get insulin without insurance."
 #semantic_phrase <- "There is going to be a COVID-19 baby boom..."
 
+# return results in chronological order or as a random sample within the range
+# (ignored if semantic_phrase is not blank)
+random_sample <- TRUE
 # number of results to return (max 10,000)
 resultsize <- 10000
 ```
@@ -69,6 +87,8 @@ results <- do_search(indexname="coronavirus-data-all",
                      rangestart=rangestart,
                      rangeend=rangeend,
                      semantic_phrase=semantic_phrase,
+                     must_have_embedding=TRUE,
+                     random_sample=random_sample,
                      resultsize=resultsize,
                      resultfields='"user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "extended_tweet.full_text", "embedding.use_large.primary"',
                      elasticsearch_host="",
@@ -109,15 +129,15 @@ tweet.vectors.df$user_location <- sapply(tweet.vectors.df$user_location, clean_t
 ```{r, echo=FALSE}
 ##UNCOMMENT TO GENERATE ELBOW PLOT
 
-#wssplot <- function(data, fc=1, nc=40, seed=20){
-#  wss <- data.frame(cluster=fc:nc, quality=c(0))
-#  for (i in fc:nc){
-#    set.seed(seed)
-#    wss[i-fc+1,2] <- sum(kmeans(data, centers=i, iter.max=30)$withinss)}
-#  ggplot(data=wss,aes(x=cluster,y=quality)) + 
-#    geom_line() + 
-#    ggtitle("Quality of k-means by Cluster")
-#}
+wssplot <- function(data, fc=1, nc=40, seed=20){
+  wss <- data.frame(k=fc:nc, withinss=c(0))
+  for (i in fc:nc){
+    set.seed(seed)
+    wss[i-fc+1,2] <- sum(kmeans(data, centers=i, iter.max=30)$withinss)}
+  ggplot(data=wss,aes(x=k,y=withinss)) + 
+    geom_line() + 
+    ggtitle("Quality (within sums of squares) of k-means by choice of k")
+}
 # Generate the plot
 #wssplot(tweet.vectors.matrix)
 ```
@@ -128,7 +148,7 @@ tweet.vectors.df$user_location <- sapply(tweet.vectors.df$user_location, clean_t
 ###############################################################################
 
 set.seed(300)
-k <- 5
+k <- 6
 km <- kmeans(tweet.vectors.matrix, centers=k, iter.max=30)
 
 tweet.vectors.df$cluster <- as.factor(km$cluster)
@@ -211,6 +231,7 @@ fig <- fig %>% toWebGL()
 taglist[[1]] <- fig
 
 #Cluster plots
+stop_words <- c(stopwords("en", source = "snowball"), ",", ".", "!", "-", "?", "&amp;")
 plot_index <- 2
 for (i in 1:k) {
   print(paste("Plotting cluster", i, "..."))
@@ -241,6 +262,25 @@ for (i in 1:k) {
                         xaxis=list(zeroline=FALSE))
   #fig <- fig %>% toWebGL()
   taglist[[plot_index]] <- fig
+  plot_index <- plot_index + 1
+  
+  # Get nearest neighbors of cluster center for display
+  cluster.center <- as.matrix(tweet.vectors.matrix[resultsize+i,])
+  cosine_similarity <- apply(tweet.vectors.matrix[1:resultsize,], 1, function(v) (v %*% cluster.center)/(norm(v, type="2")*norm(cluster.center, type="2")))
+  tweet.vectors.scored.df <- cbind(tweet.vectors.df[1:resultsize,], cosine_similarity)
+  cluster.nearest_center <- tweet.vectors.scored.df[order(tweet.vectors.scored.df$cosine_similarity, decreasing=TRUE), c("cosine_similarity", "full_text")]
+  
+  taglist[[plot_index]] <- htmltools::HTML(kable(cluster.nearest_center[1:10,]) %>% kable_styling())
+  plot_index <- plot_index + 1
+  
+  # Get word frequencies of cluster for display
+  cluster.word_freqs <- table(unlist(strsplit(cluster.tsne.plot$full_text, " ")))
+  cluster.word_freqs <- cbind.data.frame(names(cluster.word_freqs), as.integer(cluster.word_freqs))
+  colnames(cluster.word_freqs) <- c("word", "count")
+  cluster.word_freqs <- cluster.word_freqs[!(tolower(cluster.word_freqs$word) %in% stop_words),]
+  cluster.word_freqs <- cluster.word_freqs[order(cluster.word_freqs$count, decreasing=TRUE),]
+  
+  taglist[[plot_index]] <- htmltools::HTML(kable(cluster.word_freqs[1:10,]) %>% kable_styling())
   plot_index <- plot_index + 1
 }
 
