@@ -58,24 +58,36 @@ Note: large date ranges can take some time to process on initial search due to t
 
 ```{r}
 # query start date/time (inclusive)
-rangestart <- "2020-03-30 00:00:00"
+rangestart <- "2020-04-01 00:00:00"
 
 # query end date/time (exclusive)
-rangeend <- "2020-04-04 00:00:00"
+rangeend <- "2020-04-16 00:00:00"
 
 # query semantic similarity phrase (choose one of these examples or enter your own)
 #semantic_phrase <- "Elementary school students are not coping well with distance learning."
 #semantic_phrase <- "How do you stay at home when you are homeless?"
 #semantic_phrase <- "My wedding has been postponed due to the coronavirus."
 #semantic_phrase <- "I lost my job because of COVID-19. How am I going to be able to make rent?"
-semantic_phrase <- "I am diabetic and out of work because of coronavirus. I am worried I won't be able to get insulin without insurance."
+#semantic_phrase <- "I am diabetic and out of work because of coronavirus. I am worried I won't be able to get insulin without insurance."
 #semantic_phrase <- "There is going to be a COVID-19 baby boom..."
+semantic_phrase <- ""
 
 # return results in chronological order or as a random sample within the range
 # (ignored if semantic_phrase is not blank)
 random_sample <- TRUE
 # number of results to return (max 10,000)
 resultsize <- 10000
+
+####TEMPORARY SETTINGS####
+# number of high level clusters (temporary until automatic selection implemented)
+k <- if (semantic_phrase=="") 15 else 5
+# number of subclusters per high level cluster (temporary until automatic selection implemented)
+cluster.k <- 8
+# show/hide extra info (temporary until tabs are implemented)
+show_original_subcluster_plots <- FALSE
+show_regrouped_subcluster_plots <- TRUE
+show_word_freqs <- FALSE
+show_center_nn <- FALSE
 ```
 
 ```{r, echo=FALSE}
@@ -115,10 +127,17 @@ tweet.vectors.df$user_location[is.na(tweet.vectors.df$user_location)] <- ""
 tweet.vectors.df$user_location_type <- ifelse(is.na(tweet.vectors.df$place.full_name), "User", "Place")
 tweet.vectors.df <- tweet.vectors.df[, c("full_text", "user_screen_name", "user_verified", "user_location", "user_location_type")]
 
-clean_text <- function(text) {
+clean_text <- function(text, for_freq=FALSE) {
   text <- str_replace_all(text, "[\\s]+", " ")
   text <- str_replace_all(text, "http\\S+", "")
-  text <- str_replace_all(text, "[^a-zA-Z1-9 `~!@#$%^&*()-_=+\\[\\];:'\",./?’]", "")
+  if (isTRUE(for_freq)) {
+    text <- tolower(text)
+    text <- str_replace_all(text, "’", "'")
+    text <- str_replace_all(text, "_", "-")
+    text <- str_replace_all(text, "[^a-z1-9 ']", "")
+  } else {
+    text <- str_replace_all(text, "[^a-zA-Z1-9 `~!@#$%^&*()-_=+\\[\\];:'\",./?’]", "")
+  }
   text <- str_replace_all(text, " +", " ")
   text <- trimws(text)
 }
@@ -148,9 +167,9 @@ wssplot <- function(data, fc=1, nc=40, seed=20){
 ###############################################################################
 
 set.seed(300)
-k <- 6
 km <- kmeans(tweet.vectors.matrix, centers=k, iter.max=30)
 
+tweet.vectors.df$vector_type <- factor("tweet", levels=c("tweet", "cluster_center", "subcluster_center"))
 tweet.vectors.df$cluster <- as.factor(km$cluster)
 
 #append cluster centers to dataset for visualization
@@ -159,6 +178,7 @@ centers.df <- data.frame(full_text=paste("Cluster (", rownames(km$centers), ") C
                          user_verified="[N/A]",
                          user_location="[N/A]",
                          user_location_type = "[N/A]",
+                         vector_type = "cluster_center",
                          cluster=as.factor(rownames(km$centers)))
 tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
 tweet.vectors.matrix <- rbind(tweet.vectors.matrix, km$centers)
@@ -176,7 +196,6 @@ for (i in 1:k){
  print(paste("Subclustering cluster", i, "..."))
  cluster.matrix <- tweet.vectors.matrix[tweet.vectors.df$cluster == i,]
  set.seed(500)
- cluster.k <- 5
  cluster.km <- kmeans(cluster.matrix, centers=cluster.k, iter.max=30)
  tweet.vectors.df[tweet.vectors.df$cluster == i, "subcluster"] <- cluster.km$cluster
  
@@ -186,6 +205,7 @@ for (i in 1:k){
                          user_verified="[N/A]",
                          user_location="[N/A]",
                          user_location_type = "[N/A]",
+                         vector_type = "subcluster_center",
                          cluster=as.factor(i),
                          subcluster=rownames(cluster.km$centers))
  tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
@@ -207,6 +227,73 @@ tweet.vectors.df$subcluster <- as.factor(tweet.vectors.df$subcluster)
 
 ```{r, echo=FALSE}
 ###############################################################################
+# Compute labels for each cluster and subcluster based on word frequency
+# and identify the nearest neighbors to each cluster and subcluster center
+###############################################################################
+
+stop_words <- stopwords("en", source="snowball")
+stop_words <- union(stop_words, stopwords("en", source="nltk"))
+stop_words <- union(stop_words, stopwords("en", source="smart"))
+stop_words <- union(stop_words, stopwords("en", source="marimo"))
+stop_words <- union(stop_words, c(",", ".", "!", "-", "?", "&amp;", "amp"))
+
+get_word_freqs <- function(full_text) {
+  word_freqs <- table(unlist(strsplit(clean_text(full_text, TRUE), " ")))
+  word_freqs <- cbind.data.frame(names(word_freqs), as.integer(word_freqs))
+  colnames(word_freqs) <- c("word", "count")
+  word_freqs <- word_freqs[!(word_freqs$word %in% stop_words),]
+  word_freqs <- word_freqs[order(word_freqs$count, decreasing=TRUE),]
+}
+
+get_label <- function(word_freqs, exclude_from_labels=NULL) {
+  top_k <- 3
+  words <- as.character(word_freqs$word)
+  exclude_words <- NULL
+  if (!is.null(exclude_from_labels)) {
+    exclude_words <- unique(unlist(lapply(strsplit(exclude_from_labels, "/"), trimws)))
+  }
+  label <- paste(setdiff(words, exclude_words)[1:top_k], collapse=" / ")
+}
+
+get_nearest_center <- function(df, mtx, center) {
+  df$center_cosine_similarity <- apply(mtx, 1, function(v) (v %*% center)/(norm(v, type="2")*norm(center, type="2")))
+  nearest_center <- df[order(df$center_cosine_similarity, decreasing=TRUE),]
+  nearest_center <- nearest_center[nearest_center$vector_type=="tweet", c("center_cosine_similarity", "full_text")]
+}
+
+master.word_freqs <- get_word_freqs(tweet.vectors.df$full_text)
+master.label <- get_label(master.word_freqs)
+
+clusters <- list()
+for (i in 1:k) {
+  cluster.df <- tweet.vectors.df[tweet.vectors.df$cluster == i,]
+  cluster.matrix <- tweet.vectors.matrix[tweet.vectors.df$cluster == i,]
+    
+  cluster.word_freqs <- get_word_freqs(cluster.df$full_text)
+  cluster.label <- get_label(cluster.word_freqs, master.label)
+  cluster.center <- cluster.matrix[cluster.df$vector_type=="cluster_center",]
+  cluster.nearest_center <- get_nearest_center(cluster.df, cluster.matrix, cluster.center)
+  
+  cluster.subclusters <- list()
+  for (j in 1:cluster.k) {
+    subcluster.df <- cluster.df[cluster.df$subcluster == j,]
+    subcluster.matrix <- cluster.matrix[cluster.df$subcluster == j,]
+    
+    subcluster.word_freqs <- get_word_freqs(subcluster.df$full_text)
+    subcluster.label <- get_label(subcluster.word_freqs, c(master.label, cluster.label))
+    subcluster.center <- subcluster.matrix[subcluster.df$vector_type=="subcluster_center",]
+    subcluster.nearest_center <- get_nearest_center(subcluster.df, subcluster.matrix, subcluster.center)
+    
+    cluster.subclusters[[j]] <- list(word_freqs=subcluster.word_freqs, label=subcluster.label, nearest_center=subcluster.nearest_center)
+  }
+  
+  clusters[[i]] <- list(word_freqs=cluster.word_freqs, label=cluster.label, nearest_center=cluster.nearest_center, subclusters=cluster.subclusters)
+}
+
+```
+
+```{r, echo=FALSE}
+###############################################################################
 # Run T-SNE on all the tweets and then again on each cluster to get
 # plot coordinates for each tweet. We output a master plot with all clusters
 # and a cluster plot with all subclusters for each cluster.
@@ -217,21 +304,21 @@ tsne <- Rtsne(tweet.vectors.matrix, dims=2, perplexity=25, max_iter=750, check_d
 tsne.plot <- cbind(tsne$Y, tweet.vectors.df)
 colnames(tsne.plot)[1:2] <- c("X", "Y")
 tsne.plot$full_text <- sapply(tsne.plot$full_text, function(t) paste(strwrap(t ,width=60), collapse="<br>"))
+tsne.plot$cluster.label <- sapply(tsne.plot$cluster, function(c) clusters[[c]]$label)
 
 taglist <- htmltools::tagList()
 
 #Master high level plot
 fig <- plot_ly(tsne.plot, x=~X, y=~Y, 
                text=~paste("Cluster:", cluster, "<br>Text:", full_text), 
-               color=~cluster, type="scatter", mode="markers")
-fig <- fig %>% layout(title="Master Plot (high level clusters)", 
+               color=~cluster.label, type="scatter", mode="markers")
+fig <- fig %>% layout(title=paste("Master Plot:", master.label, "(high level clusters)"), 
                         yaxis=list(zeroline=FALSE), 
                         xaxis=list(zeroline=FALSE))
 fig <- fig %>% toWebGL()
 taglist[[1]] <- fig
 
 #Cluster plots
-stop_words <- c(stopwords("en", source = "snowball"), ",", ".", "!", "-", "?", "&amp;")
 plot_index <- 2
 for (i in 1:k) {
   print(paste("Plotting cluster", i, "..."))
@@ -241,47 +328,59 @@ for (i in 1:k) {
   cluster.tsne <- Rtsne(cluster.matrix, dims=2, perplexity=12, max_iter=500, check_duplicates=FALSE)
   cluster.tsne.plot <- cbind(cluster.tsne$Y, tsne.plot[tsne.plot$cluster == i,])
   colnames(cluster.tsne.plot)[1:2] <- c("cluster.X", "cluster.Y")
+  cluster.tsne.plot$subcluster.label <- sapply(cluster.tsne.plot$subcluster, function(c) clusters[[i]]$subclusters[[c]]$label)
   
   #Cluster plot with original positions
-  fig <- plot_ly(cluster.tsne.plot, x=~X, y=~Y, 
-                 text=~paste("Subcluster:", subcluster, "<br>Text:", full_text), 
-                 color=~subcluster, type="scatter", mode="markers")
-  fig <- fig %>% layout(title=paste('Cluster', i, "(as positioned in master plot)"), 
-                        yaxis=list(zeroline=FALSE), 
-                        xaxis=list(zeroline=FALSE))
-  #fig <- fig %>% toWebGL()
-  taglist[[plot_index]] <- fig
-  plot_index <- plot_index + 1
+  if (isTRUE(show_original_subcluster_plots)) {
+    fig <- plot_ly(cluster.tsne.plot, x=~X, y=~Y, 
+                   text=~paste("Subcluster:", subcluster, "<br>Text:", full_text), 
+                   color=~subcluster.label, type="scatter", mode="markers")
+    fig <- fig %>% layout(title=paste('Cluster ', i, ": ", clusters[[i]]$label, " (as positioned in master plot)", sep=""), 
+                          yaxis=list(zeroline=FALSE), 
+                          xaxis=list(zeroline=FALSE))
+    #fig <- fig %>% toWebGL()
+    taglist[[plot_index]] <- fig
+    plot_index <- plot_index + 1
+  }
   
   #Cluster plot with regrouped positions by subcluster
-  fig <- plot_ly(cluster.tsne.plot, x=~cluster.X, y=~cluster.Y, 
-                 text=~paste("Subcluster:", subcluster, "<br>Text:", full_text), 
-                 color=~subcluster, type="scatter", mode="markers")
-  fig <- fig %>% layout(title=paste('Cluster', i, "(regrouped by subcluster)"), 
-                        yaxis=list(zeroline=FALSE), 
-                        xaxis=list(zeroline=FALSE))
-  #fig <- fig %>% toWebGL()
-  taglist[[plot_index]] <- fig
-  plot_index <- plot_index + 1
+  if (isTRUE(show_regrouped_subcluster_plots)) {
+    fig <- plot_ly(cluster.tsne.plot, x=~cluster.X, y=~cluster.Y, 
+                   text=~paste("Subcluster:", subcluster, "<br>Text:", full_text), 
+                   color=~subcluster.label, type="scatter", mode="markers")
+    fig <- fig %>% layout(title=paste('Cluster ', i, ": ", clusters[[i]]$label, " (regrouped by subcluster)", sep=""), 
+                          yaxis=list(zeroline=FALSE), 
+                          xaxis=list(zeroline=FALSE))
+    #fig <- fig %>% toWebGL()
+    taglist[[plot_index]] <- fig
+    plot_index <- plot_index + 1
+  }
   
-  # Get nearest neighbors of cluster center for display
-  cluster.center <- as.matrix(tweet.vectors.matrix[resultsize+i,])
-  cosine_similarity <- apply(tweet.vectors.matrix[1:resultsize,], 1, function(v) (v %*% cluster.center)/(norm(v, type="2")*norm(cluster.center, type="2")))
-  tweet.vectors.scored.df <- cbind(tweet.vectors.df[1:resultsize,], cosine_similarity)
-  cluster.nearest_center <- tweet.vectors.scored.df[order(tweet.vectors.scored.df$cosine_similarity, decreasing=TRUE), c("cosine_similarity", "full_text")]
+  # Print cluster word frequencies
+  if (isTRUE(show_word_freqs)) {
+    taglist[[plot_index]] <- htmltools::HTML(kable(clusters[[i]]$word_freqs[1:5,], caption=paste("Cluster", i, "word frequencies")) %>% kable_styling())
+    plot_index <- plot_index + 1
+  }
   
-  taglist[[plot_index]] <- htmltools::HTML(kable(cluster.nearest_center[1:10,]) %>% kable_styling())
-  plot_index <- plot_index + 1
+  # Print nearest neighbors of cluster center
+  if (isTRUE(show_center_nn)) {
+    taglist[[plot_index]] <- htmltools::HTML(kable(clusters[[i]]$nearest_center[1:5,], caption=paste("Cluster", i, "nearest neighbors to center")) %>% kable_styling())
+    plot_index <- plot_index + 1
+  }
   
-  # Get word frequencies of cluster for display
-  cluster.word_freqs <- table(unlist(strsplit(cluster.tsne.plot$full_text, " ")))
-  cluster.word_freqs <- cbind.data.frame(names(cluster.word_freqs), as.integer(cluster.word_freqs))
-  colnames(cluster.word_freqs) <- c("word", "count")
-  cluster.word_freqs <- cluster.word_freqs[!(tolower(cluster.word_freqs$word) %in% stop_words),]
-  cluster.word_freqs <- cluster.word_freqs[order(cluster.word_freqs$count, decreasing=TRUE),]
-  
-  taglist[[plot_index]] <- htmltools::HTML(kable(cluster.word_freqs[1:10,]) %>% kable_styling())
-  plot_index <- plot_index + 1
+  for (j in 1:cluster.k) {
+    # Print subcluster word frequencies
+    if (isTRUE(show_word_freqs)) {
+      taglist[[plot_index]] <- htmltools::HTML(kable(clusters[[i]]$subclusters[[j]]$word_freqs[1:5,], caption=paste("Subcluster", j, "word frequencies")) %>% kable_styling())
+      plot_index <- plot_index + 1
+    }
+    
+    # Print nearest neighbors of subcluster center
+    if (isTRUE(show_center_nn)) {
+      taglist[[plot_index]] <- htmltools::HTML(kable(clusters[[i]]$subclusters[[j]]$nearest_center[1:5,], caption=paste("Subcluster", j, "nearest neighbors to center")) %>% kable_styling())
+      plot_index <- plot_index + 1
+    }
+  }
 }
 
 taglist
