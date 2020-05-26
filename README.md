@@ -10,7 +10,7 @@ The following resources provide an overview of the project:
 ### On the Rensselaer IDEA cluster
 1. Clone this repository to your preferred location on the cluster (home directory, etc.)
 
-2. Modify your local copies of [semantic_search.Rmd](https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/analysis/semantic_search.Rmd) and [twitter.Rmd](https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/analysis/twitter.Rmd) by inserting the hostname of the elasticsearch server into the line `elasticsearch_host=""`. See the project slack channel **#idea-covid-twitter** to get the hostname.
+2. Modify your local copies of [semantic_search.Rmd](https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/analysis/semantic_search.Rmd) and [twitter.Rmd](https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/analysis/twitter.Rmd) by inserting the hostname of the elasticsearch server into the line `elasticsearch_host=""`. See the project slack channel **#idea-covid-twitter** to get the hostname (it is pinned to the channel).
 
     **Note**: the hostname should be removed before committing changes to this repository.
 
