@@ -6,3 +6,4 @@ twitter_monitor/tmlog.txt
 .vscode/launch.json
 *.pyc
 embedder/embedderlog.txt
+twitter_monitor/jdllog.txt
