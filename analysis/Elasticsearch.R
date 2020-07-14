@@ -19,6 +19,7 @@ if (!require("jsonlite")) {
   library(jsonlite)
 }
 
+
 source("elasticsearch_queries.R")
 
 embed_use_large <- function(text, embed_use_large_url) {
@@ -53,7 +54,7 @@ do_search <- function(indexname,
   
   if (is.null(resultfields)) {
     resultfields <- '"created_at", "user.id_str", "user.screen_name",
-            "in_reply_to_status_id_str", "favorite_count", "text", "extended_tweet.full_text",
+            "in_reply_to_status_id_str", "favorite_count", "text", "full_text", "extended_tweet.full_text",
             "source", "retweeted", "in_reply_to_screen_name", "in_reply_to_user_id_str",
             "retweet_count", "favorited", "entities.hashtags", "extended_tweet.entities.hashtags",
             "entities.urls", "extended_tweet.entities.urls"'
@@ -94,10 +95,12 @@ do_search <- function(indexname,
   colnames(results.df) <- sub("entities.", "", colnames(results.df))
   colnames(results.df) <- sub("user.", "user_", colnames(results.df))
   #merge 'text' and 'full_text'
-  if ("full_text" %in% colnames(results.df)) {
-    results.df$full_text <- ifelse(is.na(results.df$full_text), results.df$text, results.df$full_text)
-  } else {
-    results.df$full_text <- results.df$text
+  if ("text" %in% colnames(results.df)) {
+    if ("full_text" %in% colnames(results.df)) {
+      results.df$full_text <- ifelse(is.na(results.df$full_text), results.df$text, results.df$full_text)
+    } else {
+      results.df$full_text <- results.df$text
+    }
   }
   
   #TODO: drop original 'text' column

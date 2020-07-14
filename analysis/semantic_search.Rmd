@@ -36,13 +36,14 @@ rangestart <- "2020-04-01 00:00:00"
 rangeend <- "2020-04-16 00:00:00"
 
 # query semantic similarity phrase (choose one of these examples or enter your own)
-#semantic_phrase <- "Elementary school students are not coping well with distance learning."
+#semantic_phrase <- "Hemoglobin"
 #semantic_phrase <- "How do you stay at home when you are homeless?"
 #semantic_phrase <- "My wedding has been postponed due to the coronavirus."
 #semantic_phrase <- "I lost my job because of COVID-19. How am I going to be able to make rent?"
 #semantic_phrase <- "I am diabetic and out of work because of coronavirus. I am worried I won't be able to get insulin without insurance."
 #semantic_phrase <- "There is going to be a COVID-19 baby boom..."
-semantic_phrase <- "There is no way schools can reopen in May."
+#semantic_phrase <- "colleges and universities"
+semantic_phrase <- "I'm taking vitamins to help fight covid-19"
 
 # number of results to return (max 10,000)
 resultsize <- 50
@@ -57,7 +58,7 @@ results <- do_search(indexname="coronavirus-data-all",
                      semantic_phrase=semantic_phrase,
                      must_have_embedding=TRUE,
                      resultsize=resultsize,
-                     resultfields='"created_at", "user.screen_name", "text", "extended_tweet.full_text"',
+                     resultfields='"created_at", "user.screen_name", "text", "full_text", "extended_tweet.full_text"',
                      elasticsearch_host="",
                      elasticsearch_path="elasticsearch",
                      elasticsearch_port=443,

@@ -70,6 +70,7 @@ rangeend <- "2020-04-16 00:00:00"
 #semantic_phrase <- "I lost my job because of COVID-19. How am I going to be able to make rent?"
 #semantic_phrase <- "I am diabetic and out of work because of coronavirus. I am worried I won't be able to get insulin without insurance."
 #semantic_phrase <- "There is going to be a COVID-19 baby boom..."
+#semantic_phrase <- "Vitamin"
 semantic_phrase <- ""
 
 # return results in chronological order or as a random sample within the range
@@ -80,7 +81,7 @@ resultsize <- 10000
 
 ####TEMPORARY SETTINGS####
 # number of high level clusters (temporary until automatic selection implemented)
-k <- if (semantic_phrase=="") 15 else 5
+k <- if (semantic_phrase=="") 8 else 5
 # number of subclusters per high level cluster (temporary until automatic selection implemented)
 cluster.k <- 8
 # show/hide extra info (temporary until tabs are implemented)
@@ -102,7 +103,7 @@ results <- do_search(indexname="coronavirus-data-all",
                      must_have_embedding=TRUE,
                      random_sample=random_sample,
                      resultsize=resultsize,
-                     resultfields='"user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "extended_tweet.full_text", "embedding.use_large.primary"',
+                     resultfields='"user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary"',
                      elasticsearch_host="",
                      elasticsearch_path="elasticsearch",
                      elasticsearch_port=443,
@@ -148,15 +149,15 @@ tweet.vectors.df$user_location <- sapply(tweet.vectors.df$user_location, clean_t
 ```{r, echo=FALSE}
 ##UNCOMMENT TO GENERATE ELBOW PLOT
 
-wssplot <- function(data, fc=1, nc=40, seed=20){
-  wss <- data.frame(k=fc:nc, withinss=c(0))
-  for (i in fc:nc){
-    set.seed(seed)
-    wss[i-fc+1,2] <- sum(kmeans(data, centers=i, iter.max=30)$withinss)}
-  ggplot(data=wss,aes(x=k,y=withinss)) + 
-    geom_line() + 
-    ggtitle("Quality (within sums of squares) of k-means by choice of k")
-}
+# wssplot <- function(data, fc=1, nc=40, seed=20){
+#   wss <- data.frame(k=fc:nc, withinss=c(0))
+#   for (i in fc:nc){
+#     set.seed(seed)
+#     wss[i-fc+1,2] <- sum(kmeans(data, centers=i, iter.max=30)$withinss)}
+#   ggplot(data=wss,aes(x=k,y=withinss)) + 
+#     geom_line() + 
+#     ggtitle("Quality (within sums of squares) of k-means by choice of k")
+# }
 # Generate the plot
 #wssplot(tweet.vectors.matrix)
 ```
@@ -214,15 +215,17 @@ for (i in 1:k){
 tweet.vectors.df$subcluster <- as.factor(tweet.vectors.df$subcluster)
 ```
 
-```{r, echo=FALSE}
+```{r echo=FALSE}
 ##UNCOMMENT TO OUTPUT FILES FOR TENSORBOARD
 
-#tweet.vectors.df$cluster_str <- paste("(", tweet.vectors.df$cluster, ")", sep="")
-#tweet.vectors.df$subcluster_str <- paste("(", tweet.vectors.df$subcluster, ")", sep="")
-
-#metadata_cols <- setdiff(colnames(tweet.vectors.df), c("cluster", "subcluster"))
-#write.table(tweet.vectors.df[,metadata_cols], "clustered_tweet_labels.tsv", sep='\t', row.names = FALSE)
-#write.table(tweet.vectors.matrix, "clustered_tweet_vectors.tsv", sep='\t', row.names = FALSE, col.names = FALSE)
+# tweet.vectors.df$cluster_str <- paste("(", tweet.vectors.df$cluster, ")", sep="")
+# tweet.vectors.df$subcluster_str <- paste("(", tweet.vectors.df$subcluster, ")", sep="")
+# 
+# metadata_cols <- setdiff(colnames(tweet.vectors.df), c("cluster", "subcluster"))
+# write.table(tweet.vectors.df[,metadata_cols], "clustered_tweet_labels.tsv", sep='\t', row.names = FALSE)
+# write.table(tweet.vectors.matrix, "clustered_tweet_vectors.tsv", sep='\t', row.names = FALSE, col.names = FALSE)
+# read.table("clustered_tweet_labels.tsv", header=TRUE)
+# read.table("clustered_tweet_vectors.tsv", header=TRUE)
 ```
 
 ```{r, echo=FALSE}
