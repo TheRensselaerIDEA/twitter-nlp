@@ -101,7 +101,7 @@ source("Elasticsearch.R")
 rangestart <- "2020-01-01 00:00:00"
 
 # query end date/time (exclusive)
-rangeend <- "2020-09-01 00:00:00"
+rangeend <- "2020-08-01 00:00:00"
 
 # query semantic similarity phrase
 semantic_phrase <- ""

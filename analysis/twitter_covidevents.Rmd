@@ -58,10 +58,10 @@ Note: large date ranges can take some time to process on initial search due to t
 
 ```{r}
 # query start date/time (inclusive)
-rangestart <- "2020-04-01 00:00:00"
+rangestart <- "2020-01-01 00:00:00"
 
 # query end date/time (exclusive)
-rangeend <- "2020-04-16 00:00:00"
+rangeend <- "2020-08-01 00:00:00"
 
 # query semantic similarity phrase (choose one of these examples or enter your own)
 #semantic_phrase <- "Elementary school students are not coping well with distance learning."
@@ -75,7 +75,7 @@ semantic_phrase <- ""
 
 # return results in chronological order or as a random sample within the range
 # (ignored if semantic_phrase is not blank)
-random_sample <- TRUE
+random_sample <- FALSE
 # number of results to return (max 10,000)
 resultsize <- 10000
 
@@ -96,21 +96,21 @@ show_center_nn <- FALSE
 # Get the tweets from Elasticsearch using the search parameters defined above
 ###############################################################################
 
-results <- do_search(indexname="coronavirus-data-all", 
+results <- do_search(indexname="covidevents-data", 
                      rangestart=rangestart,
                      rangeend=rangeend,
                      semantic_phrase=semantic_phrase,
                      must_have_embedding=TRUE,
                      random_sample=random_sample,
                      resultsize=resultsize,
-                     resultfields='"user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary"',
+                     resultfields='"user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary", "dataset_file", "dataset_entry.annotation.part1.Response", "dataset_entry.annotation.part2-opinion.Response"',
                      elasticsearch_host="",
                      elasticsearch_path="elasticsearch",
                      elasticsearch_port=443,
                      elasticsearch_schema="https")
 
 # this dataframe contains the tweet text and other metadata
-tweet.vectors.df <- results$df[,c("full_text", "user_screen_name", "user_verified", "user_location", "place.country", "place.full_name")]
+tweet.vectors.df <- results$df[,c("full_text", "user_screen_name", "user_verified", "user_location", "place.country", "place.full_name", "dataset_file", "dataset_entry.annotation.part1.Response", "dataset_entry.annotation.part2-opinion.Response")]
 
 # this matrix contains the embedding vectors for every tweet in tweet.vectors.df
 tweet.vectors.matrix <- t(simplify2array(results$df[,"embedding.use_large.primary"]))
@@ -126,7 +126,10 @@ tweet.vectors.matrix <- t(simplify2array(results$df[,"embedding.use_large.primar
 tweet.vectors.df$user_location <- ifelse(is.na(tweet.vectors.df$place.full_name), tweet.vectors.df$user_location, paste(tweet.vectors.df$place.full_name, tweet.vectors.df$place.country, sep=", "))
 tweet.vectors.df$user_location[is.na(tweet.vectors.df$user_location)] <- ""
 tweet.vectors.df$user_location_type <- ifelse(is.na(tweet.vectors.df$place.full_name), "User", "Place")
-tweet.vectors.df <- tweet.vectors.df[, c("full_text", "user_screen_name", "user_verified", "user_location", "user_location_type")]
+tweet.vectors.df$class <- sapply(tweet.vectors.df$dataset_file, function(d) sub(".jsonl", "", d))
+colnames(tweet.vectors.df)[colnames(tweet.vectors.df) == "dataset_entry.annotation.part1.Response"] <- "is_specific_event"
+colnames(tweet.vectors.df)[colnames(tweet.vectors.df) == "dataset_entry.annotation.part2-opinion.Response"] <- "opinion"
+tweet.vectors.df <- tweet.vectors.df[, c("full_text", "user_screen_name", "user_verified", "user_location", "user_location_type", "class", "is_specific_event", "opinion")]
 
 clean_text <- function(text, for_freq=FALSE) {
   text <- str_replace_all(text, "[\\s]+", " ")
@@ -179,6 +182,9 @@ centers.df <- data.frame(full_text=paste("Cluster (", rownames(km$centers), ") C
                          user_verified="[N/A]",
                          user_location="[N/A]",
                          user_location_type = "[N/A]",
+                         class = "[N/A]",
+                         is_specific_event = "[N/A]",
+                         opinion = "[N/A]",
                          vector_type = "cluster_center",
                          cluster=as.factor(rownames(km$centers)))
 tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
@@ -206,6 +212,9 @@ for (i in 1:k){
                          user_verified="[N/A]",
                          user_location="[N/A]",
                          user_location_type = "[N/A]",
+                         class = "[N/A]",
+                         is_specific_event = "[N/A]",
+                         opinion = "[N/A]",
                          vector_type = "subcluster_center",
                          cluster=as.factor(i),
                          subcluster=rownames(cluster.km$centers))
@@ -312,7 +321,7 @@ taglist <- htmltools::tagList()
 
 #Master high level plot
 fig <- plot_ly(tsne.plot, x=~X, y=~Y, 
-               text=~paste("Cluster:", cluster, "<br>Text:", full_text), 
+               text=~paste("Cluster:", cluster, "<br>Class:", class, "<br>IsSpecificEvent:", is_specific_event, "<br>Opinion:", opinion, "<br>Text:", full_text), 
                color=~cluster.label, type="scatter", mode="markers")
 fig <- fig %>% layout(title=paste("Master Plot:", master.label, "(high level clusters)"), 
                         yaxis=list(zeroline=FALSE), 
@@ -335,7 +344,7 @@ for (i in 1:k) {
   #Cluster plot with original positions
   if (isTRUE(show_original_subcluster_plots)) {
     fig <- plot_ly(cluster.tsne.plot, x=~X, y=~Y, 
-                   text=~paste("Subcluster:", subcluster, "<br>Text:", full_text), 
+                   text=~paste("Subcluster:", subcluster, "<br>Class:", class, "<br>IsSpecificEvent:", is_specific_event, "<br>Opinion:", opinion, "<br>Text:", full_text), 
                    color=~subcluster.label, type="scatter", mode="markers")
     fig <- fig %>% layout(title=paste('Cluster ', i, ": ", clusters[[i]]$label, " (as positioned in master plot)", sep=""), 
                           yaxis=list(zeroline=FALSE), 
@@ -348,7 +357,7 @@ for (i in 1:k) {
   #Cluster plot with regrouped positions by subcluster
   if (isTRUE(show_regrouped_subcluster_plots)) {
     fig <- plot_ly(cluster.tsne.plot, x=~cluster.X, y=~cluster.Y, 
-                   text=~paste("Subcluster:", subcluster, "<br>Text:", full_text), 
+                   text=~paste("Subcluster:", subcluster, "<br>Class:", class, "<br>IsSpecificEvent:", is_specific_event, "<br>Opinion:", opinion, "<br>Text:", full_text), 
                    color=~subcluster.label, type="scatter", mode="markers")
     fig <- fig %>% layout(title=paste('Cluster ', i, ": ", clusters[[i]]$label, " (regrouped by subcluster)", sep=""), 
                           yaxis=list(zeroline=FALSE), 
