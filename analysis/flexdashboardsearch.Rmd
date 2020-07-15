@@ -1,0 +1,481 @@
+---
+title: "CovidTwitter Summary Data"
+runtime: shiny_prerendered
+output:
+  flexdashboard::flex_dashboard:
+    theme: paper
+    vertical_layout: scroll
+---
+
+
+
+```{r setup, include=FALSE}
+r = getOption("repos")
+r["CRAN"] = "http://cran.rstudio.com"
+options(repos = r)
+
+if (!require("DT")) {
+  install.packages("DT")
+  library(DT)
+}
+
+
+if (!require("ggplot2")) {
+  install.packages("ggplot2")
+  library(ggplot2)
+}
+
+if (!require("knitr")) {
+  install.packages("knitr")
+  library(knitr)
+}
+
+if(!require('dplyr')) {
+  install.packages("dplyr")
+  library(dplyr)
+}
+
+if(!require('stringr')) {
+  install.packages("stringr")
+  library(stringr)
+}
+
+if(!require('Rtsne')) {
+  install.packages("Rtsne")
+  library(Rtsne)
+}
+
+if(!require('stopwords')) {
+  install.packages("stopwords")
+  library(stopwords)
+}
+
+if(!require('plotly')) {
+  install.packages("plotly")
+  library(plotly)
+}
+
+if (!require("kableExtra")) {
+  install.packages("kableExtra")
+  library(kableExtra)
+}
+
+if (!require("wordcloud2")) {
+  install.packages("wordcloud2")
+  library(wordcloud2)
+}
+
+if (!require("tidytext")) {
+  install.packages("tidytext")
+  library(tidytext)
+}
+
+if (!require("tm")) {
+  install.packages("tm")
+  library(tm)
+}
+
+if (!require("ggrepel")) {
+  install.packages("ggrepel")
+  library(ggrepel)
+}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+source("Elasticsearch.R")
+
+library(flexdashboard)
+library(shiny)
+
+
+```
+
+
+Paramaters {.sidebar Data-width=325}
+================================================================================
+
+
+
+```{r global, echo=TRUE}
+
+#range start
+rangestart <- "2020-01-01 00:00:00"
+
+#range end
+rangeend <- "2020-08-01 00:00:00"
+
+#query semantic similarity phrase 
+semantic_phrase <- ""
+
+#(ignored if semantic_phrase is not blank)
+random_sample <- FALSE
+
+#number of results to return (max 10,000)
+resultsize <- 10000
+
+#clusters in main plot
+k <- if (semantic_phrase=="") 8 else 5
+
+#subclusters per main cluster
+cluster.k <- 8
+
+show_original_subcluster_plots <- FALSE
+show_regrouped_subcluster_plots <- TRUE
+show_word_freqs <- FALSE
+show_center_nn <- FALSE
+```
+
+
+```{r, include=FALSE}
+###############################################################################
+# Get the tweets from Elasticsearch using the search parameters defined above
+###############################################################################
+
+
+
+results <-do_search(indexname="covidevents-data", 
+                     rangestart=rangestart,
+                     rangeend=rangeend,
+                     semantic_phrase=semantic_phrase,
+                     must_have_embedding=TRUE,
+                     random_sample=random_sample,
+                     resultsize=resultsize,
+                     resultfields='"user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary", "dataset_file", "dataset_entry.annotation.part1.Response", "dataset_entry.annotation.part2-opinion.Response"',
+                     elasticsearch_host="",
+                     elasticsearch_path="elasticsearch",
+                     elasticsearch_port=443,
+                     elasticsearch_schema="https")
+
+# this dataframe contains the tweet text and other metadata
+tweet.vectors.df <- results$df[,c("full_text", "user_screen_name", "user_verified", "user_location", "place.country", "place.full_name", "dataset_file", "dataset_entry.annotation.part1.Response", "dataset_entry.annotation.part2-opinion.Response")]
+
+# this matrix contains the embedding vectors for every tweet in tweet.vectors.df
+tweet.vectors.matrix <- t(simplify2array(results$df[,"embedding.use_large.primary"]))
+```
+
+
+Wordcloud
+=============================================================================
+
+Row
+---------------------------------------------------------------------------------------------------
+### Words that appear larger were more frequent in tweets related to the semantic phrase {.tabset}
+
+
+```{r, echo=FALSE}
+###############################################################################
+# Clean the tweet and user location text, and set up tweet.vectors.df 
+# the way we want it by consolidating the location field and computing
+# location type
+###############################################################################
+
+
+clean_text <- function(text, for_freq=FALSE) {
+  text <- str_replace_all(text, "[\\s]+", " ")
+  text <- str_replace_all(text, "http\\S+", "")
+  if (isTRUE(for_freq)) {
+    text <- tolower(text)
+    text <- str_replace_all(text, "’", "'")
+    text <- str_replace_all(text, "_", "-")
+    text <- str_replace_all(text, "[^a-z1-9 ']", "")
+  } else {
+    text <- str_replace_all(text, "[^a-zA-Z1-9 `~!@#$%^&*()-_=+\\[\\];:'\",./?’]", "")
+  }
+  text <- str_replace_all(text, " +", " ")
+  text <- trimws(text)
+}
+tweet.vectors.df$full_text <- sapply(tweet.vectors.df$full_text, clean_text)
+tweet.vectors.df$user_location <- sapply(tweet.vectors.df$user_location, clean_text)
+
+
+
+wordcloudtext <- 
+  str_c(tweet.vectors.df$full_text, collapse = "") %>%
+  str_remove("\\n") %>%                   # remove linebreaks
+  str_remove_all("#\\S+") %>%             # Remove any hashtags
+  str_remove_all("@\\S+") %>%             # Remove any @ mentions
+  removeWords(stopwords("english")) %>%   # Remove common words (a, the, it etc.)
+  removeNumbers() %>%
+  stripWhitespace() %>%
+  removeWords(c("amp"))                   # Final cleanup of other small changes
+  
+  
+# Convert the data into a summary table
+textCorpus <- 
+  Corpus(VectorSource(wordcloudtext)) %>%
+  TermDocumentMatrix() %>%
+  as.matrix()
+  
+textCorpus <- sort(rowSums(textCorpus), decreasing=TRUE)
+textCorpus <- data.frame(word = names(textCorpus), freq=textCorpus, row.names = NULL)
+  
+# build wordcloud 
+wordcloud2(data = textCorpus)
+
+
+
+
+```
+
+
+
+Row
+---------------------------------------------------------------------------------------------------
+### Interactive table: type a word in the search box to get a table that only includes tweets from the search {.tabset}
+
+
+
+```{r, echo=FALSE}
+###############################################################################
+# Clean the tweet and user location text, and set up tweet.vectors.df 
+# the way we want it by consolidating the location field and computing
+# location type
+###############################################################################
+
+tweet.vectors.df$user_location <- ifelse(is.na(tweet.vectors.df$place.full_name), tweet.vectors.df$user_location, paste(tweet.vectors.df$place.full_name, tweet.vectors.df$place.country, sep=", "))
+tweet.vectors.df$user_location[is.na(tweet.vectors.df$user_location)] <- ""
+tweet.vectors.df$user_location_type <- ifelse(is.na(tweet.vectors.df$place.full_name), "User", "Place")
+tweet.vectors.df$class <- sapply(tweet.vectors.df$dataset_file, function(d) sub(".jsonl", "", d))
+colnames(tweet.vectors.df)[colnames(tweet.vectors.df) == "dataset_entry.annotation.part1.Response"] <- "is_specific_event"
+colnames(tweet.vectors.df)[colnames(tweet.vectors.df) == "dataset_entry.annotation.part2-opinion.Response"] <- "opinion"
+tweet.vectors.df <- tweet.vectors.df[, c("full_text", "user_screen_name", "user_verified", "user_location", "user_location_type", "class", "is_specific_event", "opinion")]
+
+
+info<-tweet.vectors.df[, c("full_text", "user_screen_name", "user_location")]
+DT::datatable(info, editable = TRUE)
+
+
+
+
+```
+
+
+
+Cluster Plots
+=========================================================================
+
+Row
+----------------------------------------------------------------------------
+
+
+
+```{r, echo=FALSE}
+###############################################################################
+# Run K-means on all the tweet embedding vectors
+###############################################################################
+
+set.seed(300)
+km <- kmeans(tweet.vectors.matrix, centers=k, iter.max=30)
+
+tweet.vectors.df$vector_type <- factor("tweet", levels=c("tweet", "cluster_center", "subcluster_center"))
+tweet.vectors.df$cluster <- as.factor(km$cluster)
+
+#append cluster centers to dataset for visualization
+centers.df <- data.frame(full_text=paste("Cluster (", rownames(km$centers), ") Center", sep=""),
+                         user_screen_name="[N/A]",
+                         user_verified="[N/A]",
+                         user_location="[N/A]",
+                         user_location_type = "[N/A]",
+                         class = "[N/A]",
+                         is_specific_event = "[N/A]",
+                         opinion = "[N/A]",
+                         vector_type = "cluster_center",
+                         cluster=as.factor(rownames(km$centers)))
+tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
+tweet.vectors.matrix <- rbind(tweet.vectors.matrix, km$centers)
+```
+
+```{r, echo=FALSE}
+###############################################################################
+# Run K-means again on all the tweet embedding vectors in each cluster
+# to create subclusters of tweets
+###############################################################################
+
+tweet.vectors.df$subcluster <- c(0)
+
+for (i in 1:k){
+ cluster.matrix <- tweet.vectors.matrix[tweet.vectors.df$cluster == i,]
+ set.seed(500)
+ cluster.km <- kmeans(cluster.matrix, centers=cluster.k, iter.max=30)
+ tweet.vectors.df[tweet.vectors.df$cluster == i, "subcluster"] <- cluster.km$cluster
+ 
+ #append subcluster centers to dataset for visualization
+ centers.df <- data.frame(full_text=paste("Subcluster (", rownames(cluster.km$centers), ") Center", sep=""),
+                         user_screen_name="[N/A]",
+                         user_verified="[N/A]",
+                         user_location="[N/A]",
+                         user_location_type = "[N/A]",
+                         class = "[N/A]",
+                         is_specific_event = "[N/A]",
+                         opinion = "[N/A]",
+                         vector_type = "subcluster_center",
+                         cluster=as.factor(i),
+                         subcluster=rownames(cluster.km$centers))
+ tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
+ tweet.vectors.matrix <- rbind(tweet.vectors.matrix, cluster.km$centers)
+}
+tweet.vectors.df$subcluster <- as.factor(tweet.vectors.df$subcluster)
+```
+
+
+
+```{r, echo=FALSE}
+###############################################################################
+# Compute labels for each cluster and subcluster based on word frequency
+# and identify the nearest neighbors to each cluster and subcluster center
+###############################################################################
+
+stop_words <- stopwords("english")
+stop_words <- union(stop_words, c(",", ".", "!", "-", "?", "&amp;", "amp"))
+
+
+get_word_freqs <- function(full_text) {
+  word_freqs <- table(unlist(strsplit(clean_text(full_text, TRUE), " ")))
+  word_freqs <- cbind.data.frame(names(word_freqs), as.integer(word_freqs))
+  colnames(word_freqs) <- c("word", "count")
+  word_freqs <- word_freqs[!(word_freqs$word %in% stop_words),]
+  word_freqs <- word_freqs[order(word_freqs$count, decreasing=TRUE),]
+}
+
+get_label <- function(word_freqs, exclude_from_labels=NULL, top_k=3) {
+  words <- as.character(word_freqs$word)
+  exclude_words <- NULL
+  if (!is.null(exclude_from_labels)) {
+    exclude_words <- unique(unlist(lapply(strsplit(exclude_from_labels, "/"), trimws)))
+  }
+  label <- paste(setdiff(words, exclude_words)[1:top_k], collapse=" / ")
+}
+
+get_nearest_center <- function(df, mtx, center) {
+  df$center_cosine_similarity <- apply(mtx, 1, function(v) (v %*% center)/(norm(v, type="2")*norm(center, type="2")))
+  nearest_center <- df[order(df$center_cosine_similarity, decreasing=TRUE),]
+  nearest_center <- nearest_center[nearest_center$vector_type=="tweet", c("center_cosine_similarity", "full_text", "user_location")]
+}
+
+master.word_freqs <- get_word_freqs(tweet.vectors.df$full_text)
+master.label <- get_label(master.word_freqs, top_k=6)
+
+clusters <- list()
+for (i in 1:k) {
+  cluster.df <- tweet.vectors.df[tweet.vectors.df$cluster == i,]
+  cluster.matrix <- tweet.vectors.matrix[tweet.vectors.df$cluster == i,]
+    
+  cluster.word_freqs <- get_word_freqs(cluster.df$full_text)
+  cluster.label <- get_label(cluster.word_freqs, master.label)
+  cluster.center <- cluster.matrix[cluster.df$vector_type=="cluster_center",]
+  cluster.nearest_center <- get_nearest_center(cluster.df, cluster.matrix, cluster.center)
+  
+  cluster.subclusters <- list()
+  for (j in 1:cluster.k) {
+    subcluster.df <- cluster.df[cluster.df$subcluster == j,]
+    subcluster.matrix <- cluster.matrix[cluster.df$subcluster == j,]
+    
+    subcluster.word_freqs <- get_word_freqs(subcluster.df$full_text)
+    subcluster.label <- get_label(subcluster.word_freqs, c(master.label, cluster.label))
+    subcluster.center <- subcluster.matrix[subcluster.df$vector_type=="subcluster_center",]
+    subcluster.nearest_center <- get_nearest_center(subcluster.df, subcluster.matrix, subcluster.center)
+    
+    cluster.subclusters[[j]] <- list(word_freqs=subcluster.word_freqs, label=subcluster.label, nearest_center=subcluster.nearest_center)
+  }
+  
+  clusters[[i]] <- list(word_freqs=cluster.word_freqs, label=cluster.label, nearest_center=cluster.nearest_center, subclusters=cluster.subclusters)
+}
+
+```
+
+
+```{r, echo=FALSE}
+###############################################################################
+# Run T-SNE on all the tweets and then again on each cluster to get
+# plot coordinates for each tweet. We output a master plot with all clusters
+# and a cluster plot with all subclusters for each cluster.
+###############################################################################
+
+set.seed(700)
+tsne <- Rtsne(tweet.vectors.matrix, dims=2, perplexity=25, max_iter=750, check_duplicates=FALSE)
+tsne.plot <- cbind(tsne$Y, tweet.vectors.df)
+colnames(tsne.plot)[1:2] <- c("X", "Y")
+tsne.plot$full_text <- sapply(tsne.plot$full_text, function(t) paste(strwrap(t ,width=60), collapse="<br>"))
+tsne.plot$cluster.label <- sapply(tsne.plot$cluster, function(c) clusters[[c]]$label)
+
+taglist <- htmltools::tagList()
+
+#Master high level plot
+fig <- plot_ly(tsne.plot, x=~X, y=~Y, 
+               text=~paste("Cluster:", cluster, "<br>Class:", class, "<br>IsSpecificEvent:", is_specific_event, "<br>Opinion:", opinion, "<br>Text:", full_text), 
+               color=~cluster.label, type="scatter", mode="markers")
+fig <- fig %>% layout(title=paste("Master Plot:", master.label, "(high level clusters)"), 
+                        yaxis=list(zeroline=FALSE), 
+                        xaxis=list(zeroline=FALSE))
+fig <- fig %>% toWebGL()
+taglist[[1]] <- fig
+
+
+plot_index <- 2
+for (i in 1:k) {
+  cluster.matrix <- tweet.vectors.matrix[tsne.plot$cluster == i,]
+  
+  set.seed(900)
+  cluster.tsne <- Rtsne(cluster.matrix, dims=2, perplexity=12, max_iter=500, check_duplicates=FALSE)
+  cluster.tsne.plot <- cbind(cluster.tsne$Y, tsne.plot[tsne.plot$cluster == i,])
+  colnames(cluster.tsne.plot)[1:2] <- c("cluster.X", "cluster.Y")
+  cluster.tsne.plot$subcluster.label <- sapply(cluster.tsne.plot$subcluster, function(c) clusters[[i]]$subclusters[[c]]$label)
+  
+  #Cluster plot with original positions
+  if (isTRUE(show_original_subcluster_plots)) {
+    fig <- plot_ly(cluster.tsne.plot, x=~X, y=~Y, 
+                   text=~paste("Subcluster:", subcluster, "<br>Class:", class, "<br>IsSpecificEvent:", is_specific_event, "<br>Opinion:", opinion, "<br>Text:", full_text), 
+                   color=~subcluster.label, type="scatter", mode="markers")
+    fig <- fig %>% layout(title=paste('Cluster ', i, ": ", clusters[[i]]$label, " (as positioned in master plot)", sep=""), 
+                          yaxis=list(zeroline=FALSE), 
+                          xaxis=list(zeroline=FALSE))
+    #fig <- fig %>% toWebGL()
+    taglist[[plot_index]] <- fig
+    plot_index <- plot_index + 1
+  }
+  
+  #Cluster plot with regrouped positions by subcluster
+  if (isTRUE(show_regrouped_subcluster_plots)) {
+    fig <- plot_ly(cluster.tsne.plot, x=~cluster.X, y=~cluster.Y, 
+                   text=~paste("Subcluster:", subcluster, "<br>Class:", class, "<br>IsSpecificEvent:", is_specific_event, "<br>Opinion:", opinion, "<br>Text:", full_text), 
+                   color=~subcluster.label, type="scatter", mode="markers")
+    fig <- fig %>% layout(title=paste('Cluster ', i, ": ", clusters[[i]]$label, " (regrouped by subcluster)", sep=""), 
+                          yaxis=list(zeroline=FALSE), 
+                          xaxis=list(zeroline=FALSE))
+    #fig <- fig %>% toWebGL()
+    taglist[[plot_index]] <- fig
+    plot_index <- plot_index + 1
+  }
+  
+  # Print cluster word frequencies
+  if (isTRUE(show_word_freqs)) {
+    taglist[[plot_index]] <- htmltools::HTML(kable(clusters[[i]]$word_freqs[1:5,], caption=paste("Cluster", i, "word frequencies")) %>% kable_styling())
+    plot_index <- plot_index + 1
+  }
+  
+  # Print nearest neighbors of cluster center
+  if (isTRUE(show_center_nn)) {
+    taglist[[plot_index]] <- htmltools::HTML(kable(clusters[[i]]$nearest_center[1:5,], caption=paste("Cluster", i, "nearest neighbors to center")) %>% kable_styling())
+    plot_index <- plot_index + 1
+  }
+  
+  for (j in 1:cluster.k) {
+    # Print subcluster word frequencies
+    if (isTRUE(show_word_freqs)) {
+      taglist[[plot_index]] <- htmltools::HTML(kable(clusters[[i]]$subclusters[[j]]$word_freqs[1:5,], caption=paste("Subcluster", j, "word frequencies")) %>% kable_styling())
+      plot_index <- plot_index + 1
+    }
+    
+    # Print nearest neighbors of subcluster center
+    if (isTRUE(show_center_nn)) {
+      taglist[[plot_index]] <- htmltools::HTML(kable(clusters[[i]]$subclusters[[j]]$nearest_center[1:5,], caption=paste("Subcluster", j, "nearest neighbors to center")) %>% kable_styling())
+      plot_index <- plot_index + 1
+    }
+  }
+}
+taglist
+```
+
+
+
+
