@@ -6,6 +6,8 @@ The following resources provide an overview of the project:
 - [IDEA poster](https://drive.google.com/file/d/1Y66aMfGIjqbTeUX0RMQ-RpjA1u7pEWVJ/view?usp=sharing)
 - [UG Research Symposium poster slides](https://drive.google.com/file/d/13U5hQeKTnfd3I1oSDLsbVIFXPj1xX5gf/view?usp=sharing)
 
+Additional info for the Health Analytics Challenge Lab (HACL) can be found [here](HACL_20.md).
+
 ## Getting started 
 ### On the Rensselaer IDEA cluster
 1. Clone this repository to your preferred location on the cluster (home directory, etc.)
