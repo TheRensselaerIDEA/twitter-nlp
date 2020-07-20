@@ -1,4 +1,8 @@
-query_by_date_range <- function(resultfields, gte_str, lt_str, must_have_embedding, random_sample) {
+fix_text_filter <- function(text_filter) {
+  return(gsub("\"", "\\\"", text_filter, fixed=TRUE))
+}
+
+query_by_date_range <- function(resultfields, gte_str, lt_str, text_filter, must_have_embedding, random_sample) {
   if (isTRUE(must_have_embedding)) {
     embedding_clause <- '{
       "exists": { "field": "embedding.use_large.primary" }
@@ -6,10 +10,18 @@ query_by_date_range <- function(resultfields, gte_str, lt_str, must_have_embeddi
   } else {
     embedding_clause <- ''
   }
+  if (!is.null(text_filter) && text_filter != "") {
+    query_string <- sprintf('{
+      "simple_query_string": { "fields": ["text", "full_text", "extended_tweet.full_text"], "query": "%s" }
+    },', fix_text_filter(text_filter))
+  } else {
+    query_string <- ''
+  }
   
   filter_clause <- sprintf('{
       "bool": {
         "filter": [
+          %s
           %s
           {
             "range" : {
@@ -32,7 +44,7 @@ query_by_date_range <- function(resultfields, gte_str, lt_str, must_have_embeddi
           }
         ]
       }
-    }', embedding_clause, gte_str, lt_str)
+    }', query_string, embedding_clause, gte_str, lt_str)
   
   if (isTRUE(random_sample)) {
     query <- sprintf('{
@@ -58,7 +70,14 @@ query_by_date_range <- function(resultfields, gte_str, lt_str, must_have_embeddi
   return(query)
 }
 
-query_by_date_range_and_embedding <- function(resultfields, gte_str, lt_str, text_embedding) {
+query_by_date_range_and_embedding <- function(resultfields, gte_str, lt_str, text_filter, text_embedding) {
+  if (!is.null(text_filter) && text_filter != "") {
+    query_string <- sprintf('{
+      "simple_query_string": { "fields": ["text", "full_text", "extended_tweet.full_text"], "query": "%s" }
+    },', fix_text_filter(text_filter))
+  } else {
+    query_string <- ''
+  }
   query <- sprintf('{
     "_source": [%s],
     "query": {
@@ -66,6 +85,7 @@ query_by_date_range_and_embedding <- function(resultfields, gte_str, lt_str, tex
         "query": {
           "bool": {
             "filter": [
+              %s
               {
                 "range" : {
                   "created_at" : {
@@ -88,7 +108,7 @@ query_by_date_range_and_embedding <- function(resultfields, gte_str, lt_str, tex
         }
       }
     }
-  }', resultfields, gte_str, lt_str, text_embedding)
+  }', resultfields, query_string, gte_str, lt_str, text_embedding)
   
   return(query)
 }

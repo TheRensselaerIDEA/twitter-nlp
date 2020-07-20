@@ -33,26 +33,28 @@ embed_use_large <- function(text, embed_use_large_url) {
 do_search <- function(indexname, 
                       rangestart, # query start date/time (inclusive)
                       rangeend,   # query end date/time (exclusive)
+                      text_filter="",
                       semantic_phrase="",
                       must_have_embedding=FALSE,
                       random_sample=FALSE,
                       resultsize=10,
-                      resultfields=NULL,
+                      resultfields="",
                       elasticsearch_host="localhost",
                       elasticsearch_path="",
                       elasticsearch_port=9200,
                       elasticsearch_schema="http",
-                      embed_use_large_url="http://localhost:8008/embed/use_large/") {
+                      embed_use_large_url="http://localhost:8008/embed/use_large/",
+                      return_es_query_only=FALSE) {
 
   #Validate params
   
-  if (missing(indexname)) { stop("indexname not specified.") }
+  if (missing(indexname) && isFALSE(return_es_query_only)) { stop("indexname not specified.") }
   
   if (missing(rangestart) || missing(rangeend)) { stop("rangestart and rangeend not specified.") }
   rangestart <- ymd_hms(rangestart)
   rangeend <- ymd_hms(rangeend)
-  
-  if (is.null(resultfields)) {
+
+  if (is.null(resultfields) || resultfields=="") {
     resultfields <- '"created_at", "user.id_str", "user.screen_name",
             "in_reply_to_status_id_str", "favorite_count", "text", "full_text", "extended_tweet.full_text",
             "source", "retweeted", "in_reply_to_screen_name", "in_reply_to_user_id_str",
@@ -70,13 +72,16 @@ do_search <- function(indexname,
   gte_str <- format(rangestart, "%Y-%m-%dT%H:%M:%S")
   lt_str <- format(rangeend, "%Y-%m-%dT%H:%M:%S")
   
-  if (semantic_phrase == "") {
-    query <- query_by_date_range(resultfields, gte_str, lt_str, must_have_embedding, random_sample)
+  if (is.null(semantic_phrase) || semantic_phrase == "") {
+    query <- query_by_date_range(resultfields, gte_str, lt_str, text_filter, must_have_embedding, random_sample)
   } else {
     text_embedding <- embed_use_large(semantic_phrase, embed_use_large_url)
-    query <- query_by_date_range_and_embedding(resultfields, gte_str, lt_str, toJSON(text_embedding))
+    query <- query_by_date_range_and_embedding(resultfields, gte_str, lt_str, text_filter, toJSON(text_embedding))
   }
-  #print(query)
+  
+  if (isTRUE(return_es_query_only)) {
+    return(query)
+  }
   
   results <- Search(conn, index=indexname, body=query, size=resultsize, asdf=TRUE)
   results.total <- results$hits$total$value

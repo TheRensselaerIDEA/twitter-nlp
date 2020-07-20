@@ -63,6 +63,13 @@ rangestart <- "2020-04-01 00:00:00"
 # query end date/time (exclusive)
 rangeend <- "2020-04-16 00:00:00"
 
+# text filter restricts results to only those containing words, phrases, or meeting a boolean condition. This query syntax is very flexible and supports a wide variety of filter scenarios:
+# words: text_filter <- "cdc nih who"  ...contains "cdc" or "nih" or "who"
+# phrase: text_filter <- '"vitamin c"' ...contains exact phrase "vitamin c"
+# boolean condition: <- '(cdc nih who) +"vitamin c"' ...contains ("cdc" or "nih" or "who") and exact phrase "vitamin c"
+#full specification here: https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-simple-query-string-query.html
+text_filter <- ""
+
 # query semantic similarity phrase (choose one of these examples or enter your own)
 #semantic_phrase <- "Elementary school students are not coping well with distance learning."
 #semantic_phrase <- "How do you stay at home when you are homeless?"
@@ -99,6 +106,7 @@ show_center_nn <- FALSE
 results <- do_search(indexname="coronavirus-data-all", 
                      rangestart=rangestart,
                      rangeend=rangeend,
+                     text_filter=text_filter,
                      semantic_phrase=semantic_phrase,
                      must_have_embedding=TRUE,
                      random_sample=random_sample,

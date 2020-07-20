@@ -104,6 +104,9 @@ rangestart <- "2020-01-01 00:00:00"
 #range end
 rangeend <- "2020-08-01 00:00:00"
 
+# text filter restricts results to only those containing words, phrases, or meeting a boolean condition
+text_filter <- ""
+
 #query semantic similarity phrase 
 semantic_phrase <- ""
 
@@ -136,6 +139,7 @@ show_center_nn <- FALSE
 results <-do_search(indexname="covidevents-data", 
                      rangestart=rangestart,
                      rangeend=rangeend,
+                     text_filter=text_filter,
                      semantic_phrase=semantic_phrase,
                      must_have_embedding=TRUE,
                      random_sample=random_sample,
