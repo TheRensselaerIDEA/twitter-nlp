@@ -43,6 +43,17 @@ rangeend <- "2020-04-16 00:00:00"
 
 This list will be updated when storage capacity increases and more tweets are embedded.
 
+#### Text filter
+A text filter limits the result set to only those tweets that pass the filter criteria.
+```{r}
+# text filter restricts results to only those containing words, phrases, or meeting a boolean condition. This query syntax is very flexible and supports a wide variety of filter scenarios:
+# words: text_filter <- "cdc nih who"  ...contains "cdc" or "nih" or "who"
+# phrase: text_filter <- '"vitamin c"' ...contains exact phrase "vitamin c"
+# boolean condition: <- '(cdc nih who) +"vitamin c"' ...contains ("cdc" or "nih" or "who") and exact phrase "vitamin c"
+#full specification here: https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-simple-query-string-query.html
+text_filter <- "cure prevent"
+```
+
 #### Semantic phrase
 A semantic phrase causes retrieved tweets to be ordered by cosine similarity with the embedding of this phrase.
 ```{r}
