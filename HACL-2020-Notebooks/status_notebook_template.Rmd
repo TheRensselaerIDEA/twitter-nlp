@@ -8,6 +8,13 @@ output:
     toc: true
 ---
 
+## Notebook Naming Convention!
+
+Please use the following syntax:
+
+* `hacl_rcsid_ddmmmyyyy.Rmd` and `hacl_rcsid_ddmmmyyyy.html`
+* For example, `hacl_erickj4_23Jul2020.Rmd`
+
 ## Weekly Work Summary	
 
 * Summary of work since last week 
