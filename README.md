@@ -25,7 +25,7 @@ COMING SOON!
 Both [semantic_search.Rmd](https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/analysis/semantic_search.Rmd) and [twitter.Rmd](https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/analysis/twitter.Rmd) are meant to be knit to HTML. Only run the Rmd directly in RStudio when working on parts of the code. Note that the HTML output will not render correctly in RStudio, so results need to be viewed as DataFrames instead when working in this mode.
 
 ### Common parameters
-Both notebooks accept a date range, semantic phrase, and result size:
+Both notebooks accept the following common parameters:
 
 #### Date range
 This filters the date range for which tweets will be retrieved. In general, larger date ranges take longer to run. The query below retrieves tweets from April 1 to April 15. The `rangeend` parameter is exclusive, meaning that tweets occuring at midnight April 16th are not returned.
@@ -54,6 +54,21 @@ A text filter limits the result set to only those tweets that pass the filter cr
 text_filter <- "cure prevent"
 ```
 
+#### Location filter
+A location filter limits the result set to only those tweets originating from locations that pass the filter criteria.
+Locations can be provided by the tweet author's user profile or by geolocation.
+```{r}
+# location filter acts like text filter except applied to the location of the tweet instead of its text body.
+location_filter <- "louisiana"
+```
+
+#### Geolocation filter
+A geolocation filter limits the result set to only those tweets which are geolocated.
+```{r}
+# if FALSE, location filter considers both user-povided and geotagged locations. If TRUE, only geotagged locations are considered.
+must_have_geo <- FALSE
+```
+
 #### Semantic phrase
 A semantic phrase causes retrieved tweets to be ordered by cosine similarity with the embedding of this phrase.
 ```{r}
@@ -68,7 +83,14 @@ Number of tweets to retrieve.
 resultsize <- 10000
 ```
 
-### Paramaters for semantic_search.Rmd
+#### Minimum number of results
+If less than this number of tweets are returned for the given search parameters, raise an error.
+```{r}
+# minimum number of results to return. This should be set according to the needs of the analysis (i.e. enough samples for statistical significance)
+min_results <- 500
+```
+
+### Parameters for semantic_search.Rmd
 This notebook just uses the common search parameters, however `resultsize` should be restricted to a number that can reasonably be displayed (less than 1000).
 
 ### Parameters for twitter.Rmd
