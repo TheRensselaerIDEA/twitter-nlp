@@ -34,8 +34,10 @@ do_search <- function(indexname,
                       rangestart, # query start date/time (inclusive)
                       rangeend,   # query end date/time (exclusive)
                       text_filter="",
+                      location_filter="",
                       semantic_phrase="",
                       must_have_embedding=FALSE,
+                      must_have_geo=FALSE,
                       random_sample=FALSE,
                       resultsize=10,
                       resultfields="",
@@ -73,10 +75,23 @@ do_search <- function(indexname,
   lt_str <- format(rangeend, "%Y-%m-%dT%H:%M:%S")
   
   if (is.null(semantic_phrase) || semantic_phrase == "") {
-    query <- query_by_date_range(resultfields, gte_str, lt_str, text_filter, must_have_embedding, random_sample)
+    query <- base_query(resultfields, 
+                        gte_str, 
+                        lt_str, 
+                        text_filter, 
+                        location_filter, 
+                        must_have_embedding, 
+                        must_have_geo, 
+                        random_sample)
   } else {
     text_embedding <- embed_use_large(semantic_phrase, embed_use_large_url)
-    query <- query_by_date_range_and_embedding(resultfields, gte_str, lt_str, text_filter, toJSON(text_embedding))
+    query <- semantic_query(resultfields,
+                            gte_str,
+                            lt_str,
+                            text_filter,
+                            location_filter,
+                            must_have_geo,
+                            toJSON(text_embedding))
   }
   
   if (isTRUE(return_es_query_only)) {
@@ -85,38 +100,60 @@ do_search <- function(indexname,
   
   results <- Search(conn, index=indexname, body=query, size=resultsize, asdf=TRUE)
   results.total <- results$hits$total$value
-  results.df <- results$hits$hits[,3:ncol(results$hits$hits)]
+  results.df <- NULL
   
-  #fix score for semantic search
-  if (semantic_phrase != "") {
-    results.df$`_score` <- results.df$`_score` - 1.0
-    colnames(results.df) <- sub("_score", "cosine_similarity", colnames(results.df))
-  }
+  if (results.total > 0) {
+    results.df <- results$hits$hits[,3:ncol(results$hits$hits)]
   
-  #fix column names
-  colnames(results.df) <- sub("_source.", "", colnames(results.df))
-  colnames(results.df) <- sub("extended_tweet.entities.", "extended_tweet.entities.full_", colnames(results.df))
-  colnames(results.df) <- sub("extended_tweet.", "", colnames(results.df))
-  colnames(results.df) <- sub("entities.", "", colnames(results.df))
-  colnames(results.df) <- sub("user.", "user_", colnames(results.df))
-  #merge 'text' and 'full_text'
-  if ("text" %in% colnames(results.df)) {
-    if ("full_text" %in% colnames(results.df)) {
-      results.df$full_text <- ifelse(is.na(results.df$full_text), results.df$text, results.df$full_text)
-    } else {
-      results.df$full_text <- results.df$text
+    #fix score for semantic search
+    if (semantic_phrase != "") {
+      results.df$`_score` <- results.df$`_score` - 1.0
+      colnames(results.df) <- sub("_score", "cosine_similarity", colnames(results.df))
     }
+    
+    #fix column names
+    colnames(results.df) <- sub("_source.", "", colnames(results.df))
+    colnames(results.df) <- sub("extended_tweet.entities.", "extended_tweet.entities.full_", colnames(results.df))
+    colnames(results.df) <- sub("extended_tweet.", "", colnames(results.df))
+    colnames(results.df) <- sub("entities.", "", colnames(results.df))
+    colnames(results.df) <- sub("user.", "user_", colnames(results.df))
+    #merge 'text' and 'full_text'
+    if ("text" %in% colnames(results.df)) {
+      if ("full_text" %in% colnames(results.df)) {
+        results.df$full_text <- ifelse(is.na(results.df$full_text), results.df$text, results.df$full_text)
+      } else {
+        results.df$full_text <- results.df$text
+      }
+    }
+    
+    #TODO: drop original 'text' column
+    #TODO: merge 'hashtags' and 'full_hashtags', merge 'urls' and 'full_urls'
+    #TODO: drop original 'hashtags' and 'urls' columns
   }
-  
-  #TODO: drop original 'text' column
-  #TODO: merge 'hashtags' and 'full_hashtags', merge 'urls' and 'full_urls'
-  #TODO: drop original 'hashtags' and 'urls' columns
   
   return(list(total=results.total, 
               df=results.df,
               params=list(
                 rangestart=rangestart,
                 rangeend=rangeend,
-                semantic_phrase=semantic_phrase
+                text_filter=text_filter,
+                location_filter=location_filter,
+                semantic_phrase=semantic_phrase,
+                must_have_geo=must_have_geo
               )))
+}
+
+validate_results <- function(df, min_results, required_fields=character(0)) {
+  # check for minimum results
+  if (results$total < min_results) {
+    stop(paste("Insufficient results found for the provided search parameters - ", 
+               results$total, " result(s) were found and ", min_results, " result(s) are required. Try expanding your search.", sep=""))
+  }
+  
+  # check for required fields
+  missing_fields <- setdiff(required_fields, colnames(df))
+  if (length(missing_fields) > 0) {
+    stop(paste("The results found for the provided search parameters are missing the following required field(s): ", 
+               paste(missing_fields, collapse=", "), ". Try expanding your search.", sep=""))
+  }
 }

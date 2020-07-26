@@ -52,7 +52,7 @@ knitr::opts_chunk$set(echo = TRUE)
 source("Elasticsearch.R")
 ```
 
-### Configure the search parameters here - set date range and semantic phrase:
+### Configure the search parameters here:
 
 Note: large date ranges can take some time to process on initial search due to the sheer volume of data we have collected. Subsequent searches using the same date range should run quickly due to Elasticsearch caching.
 
@@ -70,6 +70,12 @@ rangeend <- "2020-04-16 00:00:00"
 #full specification here: https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-simple-query-string-query.html
 text_filter <- ""
 
+# location filter acts like text filter except applied to the location of the tweet instead of its text body.
+location_filter <- ""
+
+# if FALSE, location filter considers both user-povided and geotagged locations. If TRUE, only geotagged locations are considered.
+must_have_geo <- FALSE
+
 # query semantic similarity phrase (choose one of these examples or enter your own)
 #semantic_phrase <- "Elementary school students are not coping well with distance learning."
 #semantic_phrase <- "How do you stay at home when you are homeless?"
@@ -85,6 +91,8 @@ semantic_phrase <- ""
 random_sample <- TRUE
 # number of results to return (max 10,000)
 resultsize <- 10000
+# minimum number of results to return. This should be set according to the needs of the analysis (i.e. enough samples for statistical significance)
+min_results <- 500
 
 ####TEMPORARY SETTINGS####
 # number of high level clusters (temporary until automatic selection implemented)
@@ -107,8 +115,10 @@ results <- do_search(indexname="coronavirus-data-all",
                      rangestart=rangestart,
                      rangeend=rangeend,
                      text_filter=text_filter,
+                     location_filter=location_filter,
                      semantic_phrase=semantic_phrase,
                      must_have_embedding=TRUE,
+                     must_have_geo=must_have_geo,
                      random_sample=random_sample,
                      resultsize=resultsize,
                      resultfields='"user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary"',
@@ -118,7 +128,9 @@ results <- do_search(indexname="coronavirus-data-all",
                      elasticsearch_schema="https")
 
 # this dataframe contains the tweet text and other metadata
-tweet.vectors.df <- results$df[,c("full_text", "user_screen_name", "user_verified", "user_location", "place.country", "place.full_name")]
+required_fields <- c("full_text", "user_screen_name", "user_verified", "user_location", "place.country", "place.full_name")
+validate_results(results$df, min_results, required_fields)
+tweet.vectors.df <- results$df[,required_fields]
 
 # this matrix contains the embedding vectors for every tweet in tweet.vectors.df
 tweet.vectors.matrix <- t(simplify2array(results$df[,"embedding.use_large.primary"]))
@@ -393,5 +405,14 @@ for (i in 1:k) {
   }
 }
 
+```
+
+\  
+
+### Displaying `r nrow(results$df)` of `r results$total` results:
+
+\  
+
+```{r, echo=FALSE}
 taglist
 ```

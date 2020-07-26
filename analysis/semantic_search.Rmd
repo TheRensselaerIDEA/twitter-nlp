@@ -24,7 +24,7 @@ source("Elasticsearch.R")
 
 ## Demo for semantic similarity search using Universal Sentence Encoder embeddings and Elasticsearch.
 
-### Configure the search parameters here - set date range and semantic phrase:
+### Configure the search parameters here:
 
 Note: large date ranges can take some time to process on initial search due to the sheer volume of data we have collected. Subsequent searches using the same date range should run quickly due to Elasticsearch caching.
 
@@ -42,6 +42,12 @@ rangeend <- "2020-04-16 00:00:00"
 #full specification here: https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-simple-query-string-query.html
 text_filter <- ""
 
+# location filter acts like text filter except applied to the location of the tweet instead of its text body.
+location_filter <- ""
+
+# if FALSE, location filter considers both user-povided and geotagged locations. If TRUE, only geotagged locations are considered.
+must_have_geo <- FALSE
+
 # query semantic similarity phrase (choose one of these examples or enter your own)
 #semantic_phrase <- "Hemoglobin"
 #semantic_phrase <- "How do you stay at home when you are homeless?"
@@ -54,6 +60,8 @@ semantic_phrase <- "I'm taking vitamins to help fight covid-19"
 
 # number of results to return (max 10,000)
 resultsize <- 50
+# minimum number of results to return. This should be set according to the needs of the analysis (i.e. enough samples for statistical significance)
+min_results <- 1
 ```
 
 ### Results:
@@ -63,8 +71,10 @@ results <- do_search(indexname="coronavirus-data-all",
                      rangestart=rangestart,
                      rangeend=rangeend,
                      text_filter=text_filter,
+                     location_filter=location_filter,
                      semantic_phrase=semantic_phrase,
                      must_have_embedding=TRUE,
+                     must_have_geo=must_have_geo,
                      resultsize=resultsize,
                      resultfields='"created_at", "user.screen_name", "text", "full_text", "extended_tweet.full_text"',
                      elasticsearch_host="",
@@ -72,13 +82,19 @@ results <- do_search(indexname="coronavirus-data-all",
                      elasticsearch_port=443,
                      elasticsearch_schema="https")
 
+required_fields <- c("cosine_similarity", "full_text", "created_at", "user_screen_name")
+validate_results(results$df, min_results, required_fields)
+
 #print results
 params.df <- data.frame(from=results$params$rangestart, 
-                        to=results$params$rangeend, 
+                        to=results$params$rangeend,
+                        text.filter=results$params$text_filter,
+                        location.filter=results$params$location_filter,
                         phrase=results$params$semantic_phrase,
+                        geo_only=results$params$must_have_geo,
                         results.count=paste(nrow(results$df), "/", results$total))
 kable(params.df) %>% kable_styling()
 
-display.df <- results$df[, c("cosine_similarity", "full_text", "created_at", "user_screen_name")]
+display.df <- results$df[, required_fields]
 kable(display.df) %>% kable_styling()
 ```
