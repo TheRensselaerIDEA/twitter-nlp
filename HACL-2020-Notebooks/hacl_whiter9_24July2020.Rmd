@@ -1,0 +1,194 @@
+---
+title: "HACL Project Status Notebook Week 2"
+author: "Rachael White // whiter9"
+date: "23 July 2020"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+subtitle: COVID-Twitter Project
+---
+***       
+## I. Weekly Work Summary	
+
+##### **Verbal summary of work since last week:**
+
+*	**Weekend** (7/18-19)
+    * Began brainstorming coronavirus research questions that could be answered with Twitter data
+    * Arrived at concrete interest in studying geographic trends, based on readings
+    
+*	**Monday**
+    * RShiny workshop
+    * Webexed with Abraham for a rundown of the data collection pipeline, with aim of contributing to the development
+    of a location filter for tweet retrieval
+    * Reviewed ggplot cheat sheet, played around a bit with plotting
+    * Did a base-level exploration of a random sample of geo-tagged Twitter data (practiced constructing/modifying
+    data frames, creating bar charts)
+    
+*	**Tuesday**
+    *	Literature review of geospatial data extraction methodologies starting with UPenn paper
+    
+*	**Wednesday**
+    *	Attended Folsom library workshop on using library resources for research
+    * Read up on the tweet object type and Elasticsearch queries to get better understanding/idea of how we might
+    filter data by user location
+    
+*	**Thursday**
+    *	Project brainstorming
+    *	Readings/online tutorials on constructing time series, in light of last breakout discussion for moving forward
+  with mask sentiment over time study
+    * started working through R bootcamp
+  
+* **Friday**
+    * consolidated potential research hypotheses for the mask-sentiment study
+  
+
+***
+##### **Github commits:**
+
+* COVID-Notebooks Practice (Assignment 2)
+    * Location (with branch name): COVID-Notebooks/HACL-2020/hacl-whiter9
+      * Files: covid-notebook-hacl-whiter9.Rmd, .html  
+        
+* COVID-Twitter Notebook Kmeans Experiment (Assignment 3)
+    * Location (with branch name): COVID-Twitter/HACL-2020-Notebooks/whiter9-weekly-status
+      * Files: whiter9-covid-twitter-kmeans-test.Rmd, .html
+      
+* Summary of Available Geo-Tagged Tweets for COVID Twitter Project
+    * Location (with branch name): COVID-Twitter/HACL-2020-Notebooks/whiter9-weekly-status
+      * Files: covid-twitter-all-geo.Rmd, .html
+        
+ ***       
+##### **Presentations,  papers, or other outputs (with links)**
+
+* Writeup of K-Means Clustering with COVID Twitter Notebook Experiment
+    * https://docs.google.com/document/d/1lVUxACL-rtnWBZeFA14n4ALLidCC-bPA-10B2_NEL8A/edit?usp=sharing  
+  
+* Team Resources Document
+    * https://docs.google.com/document/d/1NuaVFeayGsvhiWx71m_QqK8awb5AzXQomanVDL6clS0/edit?usp=sharing
+    
+***
+##### **Use of group shared code base**
+
+* Modified copy of Covid-Notebooks for Assignment 2
+    
+* Modified copy of covid-twitter-hacl-template.Rmd for Assignment 3/personal inquiry
+  
+* Modified copy of Twitter.Rmd for personal inquiry
+
+***
+##### **Personal Learning / Workshops**
+
+  * Dr. Erickson's R Shiny Workshop
+  * Dr. Erickson's R bootcamp (self-led)
+  * Folsom library workshop - using library research resources 
+  * Introduction to R for geospatial data:
+  https://datacarpentry.org/r-intro-geospatial/03-data-structures-part1/index.html
+  * On the Tweet object and location attributes:
+  https://developer.twitter.com/en/docs/tweets/data-dictionary/overview/intro-to-tweet-json
+  * Elasticsearch query mechanisms/syntax:
+  https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl.html
+  
+***
+##### **Readings**
+
+  * UPenn Opioid Paper/ "Machine Learning and Natural Language Processing for Geolocation-Centric Monitoring and
+   Characterization of Opioid-Related Social Media Chatter" - good source for geospatial twitter data collection
+    methods and overall study design inspiration :
+       * https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6865282/#zoi190564r27
+
+  * “Who Tweets with their Location?” 
+      * for understanding biases that might/might arise from using geo-tagged tweet data
+      * https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4636345/#__ffn_sectitle
+      
+  * "Geo-Semantic Emotion Extraction from Technical Sensors, Human Sensors and Crowdsourced Data" - use of sentiment
+     analysis similar to what we’re looking at doing
+      * https://www.researchgate.net/publication/268630662_Urban_Emotions-Geo-Semantic_Emotion_Extraction_from_Techni         cal_Sensors_Human_Sensors_and_Crowdsourced_Data
+
+
+***
+## II. Personal Contributions	
+
+* Recommended a modification to kmeans clustering technique based on consultation of documentation/other resources (increasing nstart); suggestion was recognized as a valid means of improvement by the notebook author. Markdown of the experiment that led me to make the suggestion can be found in whiter9-covid-twitter-kmeans-test.html, included separately within this directory.
+
+    * A writeup of my findings with plot comparison included can be viewed here:
+    https://docs.google.com/document/d/1lVUxACL-rtnWBZeFA14n4ALLidCC-bPA-10B2_NEL8A/edit?usp=sharing  
+
+
+* Suggested addition of a location filter to current set of Elasticsearch query capabilities in Twitter notebooks, for use in potential future analysis of regional coronavirus trends 
+
+* Conducted (inexaustive) literature review of methodologies for analyzing Twitter data with geospatial attributes, gathered and consolidated ideas for hypotheses to explore with our data set and semantic clustering capabilities
+
+* Created Google doc of literature resources for personal and team reference
+
+    * https://docs.google.com/document/d/1NuaVFeayGsvhiWx71m_QqK8awb5AzXQomanVDL6clS0/edit?usp=sharing
+
+***
+## III. Discussion of Primary Findings 	
+
+* Personal questions of interest explored this week:
+
+    1. How does RShiny work?
+    2. What exactly does the Tweet object consist of, and how can we filter through tweets to sort out the ones that have geo-spatial metadata?
+    3. How does Elasticsearch communicate with Twitter's API, and how do we call on Elasticsearch to retrieve a specific index of tweets?
+    4. What specific questions could we answer by looking at Twitter data/trends by geographic region? And what are the potential limitations/biases that could arise from doing so? (hypothesis workshopping)
+    5. How to conduct a time series analysis in R
+    
+    
+* Primary findings: 
+
+    1. Shiny apps can be easily created from within RStudio; these apps are interactive data-visualization programs developed through two pipelines: the back-end server, where the actual main code that generates the app functionality is contained, and the UI, which is the front-end side that the user interacts directly with. The UI and server each have a separate development panel for feature design. Reactive elements integrated within both the server and UI panels maintain a direct line of communication with each other via specific matching keywords and syntax, to produce the output of the app. It was pointed out that a multitude of RShiny app examples and tutorials are available online, and I intend to follow up with these exercises in the future.
+    
+    2. Tweets are JSON objects with variable associated metadata, based on user input.
+        * Geo-located ones have a “place” attribute (parents to child object coordinates)
+            * Only original tweets have this; retweets do not, so we could only do analysis with set of originals
+            * We can use Elasticsearch to filter our dataset by only geo-tagged Tweets (Thank you Abraham!!)
+                *Potential problem/limitation: Find method of “normalizing” filter matches for specific locations                    (e.g.  so  “Kansas City, MS” doesn’t pop up in a query for Kansas State)
+
+    
+    3. In Week 1, when the COVID-Twitter project was first introduced, Lauren's top piece of advice to those of us considering getting involved was to get familiar with the data before just diving in to analysis. So, I made this task a personal goal for myself this week, and on self-evaluation I feel that I was fairly successful. I began by doing some reading and then consulted with Abraham about the details of his notebooks; I've gained a working understanding of Elasticsearch queries and logic, as well as the mechanism of making a data retrieval. I believe this will come in handy for general background knowledge when doing any sort of research writeup in the future. 
+
+    4. Potential COVID Twitter research project hypotheses brainstorming (not ranked by preference):
+        *	**Option 1:** For a given region and time frame, is there a correlation between:
+                    [ the negative sentimentality rate in relation to mask use/wearing ] and [ death rates/infection                     rates] ?
+            * Notably, in the UPenn paper "Machine Learning and Natural Language Processing for
+                     Geolocation-Centric Monitoring and Characterization of Opioid-Related Social Media Chatter", the                     authors establish a significant correlation between the average opioid-related death rates for a                     given region and time period (Pennsylvania, 3 years), and the frequencies of opioid-related
+                    Twitter discourse for the same region and timeframe. 
+            * It would be interesting to conduct a similar analysis, with coronavirus-era Twitter discourse
+                  semantically related to mask-wearing and bearing objectively negative sentimentality replacing
+                  Twitter discourse on opioid abuse as the correlate to death rates. Check out this visual from the
+                  UPenn study: 
+![](/home/whiter9/COVID-Twitter/HACL-2020-Notebooks/UPenn Study - Opioid discourse by death rate correlation.jpg)  
+        * **Option 2:** Is there a significant difference in attitudes towards masks over time for a given region?
+        
+        * **Option 3:** Generally, how has average sentimentality towards mask usage changed over time from March to now
+                  (across the us, by region, etc)? Might it be illustrative to do a time series with weekly moving                     average or similar smoothing?
+
+        *	**Important Factors to consider:**
+          
+            *	Nature of tweet data
+            
+                *	Are we using the unaugmented text of tweets, or embeddings with semantic/sentimental info
+                
+                *	What do the actual data sets look like/what types of analyses can you do with them; 
+                I.e is there an average, or a proportion, are we correlating sets of data points, etc 
+                
+            *	Time frame from which tweets should be drawn
+            
+                *	Somewhat hinges on Abraham’s new data index, if the analysis is going to be recent
+                 (for newsworthiness, it probably should be)
+                 
+                    *	One single if doing opt 1
+                    *	Two to compare if doing opt 2
+                    * Many, periodic time frames if doing opt 3
+                    
+            * What geographic area are we studying the twitter activity of (Or, are we just going to look at a random sample of global Twitter activity pushed to us by the API)
+              
+                *	Somewhat hinges on 2 other factors: 
+                
+                    * The question we’re trying to answer (are we Observing trends or predicting or comparing to some
+gold standard metric)? and 
+                     
+                    * The dataset we’re working with (are we looking at purely the proportion of tweets that are mask-related out of the total, do we have a continuous variable of sentimentality that we could take an average of, etc).
+

@@ -1,0 +1,40 @@
+---
+title: "Covid Twitter Geo-Tagged Tweets: Initial Inspection"
+author: "Rachael White // DAR-HACL 2020"
+output: 
+  html_document: 
+    df_print: kable
+editor_options: 
+  chunk_output_type: console
+---
+
+Summary of covid-twitter-all dataset, 
+with percentages of geo-tagged tweets for original and embedded tweets out of respective totals. Secondarily, an exercise in constructing/naming/modifying R data frames.
+
+
+```{r echo=TRUE}
+
+a = c(529185432,5417156)
+b = c(174794134,5417156)
+c = c(52122294,1748689)
+
+geo_data <- data.frame(a,b,c)
+names(geo_data) <- c("Tweets","Original_Tweets","Original_Embedded_Tweets")
+
+```
+
+```{r include=FALSE}
+
+percent_geo_originals <- round((as.integer(geo_data$Original_Tweets[2])/as.integer(geo_data$Original_Tweets[1]))*100,2)
+percent_geo_embeds <- round((as.integer(geo_data$Original_Embedded_Tweets[2])/as.integer(geo_data$Original_Embedded_Tweets[1]))*100,2)
+```
+
+```{r echo=TRUE}
+percents <- c('',percent_geo_originals,percent_geo_embeds)
+geo_data <- rbind(geo_data,percents)
+
+row.names(geo_data) <- c("Overall_Total","Geo-tagged","Percent Geo")
+
+geo_data
+
+```

@@ -10,7 +10,7 @@ output:
 subtitle: HACL project name (e.g. COVIDMINDER)
 ---
 
-## Instructions (DELETE BEFORE SUBMISSION)
+### Instructions (DELETE BEFORE SUBMISSION)
 
 * This notebook is a template for your weekly project status assignment. Please use the sections starting with "Weekly Work Summary" as your outline for your submitted notebook. DELETE this "Instructions" section
 

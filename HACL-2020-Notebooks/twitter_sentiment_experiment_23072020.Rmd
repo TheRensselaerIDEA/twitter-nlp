@@ -1,3 +1,8 @@
+
+```{r}
+elasticsearch_host <- "lp01.idea.rpi.edu"
+```
+
 ```{r setup, include=FALSE}
 # Required R package installation:
 # These will install packages if they are not already installed
@@ -60,7 +65,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 source("Elasticsearch.R")
 ```
-
 ## Summary
 
 This notebook consists of an experiment using the VADER algorithm to perform sentiment analysis on the Tweets and also cluster them based on sentiment. 
@@ -204,6 +208,8 @@ Next, we add a new column to the dataframe of tweets consisting of the VADER com
 
 tweet.vectors.df$sentiment <- c(0)
 tweet.vectors.df$sentiment <- vader_df(tweet.vectors.df$full_text)[,"compound"]
+
+print(tweet.vectors.df)
 ```
 
 We then cluster the tweet embedding using k-means with 4 clusters. This specific number of clusters was achieved using the `NbClust` package and function, which computes several metrics for a given range of clusters and returns the best number as given by mojority rule. It runs very slowly when computing all metrics, but as Dr. Erickson mentioned, there might be a way to parallelize this computation, which would be worthwhile in the context of an app.
