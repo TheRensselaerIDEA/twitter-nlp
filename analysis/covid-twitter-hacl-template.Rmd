@@ -15,7 +15,7 @@ Code is mostly excluded from the knit .html version of this notebook to maintain
 To run the .Rmd file, make sure the included dependencies Elasticsearch.R and elasticsearch_queries.R are in the same directory as the Rmd, and make sure to set "elasticsearch_host" to the approriate value here (this is not included in the github version for security reasons).
 
 ```{r}
-elasticsearch_host <- "lp01.idea.rpi.edu"
+elasticsearch_host <- ""
 ```
 
 #  Overview
