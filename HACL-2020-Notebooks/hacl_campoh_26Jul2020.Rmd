@@ -1,0 +1,45 @@
+---
+title: "HACL Project Status Report"
+author: "Haniel Campos Alcantara Paulo"
+date: "26 July 2020"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+subtitle: COVID-Twitter
+---
+
+## Weekly Work Summary	
+
+Most of my past week's work went into an experiment on the `HACL-2020-Notebooks` folder named `twitter_sentiment_experiment_23072020.Rmd`, which can be found [here](https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/HACL-2020-Notebooks/twitter_sentiment_experiment_23072020.Rmd). 
+This was an experiment using the VADER algorithm to perform sentiment analysis and incorporate tweets' sentiment scores into the subclustering process.
+Thus, this `Rmd` file, along with the knitted HTML `twitter_sentiment_experiment_23072020.html`, were my main commits from my brach `hacl-campoh` this week.
+The notebook goes into the analysis' details, so I refer the reader to the aforementioned files for an in depth summary of the experiment.
+
+It is clear that in order to run the experiment, I used the code contained on the shared `twitter.Rmd` as a basis, only adding the VADER sentiment analysis and changing the subclustering process. 
+Beyond this, all work was performed solely by myself.
+
+
+## Personal Contribution	
+
+My main contribution for this week is, of course, summarized in the sentiment analysis experiment committed to `HACL-2020-Notebooks` on the GitHub.
+It includes the idea of VADER for sentiment analysis, as well as an empirical evaluation of the effectiveness of using sentiment scaled data.
+It must be noted, however, that the idea of scaling embedding vectors by their tweet's sentiment score was originally proposed by Abraham at a meeting last week.
+
+## Discussion of Primary Findings 
+
+My objective with the sentiment experiment was to find an effective and quickly deployable way of performing sentiment analysis, as well as evaluating whether it could prove useful in subclustering as conjectured in class.
+
+I researched several algorithms for performing sentiment analysis, initially being drawn to the top performing neural network methods from the SemEval 2017 Task 4 competition.
+While I found these methods to have very good performance, their Python implementations would require a signifact amount of time to incorporate into the analysis and they work on the basis of sentiment classification as opposed to sentiment scores.
+Thus, I decided to go with the seniment analysis algoithm VADER.
+It works very well for oue purposes of sentiment analysis, as it's especially made for social media text, understands text valence and can be quickly deployed in R using the `VADER` package.
+
+Upon evaluating the compound sentiment score of each tweet with VADER, I set out to evaluate the conjecture that scaling the cluster embeddings by their score and then subclustering could show interesting results.
+As shown in the experiment, this resulted in tight and well defined clusters on the t-SNE plots, especially when compared to subclustering without scaling.
+
+Some questions remain unanswered, such as what each subcluster means or how to quickly find an optimal number of clusters for k-means (which I know some of my teammates are working on).
+
+Once again, this notebook can be found under `HACL-2020-Notebooks` on the GitHub.
+
