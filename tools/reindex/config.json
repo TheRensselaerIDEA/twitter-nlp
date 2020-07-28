@@ -3,5 +3,6 @@
     "elasticsearch_host": "localhost",
     "elasticsearch_verify_certs": false,
     "elasticsearch_index_name": "coronavirus-data2",
-    "elasticsearch_timeout_secs": 30
+    "elasticsearch_timeout_secs": 30,
+    "elasticsearch_query": null
 }

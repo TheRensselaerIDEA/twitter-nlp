@@ -11,6 +11,7 @@ parser = argparse.ArgumentParser("Run the reindex script")
 parser.add_argument("--sourceindex", "-s", required=True, help="Source index to copy data from.")
 parser.add_argument("--configfile", "-c", default="config.json", required=False, help="Path to the config file to use.")
 parser.add_argument("--reqpersec", "-r", type=int, default=-1, required=False, help="Num requests per second to throttle the reindex task.")
+parser.add_argument("--slices", default="auto", required=False, help="Num of parallel slices to split the reindex task into. 'auto' lets Elasticsearch choose.")
 parser.add_argument("--verify", "-v", action="store_true", required=False, help="Verify the diff between source and target indices instead of running the reindex")
 args = parser.parse_args()
 
@@ -34,11 +35,11 @@ if args.verify:
     print()
 
     source_search = Search(using=es, index=args.sourceindex)
+    source_search_query = { "match_all": {}} if config.elasticsearch_query is None else config.elasticsearch_query
     source_search = source_search.update_from_dict({
         "_source": False,
-        "query" : {
-            "match_all": {}
-    }})
+        "query" : source_search_query
+    })
     scan_size = 10000
     source_search = source_search.params(size=scan_size)
 
@@ -68,14 +69,18 @@ else:
     print("Reindexing data...")
     print()
 
-    res = es.reindex({
+    reindex_body = {
         "source": {
             "index": args.sourceindex
         },
         "dest": {
             "index": config.elasticsearch_index_name
         }
-    }, wait_for_completion=False, refresh=True, requests_per_second=args.reqpersec)
+    }
+    if config.elasticsearch_query is not None:
+        reindex_body["source"]["query"] = config.elasticsearch_query
+
+    res = es.reindex(reindex_body, wait_for_completion=False, refresh=True, requests_per_second=args.reqpersec, slices=args.slices)
 
     task_id = res["task"]
     while True:
