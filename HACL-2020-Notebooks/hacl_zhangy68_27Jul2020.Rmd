@@ -1,0 +1,59 @@
+---
+title: "HACL Project Status Notebook Template"
+author: "Yucheng Zhang"
+date: "27 July 2020"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+subtitle: COVID-Twitter
+---
+
+## Weekly Work Summary	
+
+* Summary of work since last week:
+
+  Found articles on data analysis of covid using twitter as a primary source of information. Also found articles on the usage of twitter in healthcare data applications
+
+* Summary of github commits 
+
+    * include branch name: hacl-zhangy68
+    * include files:
+    covid-twitter-hacl-template-zhangy68.Rmd, 
+    semantic_search-zhangy68.Rmd, 
+    hacl_zhangy88_23Jul2020.Rmd, 
+    hacl_zhangy88_23Jul2020.html (all in HACL-2020-Notebooks)
+    
+    
+
+    
+* List of presentations,  papers, or other outputs (with links)
+
+  Resources linked on https://docs.google.com/document/d/1sDrV-FwJdIDu9zCbH8lNN0ncK14clOCueyj5xcLzIFc/edit?usp=sharing
+
+
+* List of location(s) of all work submitted to github
+  COVID-Twitter/analysis
+
+
+## Personal Contribution	
+
+* Clearly defined, unique contribution done by you (code, ideas, writing)
+  
+  Found research articles on what others are currently analyzing about covid in twitter
+
+## Discussion of Primary Findings 	
+
+* Discuss primary findings: 
+
+    * What did you want to know? 
+    I wanted to know if other researchers are analyzing covid using twitter and what types of analysis they used.
+    * How did you go about finding it? 
+    I did an online search of articles discussing various ways of analyzing twitter data in regards to covid.
+    * What did you find?
+    I found that there is another app out there called CoronoVis that does sentiment analysis of covid tweets per state in a specified time range. I also found many other usages of sentiment analysis on covid twitter data.
+	
+* Provide illustrating figures and or tables
+* Make sure any source code for your figures and tables are embedded in notebook or provide github location
+
