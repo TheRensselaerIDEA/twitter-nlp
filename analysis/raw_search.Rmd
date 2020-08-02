@@ -1,0 +1,82 @@
+```{r setup, include=FALSE}
+# Required R package installation:
+# These will install packages if they are not already installed
+# Set the correct default repository
+r = getOption("repos")
+r["CRAN"] = "http://cran.rstudio.com"
+options(repos = r)
+
+
+if (!require("knitr")) {
+  install.packages("knitr")
+  library(knitr)
+}
+
+if (!require("kableExtra")) {
+  install.packages("kableExtra")
+  library(kableExtra)
+}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+source("Elasticsearch.R")
+```
+
+### Configure the search query here:
+
+```{r}
+# number of results to return (max 10,000)
+resultsize <- 50
+
+# raw JSON elasticsearch query
+query <- '{
+  "_source": ["place.name", "place.full_name", "place.place_type", "place.country_code", "place.country"],
+  "query": {
+    "bool": {
+      "filter": [
+        {
+          "simple_query_string": {
+            "fields": ["place.country_code"],
+            "query": "US"
+          }
+        },
+        {
+          "simple_query_string": {
+            "fields": ["place.place_type"],
+            "query": "admin city"
+          }
+        }
+      ]
+    }
+  },
+  "aggs": {
+    "states": {
+      "terms": {
+        "field": "place.name.keyword"
+      }
+    }
+  }
+}'
+```
+
+### Results:
+
+```{r, echo=FALSE}
+results <- do_search_raw(indexname="coronavirus-data-masks", 
+                     query,
+                     resultsize=resultsize,
+                     elasticsearch_host="",
+                     elasticsearch_path="elasticsearch",
+                     elasticsearch_port=443,
+                     elasticsearch_schema="https")
+
+#print results
+counts.df <- data.frame(results.count=paste(nrow(results$hits$hits), "/", results$hits$total$value))
+kable(counts.df) %>% kable_styling()
+
+hits.df <- results$hits$hits
+kable(hits.df) %>% kable_styling()
+
+buckets.df <- results$aggregations$states$buckets
+kable(buckets.df) %>% kable_styling()
+```

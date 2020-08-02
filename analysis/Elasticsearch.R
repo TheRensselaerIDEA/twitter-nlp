@@ -30,6 +30,24 @@ embed_use_large <- function(text, embed_use_large_url) {
   text_embedding <- res.json$use_large
 }
 
+do_search_raw <- function(indexname, 
+                          query, 
+                          resultsize=10, 
+                          elasticsearch_host="localhost",
+                          elasticsearch_path="",
+                          elasticsearch_port=9200,
+                          elasticsearch_schema="http") {
+  
+  conn <- connect(host = elasticsearch_host,
+                  path = elasticsearch_path, 
+                  port = elasticsearch_port, 
+                  transport_schema = elasticsearch_schema,
+                  errors="complete")
+  
+  results <- Search(conn, index=indexname, body=query, size=resultsize, asdf=TRUE)
+  return(results)
+}
+
 do_search <- function(indexname, 
                       rangestart, # query start date/time (inclusive)
                       rangeend,   # query end date/time (exclusive)
