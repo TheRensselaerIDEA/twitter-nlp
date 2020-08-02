@@ -1,0 +1,421 @@
+---
+title: 'Is Public Sentiment around Mask Usage on Twitter (As Computed with Vader) Consistent with Actual Survey Responses?'
+author: "Rachael White // Health Analytics Challenge Lab 2020"
+date: "July 28, 2020"
+subtitle: Twitter-Based Sentiment Analysis with Vader against New York Times Survey Data
+output:
+  html_document: 
+    df_print: tibble
+    toc: yes
+    toc_depth: 2
+---
+```{r setup, include=FALSE}
+# Required R package installation:
+# These will install packages if they are not already installed
+# Set the correct default repository
+r = getOption("repos")
+r["CRAN"] = "http://cran.rstudio.com"
+options(repos = r)
+
+if (!require("ggplot2")) {
+  install.packages("ggplot2")
+  library(ggplot2)
+}
+
+if (!require("knitr")) {
+  install.packages("knitr")
+  library(knitr)
+}
+
+if(!require('dplyr')) {
+  install.packages("dplyr")
+  library(dplyr)
+}
+
+if(!require('stringr')) {
+  install.packages("stringr")
+  library(stringr)
+}
+
+if(!require('Rtsne')) {
+  install.packages("Rtsne")
+  library(Rtsne)
+}
+
+if(!require('stopwords')) {
+  install.packages("stopwords")
+  library(stopwords)
+}
+
+if(!require('plotly')) {
+  install.packages("plotly")
+  library(plotly)
+}
+
+if (!require("kableExtra")) {
+  install.packages("kableExtra")
+  library(kableExtra)
+}
+
+if (!require("vader")) {
+  install.packages("vader")
+  library(vader)
+}
+
+if (!require("gridExtra")) {
+  install.packages("gridExtra")
+  library(NbClust)
+}
+
+if(!require('rcompanion')) {
+  install.packages("rcompanion")
+  library(plotly)
+}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+
+source("Elasticsearch.R") 
+
+
+```
+
+### Overview
+
+#### What follows is a statistical approach to evaluating the effectiveness of the sentiment analysis algorithm vader against a recent survey of public attitudes towards mask usage conducted by the New York Times, which can be accessed here: https://github.com/nytimes/covid-19-data/tree/master/mask-use. 
+* Description from the survey webpage:
+  + "This data comes from a large number of interviews conducted online by the global data and survey firm Dynata at the request of The New York Times. The firm asked a question about mask use to obtain 250,000 survey responses between July 2 and July 14, enough data to provide estimates more detailed than the state level. (Several states have imposed new mask requirements since the completion of these interviews.)
+
+  + Specifically, each participant was asked: How often do you wear a mask in public when you expect to be within six feet of another person?"
+  
+* The following summarizes the survey results:
+
+![](/home/whiter9/masksent_check_with_NYT_whiter9/NYT_mask_map.jpg)
+  
+### Methodology
+
+* In this notebook, we query a **random sample** of **10,000 tweets** from the newer **coronavirus-data-masks** index (containing a body of embedded tweets collected between mid-March and mid-July 2020 and filtered to be strictly coronavirus- and mask-related), with date range **July 2 to July 14**, the same time frame as the NYT survey. The tweets are geo-located to the state of New York for this initial test (yielding a net retrieval of 242/10,000 possible tweets), but a goal is to expand this procedure to be applicable to any U.S. state. 
+* We then use VADER to compute the sentiment score of each retrieved tweet. Vader assigns a sentence a compound sentiment score in the range [-1,1], -1 being very negative, 0 neutral and 1 very positive.
+
+* Finally, we run a simple Pearson's correlation to determine if there is a relationship between positive mask sentiment scores and positive survey responses of "frequently" or "always" for a selected group of counties in the state of New York. 
+
+### Search configuration:
+
+```{r include=FALSE}
+elasticsearch_host <- "lp01.idea.rpi.edu"
+```
+
+
+```{r}
+# query start date/time (inclusive)
+rangestart <- "2020-07-02 00:00:00"
+
+# query end date/time (exclusive)
+rangeend <- "2020-07-14 00:00:00"
+
+# text filter restricts results to only those containing words, phrases, or meeting a boolean condition. This query syntax is very flexible and supports a wide variety of filter scenarios:
+# words: text_filter <- "cdc nih who"  ...contains "cdc" or "nih" or "who"
+# phrase: text_filter <- '"vitamin c"' ...contains exact phrase "vitamin c"
+# boolean condition: <- '(cdc nih who) +"vitamin c"' ...contains ("cdc" or "nih" or "who") and exact phrase "vitamin c"
+#full specification here: https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-simple-query-string-query.html
+text_filter <- ""
+
+# location filter acts like text filter except applied to the location of the tweet instead of its text body.
+location_filter <- "NY"
+
+# if FALSE, location filter considers both user-povided and geotagged locations. If TRUE, only geotagged locations are considered.
+must_have_geo <- TRUE
+
+#semantic search option off for random sample
+semantic_phrase <- ""
+
+# return results as a random sample within the range
+random_sample <- TRUE
+
+# ideal number of results to return (max 10,000)
+resultsize <- 10000
+
+# minimum number of results to return
+min_results <- 200
+
+```
+
+```{r, echo=FALSE}
+###############################################################################
+# Get the tweets from Elasticsearch using the search parameters defined above
+###############################################################################
+
+results <- do_search(indexname="coronavirus-data-masks", 
+                     rangestart=rangestart,
+                     rangeend=rangeend,
+                     text_filter=text_filter,
+                     location_filter=location_filter,
+                     semantic_phrase=semantic_phrase,
+                     must_have_embedding=TRUE,
+                     must_have_geo=must_have_geo,
+                     random_sample=random_sample,
+                     resultsize=resultsize,
+                     resultfields='"user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary"', 
+                     elasticsearch_host=elasticsearch_host,
+                     elasticsearch_path="elasticsearch",
+                     elasticsearch_port=443,
+                     elasticsearch_schema="https")
+
+# this dataframe contains the tweet text and other metadata
+required_fields <- c("full_text", "user_screen_name", "user_verified", "user_location", "place.country", "place.full_name")
+validate_results(results$df, min_results, required_fields)
+tweet.vectors.df <- results$df[,required_fields]
+
+# this matrix contains the embedding vectors for every tweet in tweet.vectors.df
+tweet.vectors.matrix <- t(simplify2array(results$df[,"embedding.use_large.primary"]))
+
+```
+
+
+```{r, echo=FALSE}
+###############################################################################
+# Clean the tweet and user location text, and set up tweet.vectors.df 
+###############################################################################
+
+tweet.vectors.df$user_location <- ifelse(is.na(tweet.vectors.df$place.full_name), tweet.vectors.df$user_location, paste(tweet.vectors.df$place.full_name, tweet.vectors.df$place.country, sep=", "))
+tweet.vectors.df$user_location[is.na(tweet.vectors.df$user_location)] <- ""
+tweet.vectors.df$user_location_type <- ifelse(is.na(tweet.vectors.df$place.full_name), "User", "Place")
+tweet.vectors.df <- tweet.vectors.df[, c("full_text", "user_screen_name", "user_verified", "user_location", "user_location_type")]
+
+clean_text <- function(text, for_freq=FALSE) {
+  text <- str_replace_all(text, "[\\s]+", " ")
+  text <- str_replace_all(text, "http\\S+", "")
+  if (isTRUE(for_freq)) {
+    text <- tolower(text)
+    text <- str_replace_all(text, "’", "'")
+    text <- str_replace_all(text, "_", "-")
+    text <- str_replace_all(text, "[^a-z1-9 ']", "")
+  } else {
+    text <- str_replace_all(text, "[^a-zA-Z1-9 `~!@#$%^&*()-_=+\\[\\];:'\",./?’]", "")
+  }
+  text <- str_replace_all(text, " +", " ")
+  text <- trimws(text)
+}
+tweet.vectors.df$full_text <- sapply(tweet.vectors.df$full_text, clean_text)
+tweet.vectors.df$user_location <- sapply(tweet.vectors.df$user_location, clean_text)
+```
+
+### Here are some of the most frequently-occurring words from the search, just for kicks:
+
+```{r echo=FALSE}
+###############################################
+# Compute word frequency, excluding stopwords
+###############################################
+
+stop_words <- stopwords("en", source="snowball")
+stop_words <- union(stop_words, stopwords("en", source="nltk"))
+stop_words <- union(stop_words, stopwords("en", source="smart"))
+stop_words <- union(stop_words, stopwords("en", source="marimo"))
+stop_words <- union(stop_words, c(",", ".", "!", "-", "?", "&amp;", "amp"))
+
+get_word_freqs <- function(full_text) {
+  word_freqs <- table(unlist(strsplit(clean_text(full_text, TRUE), " ")))
+  word_freqs <- cbind.data.frame(names(word_freqs), as.integer(word_freqs))
+  colnames(word_freqs) <- c("word", "count")
+  word_freqs <- word_freqs[!(word_freqs$word %in% stop_words),]
+  word_freqs <- word_freqs[order(word_freqs$count, decreasing=TRUE),]
+}
+
+word_freqs <- get_word_freqs(tweet.vectors.df$full_text)
+head(word_freqs,10)
+
+```
+
+*** 
+
+### Sentiment score generation with Vader
+
+We compute a new vector consisting of the `vader` compound sentiment score for each tweet, and append to the results dataframe:
+
+```{r echo=TRUE}
+
+tweet.vectors.df$sentiment <- c(0)
+tweet.vectors.df$sentiment <- vader_df(tweet.vectors.df$full_text)[,"compound"]
+
+```
+
+### Consolidate query data for analysis
+
+```{r}
+
+# filter to just location and sentiment
+tweets.by.loc <- tweet.vectors.df %>% select(user_location,sentiment)
+
+# get count of tweets for each location and order highest to lowest
+place.counts <- tweets.by.loc %>% group_by(user_location) %>% summarise(frequency = length(user_location)) 
+place.counts <- arrange(place.counts, desc(frequency))
+head(place.counts,15)
+
+```
+***
+
+It's clear that for New York, tweet return by county is unfortunately very unevenly distributed. We proceed with the caveat that this correlation will make use of a small sample size (i.e. restricted to the 8 counties for which more than 2 tweets were found).
+
+Create a new data frame out of top 8 places with the most tweets represented, naming by county rather than city/town, also computing and appending the average mask-related sentiment score for each county:
+
+```{r echo=FALSE}
+
+#sample sizes by county for NY are apparently going to be heck small... 
+#but, I got this far so I'll just roll with it and throw up a caveat later.
+
+place.counts <- place.counts[1:8,]
+
+#Manhattan => New York County
+#Brooklyn => Kings County
+#Queens => Queens County
+#Bronx => Bronx County
+#Staten Island => Richmond County
+#Buffalo,Cheektowaga => Erie County
+#Stony Brook => Suffolk County
+
+ny_county <- tweets.by.loc %>% filter(user_location=='Manhattan, NY, United States') %>% filter(sentiment>0) 
+ny_county_sent <- mean(ny_county$sentiment)
+
+kings_county <- tweets.by.loc %>% filter(user_location=='Brooklyn, NY, United States') %>% filter(sentiment>0) 
+kings_county_sent <- mean(kings_county$sentiment)
+
+queens_county <- tweets.by.loc %>% filter(user_location=='Queens, NY, United States') %>% filter(sentiment>0) 
+queens_county_sent <- mean(queens_county$sentiment)
+
+bronx_county <- tweets.by.loc %>% filter(user_location=='Bronx, NY, United States') %>% filter(sentiment>0)
+bronx_county_sent <- mean(bronx_county$sentiment)
+
+richmond_county <- tweets.by.loc %>% filter(user_location=='Staten Island, NY, United States') %>% filter(sentiment>0) 
+richmond_county_sent <- mean(richmond_county$sentiment)
+
+erie_county1 <- tweets.by.loc %>% filter(user_location=='Buffalo, NY, United States') %>% filter(sentiment>0) 
+
+erie_county2 <- tweets.by.loc %>% filter(user_location=='Cheektowaga, NY, United States') %>% filter(sentiment>0) 
+
+erie_county_sent <- (sum(erie_county1$sentiment)+sum(erie_county1$sentiment))/9
+
+suffolk_county <- tweets.by.loc %>% filter(user_location=='Stony Brook, NY, United States') %>% filter(sentiment>0) 
+suffolk_county_sent <- mean(suffolk_county$sentiment)
+
+nycounties_df <- data.frame(
+  county = c("New York County", "Kings County", "Queens County", "Bronx County", "Richmond County", "Erie County", "Suffolk County"),
+  avg_sentiment = c(ny_county_sent,kings_county_sent,queens_county_sent,bronx_county_sent,richmond_county_sent,erie_county_sent,suffolk_county_sent)
+)
+
+#display results
+nycounties_df   
+
+```
+
+
+***
+#### We now read in the data from the New York Times survey, located in `mask-use-by-county.csv`. The correct counties are identified manually by their FIPS codes (all NY counties start with '36'). 
+
+```{r echo=TRUE}
+
+mask_use <- read.csv('mask-use-by-county.csv')
+head(mask_use)
+
+```
+
+***
+For each county, the proportion of respondents who said that they currently "frequently" or "always" wear masks when in close proximity with other people is recorded.
+
+```{r echo=FALSE}
+
+#############################
+#FIPS Code Key             
+#############################
+#36061        New York County
+#36047        Kings County
+#36081        Queens County
+#36005        Bronx County
+#36085        Richmond County
+#36029        Erie County
+#36103        Suffolk County
+#############################
+
+#filter by our counties
+mask_use_df <-mask_use %>% filter(COUNTYFP==36061 | COUNTYFP==36047 | COUNTYFP==36081 | COUNTYFP==36005 | COUNTYFP==36085 | COUNTYFP==36029 | COUNTYFP==36103) 
+
+#collect the desired proportion for each county 
+mask_use_combined <- mask_use_df %>% summarize(total = mask_use_df$FREQUENTLY + mask_use_df$ALWAYS)
+
+#then stick it in the counties and sentiment df
+nycounties_df$proportion_positive <- c(mask_use_combined$total)
+nycounties_df
+
+```
+***
+#### Finally, we run the correlation.
+
+First check normality assumption (lol just to see how bad the departure is, in this case)
+
+```{r include=FALSE}
+
+
+####### normality test: Shapiro-Wilkes
+Ntestsent<-shapiro.test(nycounties_df$avg_sentiment)
+Ntestprop<-shapiro.test(nycounties_df$proportion_positive)
+```
+Sentiment distribution:
+```{r echo=FALSE}
+
+print(Ntestsent)
+
+```
+Dist. of proportion of affirmative responses to mask-usage inquiry:
+
+```{r echo=FALSE}
+
+print(Ntestprop)
+
+```
+***
+
+Oddly enough... based on these tests, at p= 0.05, we don't find that either distribution is non-normal.
+(Doesn't fix the small sample size, but reassuring nonetheless.)
+
+### Scatterplot tiiiimmme
+
+```{r echo=FALSE}
+
+#### do pretty color
+ggplot(data=nycounties_df, aes(x=proportion_positive,y=avg_sentiment)) + geom_point(color='aquamarine3') + labs(y = 'Mean Positive Mask Sentiment', title = 'Mean Positive Mask-Related Tweet Sentiment per County versus\nProportion of Self-Reported Mask Users from that County', caption = 'Tweets and Responses from July 2 - July 14 2020',x = 'Proportion Affirmative Mask Users')
+
+```
+
+Oh boy. Rough scatter.
+
+Since we're here though, we'll still get the correlation.
+
+```{r}
+
+cor.test(nycounties_df$proportion_positive, nycounties_df$avg_sentiment)
+
+```
+
+
+### Takeaways
+
+* As expected, unfortunately we can't reject the null that there's no correlation by the measures followed here. More rigorous analysis with larger case numbers on which to run the correlation (counties, in this case) are necessary to verify the slightly negative relationship we find for vader sentiment output and actual reported sentiment indication, in this experiment.
+
+* One useful feature I found with this notebook is that entering the state abbreviation character as input to `location filter` is a quick and easy way to filter tweet retrieval by state, as opposed to entering a longer list of state identifiers.
+
+### Ideas for improving statistical methodology that I plan to try:
+ 
+* Increasing number of counties with a sufficient quantity of tweets that can be retrieved and studied, perhaps by
+  * drawing individual tweet samples from our mask index for each county in a given state, or
+  * better yet, figure out how to aggregate data in Elasticsearch directly, then import to R for analysis (next up on the personal agenda ;) )
+
+
+### References
+
+* Link to the NYT Github repository: https://github.com/nytimes/covid-19-data/tree/master/mask-use
+* Ref for subsetting NYT data by location, using the provided FIPS (Federal Information Processing System) Codes for States and Counties: https://transition.fcc.gov/oet/info/maps/census/fips/fips.txt
+* list of NY counties/cities: http://www.nysl.nysed.gov/genealogy/townlist.htm
+* Info on vader algorithm: https://cran.r-project.org/web/packages/vader/vader.pdf
+* On when using small sample sizes for correlations is reasonable: https://towardsdatascience.com/sample-size-and-correlation-eb1581227ce2
+
+
+
