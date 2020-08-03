@@ -7,7 +7,7 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-elasticsearch_host <- "lp01.idea.rpi.edu"
+elasticsearch_host <- ""
 r = getOption("repos")
 r["CRAN"] = "http://cran.rstudio.com"
 options(repos = r)
