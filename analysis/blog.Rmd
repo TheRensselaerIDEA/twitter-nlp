@@ -1,0 +1,280 @@
+---
+title: "Covid Versus Twitter"
+author: "Lauren Severson"
+date: "7/28/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+elasticsearch_host <- "lp01.idea.rpi.edu"
+r = getOption("repos")
+r["CRAN"] = "http://cran.rstudio.com"
+options(repos = r)
+
+if (!require("ggplot2")) {
+  install.packages("ggplot2")
+  library(ggplot2)
+}
+
+if (!require("png")) {
+  install.packages("png")
+  library(png)
+}
+
+
+if (!require("magick")) {
+  install.packages("magick")
+  library(magick)
+}
+
+if (!require("knitr")) {
+  install.packages("knitr")
+  library(knitr)
+}
+
+if(!require('dplyr')) {
+  install.packages("dplyr")
+  library(dplyr)
+}
+
+if(!require('stringr')) {
+  install.packages("stringr")
+  library(stringr)
+}
+
+if(!require('Rtsne')) {
+  install.packages("Rtsne")
+  library(Rtsne)
+}
+
+if(!require('stopwords')) {
+  install.packages("stopwords")
+  library(stopwords)
+}
+
+if(!require('plotly')) {
+  install.packages("plotly")
+  library(plotly)
+}
+
+if (!require("kableExtra")) {
+  install.packages("kableExtra")
+  library(kableExtra)
+}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+source("Elasticsearch.R")
+
+if (!require("syuzhet")) {
+  install.packages("syuzhet")
+  library(syuzhet)
+}
+if (!require("wordcloud2")) {
+  install.packages("wordcloud2")
+  library(wordcloud2)
+}
+
+if (!require("tidytext")) {
+  install.packages("tidytext")
+  library(tidytext)
+}
+
+if (!require("tm")) {
+  install.packages("tm")
+  library(tm)
+}
+
+if (!require("ggrepel")) {
+  install.packages("ggrepel")
+  library(ggrepel)
+}
+
+if (!require("wordcloud")) {
+  install.packages("wordcloud")
+  library(wordcloud)
+}
+```
+
+
+Twitter is a resource most young adults favor when it comes to social network or a news resource. Twitter is also a common place for people to tweet their thoughts and feelings on current topics. Whether someone is reading the tweet or tweeting the tweet, there is psychological impact. A tweet that shows negativity towards masks or quarantining is going to make it harder for others to quarantine. A tweet that shows someone hanging out with their friends is going to make someone want to see their friends. Life isn't fair and twitter can make it hard to do the right thing, even when it comes to saving a nation from economic downfall.
+
+
+## Is Covid-19 Spreading Through Twitter in Colorado
+
+Currently in Colorado the most popular age range testing positive for Covid-19 is twenty to twenty-nine year olds. In response to this statistic, Colorado has banned alcohol sales after 10pm to this age demographic in hopes it will stop the state’s rise in cases. 
+
+A large percentage of tweets come from people who identify in this demographic. The question is whether this age demographic actually is the problem. If the sentiment on a dataset of mask related tweets from Colorado is mostly negative, it can be implied there is a relationship between the tweets and the rise in cases.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# query start date/time (inclusive)
+rangestart <- "2020-03-01 00:00:00"
+
+# query end date/time (exclusive)
+rangeend <- "2020-08-01 00:00:00"
+
+# text filter restricts results to only those containing words, phrases, or meeting a boolean condition. This query syntax is very flexible and supports a wide variety of filter scenarios:
+# words: text_filter <- "cdc nih who"  ...contains "cdc" or "nih" or "who"
+# phrase: text_filter <- '"vitamin c"' ...contains exact phrase "vitamin c"
+# boolean condition: <- '(cdc nih who) +"vitamin c"' ...contains ("cdc" or "nih" or "who") and exact phase "vitamin c"
+#full specification here: https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-simple-query-string-query.html
+text_filter <- ""
+
+# location filter acts like text filter except applied to the location of the tweet instead of its text body.
+location_filter <- "co colorado"
+
+# if FALSE, location filter considers both user-povided and geotagged locations. If TRUE, only geotagged locations are considered.
+must_have_geo <- FALSE
+
+# query semantic similarity phrase
+semantic_phrase <- ""
+
+# return results in chronological order or as a random sample within the range
+# (ignored if semantic_phrase is not blank)
+random_sample <- FALSE
+# number of results to return (max 10,000)
+resultsize <- 10000
+# minimum number of results to return. This should be set according to the needs of the analysis (i.e. enough samples for statistical significance)
+min_results <- 1
+
+elasticsearch_indexname <- "coronavirus-data-masks"
+
+results <- do_search(indexname="coronavirus-data-masks", 
+                     rangestart=rangestart,
+                     rangeend=rangeend,
+                     text_filter=text_filter,
+                     location_filter=location_filter,
+                     semantic_phrase=semantic_phrase,
+                     must_have_embedding=TRUE,
+                     must_have_geo=must_have_geo,
+                     random_sample=random_sample,
+                     resultsize=resultsize,
+                     resultfields='"user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary"',
+                     elasticsearch_host="",
+                     elasticsearch_path="elasticsearch",
+                     elasticsearch_port=443,
+                     elasticsearch_schema="https")
+
+# this dataframe contains the tweet text and other metadata
+required_fields <- c("full_text", "user_screen_name", "user_verified", "user_location", "place.country", "place.full_name")
+validate_results(results$df, min_results, required_fields)
+tweet.vectors.df <- results$df[,required_fields]
+
+# this matrix contains the embedding vectors for every tweet in tweet.vectors.df
+tweet.vectors.matrix <- t(simplify2array(results$df[,"embedding.use_large.primary"]))
+
+tweet.vectors.df$user_location <- ifelse(is.na(tweet.vectors.df$place.full_name), tweet.vectors.df$user_location, paste(tweet.vectors.df$place.full_name, tweet.vectors.df$place.country, sep=", "))
+tweet.vectors.df$user_location[is.na(tweet.vectors.df$user_location)] <- ""
+tweet.vectors.df$user_location_type <- ifelse(is.na(tweet.vectors.df$place.full_name), "User", "Place")
+tweet.vectors.df <- tweet.vectors.df[, c("full_text", "user_screen_name", "user_verified", "user_location", "user_location_type")]
+
+
+clean_text <- function(text, for_freq=FALSE) {
+  text <- str_replace_all(text, "[\\s]+", " ")
+  text <- str_replace_all(text, "http\\S+", "")
+  if (isTRUE(for_freq)) {
+    text <- tolower(text)
+    text <- str_replace_all(text, "’", "'")
+    text <- str_replace_all(text, "_", "-")
+    text <- str_replace_all(text, "[^a-z1-9 ']", "")
+  } else {
+    text <- str_replace_all(text, "[^a-zA-Z1-9 `~!@#$%^&*()-_=+\\[\\];:'\",./?’]", "")
+  }
+  text <- str_replace_all(text, " +", " ")
+  text <- trimws(text)
+}
+
+tweet.vectors.df$full_text <- sapply(tweet.vectors.df$full_text, clean_text)
+tweet.vectors.df$user_location <- sapply(tweet.vectors.df$user_location, clean_text)
+
+
+  
+    
+
+emotions <- get_nrc_sentiment(tweet.vectors.df$full_text)
+emo_bar = colSums(emotions)
+emo_sum = data.frame(count=emo_bar, emotion=names(emo_bar))
+emo_sum$emotion = factor(emo_sum$emotion, levels=emo_sum$emotion[order(emo_sum$count, decreasing = TRUE)])
+
+
+
+
+```
+
+
+
+### Sentiment Analysis
+
+Each tweet can be evaluated with sentiment analysis which then returns a score based off an algorithm for each sentiment. The total scores for the sentiments are shown in the histogram below for recent tweets, March 1st through August 1st located in the state of Colorado.
+
+The plot below shows us that the tweets from Colorado related to masks are mostly negative.
+
+```{r sentiment, echo=FALSE, message=FALSE, warning=FALSE}
+
+plot_ly(emo_sum, x=~emotion, y=~count, type="bar", color=~emotion) %>%
+  layout(xaxis=list(title="Sentiment Scores for Tweets About Masks in Colorado"), showlegend=FALSE,
+         title="")
+  
+```
+
+
+Taking the visualizations a bit further a wordcloud is shown. A wordcloud extracts words from the dataset that are most popular. The more frequent words apear larger then the less frequent words. This wordcloud takes the cloud a bit further by placing the frequent words closer to the emotion that it correlates to and color coating them with their correlated emotion.
+
+The wordcloud is only useful if examined with a purpose. The goal is to find words that show evidence of a state that has a problem with social distancing. One noteable part of this wordcloud is the word "Colorodians" and it's correlation to anger. This could be to recent frustrations with other Colorado residents. This could be a good thing for Colorado as people do need to get angry at each other for not following protocol regarding social distancing.
+
+Looking further into the wordcloud, the word "mask" is correlated with the emotion disgust. If the word "mask" was correlated to trust or even fear, Colorado would not be struggling as much as they are.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+all = c(
+
+  paste(tweet.vectors.df$full_text[emotions$anger > 0], collapse=" "),
+  paste(tweet.vectors.df$full_text[emotions$anticipation > 0], collapse=" "),
+  paste(tweet.vectors.df$full_text[emotions$disgust > 0], collapse=" "),
+  paste(tweet.vectors.df$full_text[emotions$fear > 0], collapse=" "),
+  paste(tweet.vectors.df$full_text[emotions$joy > 0], collapse=" "),
+  paste(tweet.vectors.df$full_text[emotions$sadness > 0], collapse=" "),
+  paste(tweet.vectors.df$full_text[emotions$surprise > 0], collapse=" "),
+  paste(tweet.vectors.df$full_text[emotions$trust > 0], collapse=" ")
+)
+all<-removeWords(all, stopwords("english"))
+# create corpus
+corpus = Corpus(VectorSource(all))
+#
+# create term-document matrix
+tdm = TermDocumentMatrix(corpus)
+#
+# convert as matrix
+tdm = as.matrix(tdm)
+tdm1 <- tdm[nchar(rownames(tdm)) < 11,]
+#
+# add column names
+colnames(tdm) = c('anger', 'anticipation', 'disgust', 'fear', 'joy', 'sadness', 'surprise', 'trust')
+colnames(tdm1) <- colnames(tdm)
+comparison.cloud(tdm1, random.order=FALSE,
+                 colors = c("#00B2FF", "red", "#FF0099", "#6600CC", "green", "orange", "blue", "brown"),
+                 title.size=1, max.words=250, scale=c(2.5, 0.4),rot.per=0.4)
+```
+
+#### Final Thoughts
+
+Their may be a relationship between the negative sentiment score in an area versus the rise or fall in covid cases in a given area. Colorado is an interesting focal point because they have spotted a trend that could be causing the state to struggle. The trend is younger adults expressing their point of view on social networks and impacting how twitter users feel on the subject. 
+
+Colorado's alcohol law for young adults may be smart as it is obvious people are more likely to ignore social distance protocols while drinking late. With social network replacing social gatherings during a pandemic, sentiment can give a big hint to what people are doing and thinking.
+
+#### References
+
+-sentiments and sentiment scores were gathered with a R package called "syuzhet" <https://cran.r-project.org/web/packages/syuzhet/index.html>
+
+
+<!-- ## Why These Tweets Matter -->
+
+<!-- The sentiment behind a tweet can give us hints on how people are acting. Someone that is putting their negative perspective online about the new laws and policies, probably isn't following them. Social media not only impacts one's emotion, it can impact actions and cause a snowball effect.  -->
+
+<!-- ```{r pressure, echo=FALSE, fig.cap="A caption", out.width = '100%'} -->
+<!-- knitr::include_graphics("www/COcases.png") -->
+<!-- ``` -->
+
+
+
+
