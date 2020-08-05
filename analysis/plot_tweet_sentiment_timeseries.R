@@ -28,6 +28,8 @@ if (!require("vader")) {
   library(vader)
 }
 
+
+
 # Compute divisiveness score from vector of sentiments
 divisiveness_score <- function(x) {
   ########################################################################################
