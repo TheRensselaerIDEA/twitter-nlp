@@ -19,6 +19,11 @@ if (!require("jsonlite")) {
   library(jsonlite)
 }
 
+if (!require("dplyr")) {
+  install.packages("dplyr")
+  library(dplyr)
+}
+
 
 source("elasticsearch_queries.R")
 
@@ -38,13 +43,72 @@ do_search_raw <- function(indexname,
                           elasticsearch_port=9200,
                           elasticsearch_schema="http") {
   
+  if (isTRUE(is.na(resultsize)) || isTRUE(resultsize < 0)) {
+    #all results, unlimited size.
+    resultsize <- NULL
+  }
+  
   conn <- connect(host = elasticsearch_host,
                   path = elasticsearch_path, 
                   port = elasticsearch_port, 
                   transport_schema = elasticsearch_schema,
                   errors="complete")
   
-  results <- Search(conn, index=indexname, body=query, size=resultsize, asdf=TRUE)
+  max_res_window <- 10000
+  #If the requested result size exceeds the max result window, use scrolling.
+  #Othewrwise, a standard search call is made.
+  if (is.null(resultsize) || resultsize > max_res_window) {
+    scroll_id <- NULL
+    results <- tryCatch({
+      
+      #Do initial search to open a scroll window
+      first_results <- Search(conn, index=indexname, body=query, size=max_res_window, asdf=TRUE, time_scroll="5m")
+      scroll_id <- first_results$`_scroll_id`
+      has_results <- is.data.frame(first_results$hits$hits)
+      
+      #If we have results, proceed to iteratively scroll through them
+      if (has_results) {
+        scroll_results_list = list(first_results$hits$hits)
+        scroll_i <- 2
+        scroll_result_count <- nrow(first_results$hits$hits)
+        
+        while (has_results) {
+          scroll_results <- scroll(conn, scroll_id, asdf=TRUE, time_scroll="5m")
+          scroll_id <- scroll_results$`_scroll_id`
+          has_results <- is.data.frame(scroll_results$hits$hits)
+          
+          if (has_results) {
+            #For every iteration, add the results to the list
+            scroll_result_count <- scroll_result_count + nrow(scroll_results$hits$hits)
+            
+            #Check if we have reached the desired number of results. 
+            #If so, stop scrolling even though there may be more results that can be retrieved.
+            if (!is.null(resultsize) && scroll_result_count >= resultsize) {
+              take <- resultsize - scroll_result_count + nrow(scroll_results$hits$hits)
+              scroll_results_list[[scroll_i]] <- scroll_results$hits$hits[1:take,]
+              break
+            } else {
+              scroll_results_list[[scroll_i]] <- scroll_results$hits$hits
+              scroll_i <- scroll_i + 1
+            }
+          }
+        }
+        #If scroll_results_list is not empty, combine all the results now
+        if (length(scroll_results_list) > 1) {
+          first_results$hits$hits <- bind_rows(scroll_results_list)
+        }
+      }
+      first_results
+    },
+    finally={
+      #Must dispose of the search context, otherwise it will hog memory until the time limit expires!
+      if (!is.null(scroll_id)) {
+        scroll_clear(conn, scroll_id)
+      }
+    })
+  } else {
+    results <- Search(conn, index=indexname, body=query, size=resultsize, asdf=TRUE)
+  }
   return(results)
 }
 
@@ -83,12 +147,6 @@ do_search <- function(indexname,
   }
    
   #Do the search
-  conn <- connect(host = elasticsearch_host,
-                  path = elasticsearch_path, 
-                  port = elasticsearch_port, 
-                  transport_schema = elasticsearch_schema,
-                  errors="complete")
-  
   gte_str <- format(rangestart, "%Y-%m-%dT%H:%M:%S")
   lt_str <- format(rangeend, "%Y-%m-%dT%H:%M:%S")
   
@@ -116,7 +174,14 @@ do_search <- function(indexname,
     return(query)
   }
   
-  results <- Search(conn, index=indexname, body=query, size=resultsize, asdf=TRUE)
+  results <- do_search_raw(indexname, 
+                           query, 
+                           resultsize, 
+                           elasticsearch_host, 
+                           elasticsearch_path, 
+                           elasticsearch_port, 
+                           elasticsearch_schema)
+  
   results.total <- results$hits$total$value
   results.df <- NULL
   

@@ -58,10 +58,10 @@ Note: large date ranges can take some time to process on initial search due to t
 
 ```{r}
 # query start date/time (inclusive)
-rangestart <- "2020-04-01 00:00:00"
+rangestart <- "2020-01-01 00:00:00"
 
 # query end date/time (exclusive)
-rangeend <- "2020-04-16 00:00:00"
+rangeend <- "2020-08-01 00:00:00"
 
 # text filter restricts results to only those containing words, phrases, or meeting a boolean condition. This query syntax is very flexible and supports a wide variety of filter scenarios:
 # words: text_filter <- "cdc nih who"  ...contains "cdc" or "nih" or "who"
@@ -89,7 +89,7 @@ semantic_phrase <- ""
 # return results in chronological order or as a random sample within the range
 # (ignored if semantic_phrase is not blank)
 random_sample <- TRUE
-# number of results to return (max 10,000)
+# number of results to return (to return all results, set to NA)
 resultsize <- 10000
 # minimum number of results to return. This should be set according to the needs of the analysis (i.e. enough samples for statistical significance)
 min_results <- 500
@@ -111,7 +111,7 @@ show_center_nn <- FALSE
 # Get the tweets from Elasticsearch using the search parameters defined above
 ###############################################################################
 
-results <- do_search(indexname="coronavirus-data-all", 
+results <- do_search(indexname="coronavirus-data-masks", 
                      rangestart=rangestart,
                      rangeend=rangeend,
                      text_filter=text_filter,
@@ -284,7 +284,7 @@ get_nearest_center <- function(df, mtx, center) {
 }
 
 master.word_freqs <- get_word_freqs(tweet.vectors.df$full_text)
-master.label <- get_label(master.word_freqs, top_k=6)
+master.label <- get_label(master.word_freqs, top_k=8)
 
 clusters <- list()
 for (i in 1:k) {

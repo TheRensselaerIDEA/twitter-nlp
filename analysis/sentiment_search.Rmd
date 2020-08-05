@@ -20,20 +20,17 @@ if (!require("kableExtra")) {
 knitr::opts_chunk$set(echo = TRUE)
 
 source("Elasticsearch.R")
+source("plot_tweet_sentiment_timeseries.R")
 ```
-
-## Demo for semantic similarity search using Universal Sentence Encoder embeddings and Elasticsearch.
 
 ### Configure the search parameters here:
 
-Note: large date ranges can take some time to process on initial search due to the sheer volume of data we have collected. Subsequent searches using the same date range should run quickly due to Elasticsearch caching.
-
 ```{r}
 # query start date/time (inclusive)
-rangestart <- "2020-04-01 00:00:00"
+rangestart <- "2020-01-01 00:00:00"
 
 # query end date/time (exclusive)
-rangeend <- "2020-04-16 00:00:00"
+rangeend <- "2020-08-01 00:00:00"
 
 # text filter restricts results to only those containing words, phrases, or meeting a boolean condition. This query syntax is very flexible and supports a wide variety of filter scenarios:
 # words: text_filter <- "cdc nih who"  ...contains "cdc" or "nih" or "who"
@@ -48,18 +45,14 @@ location_filter <- ""
 # if FALSE, location filter considers both user-povided and geotagged locations. If TRUE, only geotagged locations are considered.
 must_have_geo <- FALSE
 
-# query semantic similarity phrase (choose one of these examples or enter your own)
-#semantic_phrase <- "Hemoglobin"
-#semantic_phrase <- "How do you stay at home when you are homeless?"
-#semantic_phrase <- "My wedding has been postponed due to the coronavirus."
-#semantic_phrase <- "I lost my job because of COVID-19. How am I going to be able to make rent?"
-#semantic_phrase <- "I am diabetic and out of work because of coronavirus. I am worried I won't be able to get insulin without insurance."
-#semantic_phrase <- "There is going to be a COVID-19 baby boom..."
-#semantic_phrase <- "colleges and universities"
-semantic_phrase <- "I'm taking vitamins to help fight covid-19"
+# query semantic similarity phrase
+semantic_phrase <- ""
 
+# return results in chronological order or as a random sample within the range
+# (ignored if semantic_phrase is not blank)
+random_sample <- TRUE
 # number of results to return (to return all results, set to NA)
-resultsize <- 50
+resultsize <- 10000
 # minimum number of results to return. This should be set according to the needs of the analysis (i.e. enough samples for statistical significance)
 min_results <- 1
 ```
@@ -67,23 +60,40 @@ min_results <- 1
 ### Results:
 
 ```{r, echo=FALSE}
-results <- do_search(indexname="coronavirus-data-all", 
+results <- do_search(indexname="coronavirus-data-masks", 
                      rangestart=rangestart,
                      rangeend=rangeend,
                      text_filter=text_filter,
                      location_filter=location_filter,
                      semantic_phrase=semantic_phrase,
-                     must_have_embedding=TRUE,
                      must_have_geo=must_have_geo,
+                     random_sample=random_sample,
                      resultsize=resultsize,
-                     resultfields='"created_at", "user.screen_name", "text", "full_text", "extended_tweet.full_text"',
+                     resultfields='"created_at", "user.screen_name", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "sentiment.vader.primary"',
                      elasticsearch_host="",
                      elasticsearch_path="elasticsearch",
                      elasticsearch_port=443,
                      elasticsearch_schema="https")
 
-required_fields <- c("cosine_similarity", "full_text", "created_at", "user_screen_name")
+required_fields <- c("created_at", "user_screen_name", "user_location", "place.full_name", "place.country", "full_text", "sentiment.vader.primary")
 validate_results(results$df, min_results, required_fields)
+
+
+#Transform results for sentiment plot
+results.df <- results$df
+colnames(results.df)[colnames(results.df) == "sentiment.vader.primary"] <- "sentiment"
+results.df$vector_type <- "tweet"
+
+#Transform results for tweet display
+display.df <- results.df
+display.df$user_location <- ifelse(is.na(display.df$place.full_name), display.df$user_location, paste(display.df$place.full_name, display.df$place.country, sep=", "))
+display.df$user_location[is.na(display.df$user_location)] <- ""
+display.df$user_location_type <- ifelse(is.na(display.df$place.full_name), "User", "Place")
+display_fields <- c("full_text", "created_at", "user_screen_name", "user_location", "user_location_type", "sentiment")
+if (semantic_phrase != "") {
+  display_fields <- c("cosine_similarity", display_fields)
+}
+display.df <- display.df[,display_fields]
 
 #print results
 params.df <- data.frame(from=results$params$rangestart, 
@@ -95,6 +105,9 @@ params.df <- data.frame(from=results$params$rangestart,
                         results.count=paste(nrow(results$df), "/", results$total))
 kable(params.df) %>% kable_styling()
 
-display.df <- results$df[, required_fields]
-kable(display.df) %>% kable_styling()
+#show sentiment plots
+plot_tweet_sentiment_timeseries(results.df, group.by="week")
+
+#print up to 100 tweets
+kable(display.df[1:min(100, nrow(display.df)),]) %>% kable_styling()
 ```

@@ -79,7 +79,7 @@ A semantic phrase causes retrieved tweets to be ordered by cosine similarity wit
 #### Result size
 Number of tweets to retrieve.
 ```{r}
-# number of results to return (max 10,000)
+# number of results to return (to return all results, set to NA)
 resultsize <- 10000
 ```
 

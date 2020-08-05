@@ -23,6 +23,11 @@ if (!require("ggplot2")) {
   library(ggplot2)
 }
 
+if (!require("egg")) {
+  install.packages("egg")
+  library(egg)
+}
+
 # Compute divisiveness score from vector of sentiments
 divisiveness_score <- function(x) {
   ########################################################################################
@@ -63,7 +68,7 @@ plot_tweet_sentiment_timeseries <- function(tweet.vectors.df, group.by = "day", 
   #########################################################################################################################
   
   tweets.df <- tweet.vectors.df[tweet.vectors.df$vector_type == "tweet",]
-  tweets.df$created_at <- as.POSIXlt(strptime(tweets.df$created_at, format="%a %b %d %H:%M:%S +0000 %Y", tz="UTC"))
+  tweets.df$created_at <- as.POSIXct(strptime(tweets.df$created_at, format="%a %b %d %H:%M:%S +0000 %Y", tz="UTC"))
   tweets.df$week <- epiweek(tweets.df$created_at)  # find CDC epidemiological week
   tweets.df$date <- date(tweets.df$created_at)
   tweet.tibble <- tibble(sentiment = tweets.df$sentiment, week = tweets.df$week, date = tweets.df$date, datetime = tweets.df$created_at)
@@ -105,7 +110,7 @@ plot_tweet_sentiment_timeseries <- function(tweet.vectors.df, group.by = "day", 
     ggarrange(fig1, fig2, nrow = 2, heights = c(0.75, 0.25))
   } else if (group.by == "day") {
     # Compute statistics
-    summary.tibble <- tweet.tibble %>% group_by(date) %>% summarize(mean_sentiment = mean(sentiment), sd_sentiment = sd(sentiment), count = length(datetime), divisiveness = -log(1 / (sarles_BC(sentiment) - 1/18) - 1))
+    summary.tibble <- tweet.tibble %>% group_by(date) %>% summarize(mean_sentiment = mean(sentiment), sd_sentiment = sd(sentiment), count = length(datetime), divisiveness = divisiveness_score(sentiment))
     summary.tibble$divisiveness[is.na(summary.tibble$divisiveness)] <- 0
     if (plot.ma == TRUE) {
       # Compute moving averages
