@@ -19,7 +19,7 @@ is_null_or_empty <- function(str) {
 }
 
 string_or_null <- function(str) {
-  return (if (str=="NULL") NULL else str)
+  return (if (str=="NULL") NULL else (if (str=="NA") NA else str))
 }
 
 get_query_node <- function(query_json) {
@@ -45,6 +45,7 @@ params.df <- expand.grid(rangestart=c("2020-04-01 00:00:00"),
                          must_have_embedding=c(TRUE, FALSE),
                          must_have_geo=c(TRUE, FALSE),
                          random_sample=c(TRUE, FALSE),
+                         random_seed=c("hello", "NA", "NULL"),
                          resultfields=c('"created_at", "user.screen_name", "text", "full_text", "extended_tweet.full_text"'),
                          stringsAsFactors=FALSE)
 
@@ -60,6 +61,7 @@ test_function <- function(params) {
   must_have_embedding <- as.logical(params["must_have_embedding"])
   must_have_geo <- as.logical(params["must_have_geo"])
   random_sample <- as.logical(params["random_sample"])
+  random_seed <- string_or_null(params["random_seed"])
   resultfields <- string_or_null(params["resultfields"])
   
   #generate the query
@@ -71,6 +73,7 @@ test_function <- function(params) {
                      must_have_embedding=must_have_embedding,
                      must_have_geo=must_have_geo,
                      random_sample=random_sample,
+                     random_seed=random_seed,
                      resultfields=resultfields,
                      return_es_query_only=TRUE)
   
@@ -126,8 +129,10 @@ test_function <- function(params) {
   }
   
   #check random sample - query should be within a function_score if provided as a parameter and not if not.
-  #                      also, sort should not be present if random sample is true.
-  #                      NOTE: if semantic phrase is provided, random sampling should always be disabled.
+  #                      also:
+  #                         - if semantic phrase is provided, random sampling should always be disabled.
+  #                         - sort should not be present if random sampling is enabled.
+  #                         - if random sampling is enabled and a seed is provided, the seed parameters should exist and not if not.
   if (isFALSE(random_sample) || !is_null_or_empty(semantic_phrase)) {
     testthat::expect_null(query_json$query$function_score$random_score)
     if (is_null_or_empty(semantic_phrase)) {
@@ -136,6 +141,11 @@ test_function <- function(params) {
   } else {
     testthat::expect_false(is.null(query_json$query$function_score$random_score))
     testthat::expect_null(query_json$sort)
+    if (isFALSE(is.null(random_seed)) && isFALSE(is.na(random_seed))) {
+      testthat::expect_equal(query_json$query$function_score$random_score$field, "id_str.keyword")
+    } else {
+      testthat::expect_null(query_json$query$function_score$random_score$field)
+    }
   }
 }
 

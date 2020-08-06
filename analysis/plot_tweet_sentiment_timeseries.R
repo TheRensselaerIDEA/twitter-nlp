@@ -23,6 +23,16 @@ if (!require("ggplot2")) {
   library(ggplot2)
 }
 
+if (!require("vader")) {
+  install.packages("vader")
+  library(vader)
+}
+
+if (!require("egg")) {
+  install.packages("egg")
+  library(egg)
+}
+
 # Compute divisiveness score from vector of sentiments
 divisiveness_score <- function(x) {
   ########################################################################################
@@ -49,10 +59,11 @@ divisiveness_score <- function(x) {
 
 # Return plot of tweet counts, average sentiments and divisiveness over time. 
 # Can plot moving averages of counts, sentiment and divisiveness, as well as group by day or week
-plot_tweet_sentiment_timeseries <- function(tweet.vectors.df, group.by = "day", plot.ma = FALSE, ma.n = 5, ma.type = "simple") {
+plot_tweet_sentiment_timeseries <- function(tweet.vectors.df, group.by = "day", compute.sentiment = FALSE, plot.ma = FALSE, ma.n = 5, ma.type = "simple") {
   #########################################################################################################################
   # INPUT:
-  #   tweet.vectors.df  : Dataframe of tweets, MUST INCLUDE THE FIELS: `created_at`, `vector_type`, `sentiment`.
+  #   tweet.vectors.df  : Dataframe of tweets, MUST INCLUDE THE FIELS: `created_at`, `vector_type`.
+  #                       FIELD `sentiment` IS OPTIONAL BUT GREATLY SPEEDS UP COMPUTATION.
   #   group.by          : Time frame by which to group tweets, either "day" or "week.
   #   plot.ma           : Whether to plot the moving average of tweet counts, sentiments and divisiveness.
   #   ma.n              : If plotting the moving average, the number of timesteps to be used in the computation.
@@ -61,9 +72,21 @@ plot_tweet_sentiment_timeseries <- function(tweet.vectors.df, group.by = "day", 
   # OUTPUT:
   #   ggplot figure of tweet counts, average sentiment and divisiveness over time.
   #########################################################################################################################
-  
   tweets.df <- tweet.vectors.df[tweet.vectors.df$vector_type == "tweet",]
-  tweets.df$created_at <- as.POSIXlt(strptime(tweets.df$created_at, format="%a %b %d %H:%M:%S +0000 %Y", tz="UTC"))
+  if (compute.sentiment == TRUE) {
+    tweet.vectors.df$sentiment <- c(0)
+    sentiment.vector <- rep(NA, length(tweet.vectors.df$sentiment))
+    for (i in 1:length(tweet.vectors.df$sentiment)) {
+      tryCatch({
+        sentiment.vector[i] <- get_vader(tweet.vectors.df$full_text[i])["compound"]
+      }, error = function(e) {
+        sentiment.vector[i] <- NA
+      })
+    }
+    tweet.vectors.df$sentiment <- sentiment.vector
+    tweet.vectors.df <- tweet.vectors.df[!is.na(sentiment.vector),]
+  }
+  tweets.df$created_at <- as.POSIXct(strptime(tweets.df$created_at, format="%a %b %d %H:%M:%S +0000 %Y", tz="UTC"))
   tweets.df$week <- epiweek(tweets.df$created_at)  # find CDC epidemiological week
   tweets.df$date <- date(tweets.df$created_at)
   tweet.tibble <- tibble(sentiment = tweets.df$sentiment, week = tweets.df$week, date = tweets.df$date, datetime = tweets.df$created_at)
@@ -105,7 +128,7 @@ plot_tweet_sentiment_timeseries <- function(tweet.vectors.df, group.by = "day", 
     ggarrange(fig1, fig2, nrow = 2, heights = c(0.75, 0.25))
   } else if (group.by == "day") {
     # Compute statistics
-    summary.tibble <- tweet.tibble %>% group_by(date) %>% summarize(mean_sentiment = mean(sentiment), sd_sentiment = sd(sentiment), count = length(datetime), divisiveness = -log(1 / (sarles_BC(sentiment) - 1/18) - 1))
+    summary.tibble <- tweet.tibble %>% group_by(date) %>% summarize(mean_sentiment = mean(sentiment), sd_sentiment = sd(sentiment), count = length(datetime), divisiveness = divisiveness_score(sentiment))
     summary.tibble$divisiveness[is.na(summary.tibble$divisiveness)] <- 0
     if (plot.ma == TRUE) {
       # Compute moving averages

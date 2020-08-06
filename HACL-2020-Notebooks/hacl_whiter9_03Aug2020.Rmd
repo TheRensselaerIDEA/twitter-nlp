@@ -1,0 +1,333 @@
+---
+title: "HACL Project Status Notebook Assignment 6: Week 4 Summary"
+author: "Rachael White // whiter9"
+date: "01 August 2020"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+subtitle: COVID-Twitter Project
+---
+```{r setup, include=FALSE}
+r = getOption("repos")
+r["CRAN"] = "http://cran.rstudio.com"
+options(repos = r)
+
+if (!require("ggplot2")) {
+  install.packages("ggplot2")
+  library(ggplot2)
+}
+
+if(!require('dplyr')) {
+  install.packages("dplyr")
+  library(dplyr)
+}
+
+
+if (!require("wesanderson")) {
+  install.packages("wesanderson")
+  library(wesanderson)
+}
+
+if (!require("knitr")) {
+  install.packages("knitr")
+  library(knitr)
+}
+  
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+***       
+## I. Weekly Work Summary	
+
+##### **Verbal summary of work completed this week:**
+* My main focus this week has been a continuation of both the personal project goal of, and current teamwide interest in, consolidating relevant Twitter data and metadata related to mask usage with and without the added augementation factor of user sentiment, in order to draw conclusions about mask usage in the US. amidst the coronavirus pandemic.   
+* This week, I initially focused on the employment of a time series analysis for studying trends in mask attitudes over time with our coronavirus-data-all index. However, early in the week, I quickly pivoted my efforts as a result of both a lab member's introduction of a fairly comprehensive (and really stellar) time series analysis tool for general  use, and also the availability of our new mask-related index coronavirus-data-masks. Instead I dove into an initial investigation of how vader's sentiment score generation holds up against a dataset of mask-usage survey results from the New York Times, a question I felt would be relevant to answer to add context/depth to a formal statistical writeup of a sentiment analysis.
+* In general, in assessment of the fact that research efforts related to COVID-Twitter seem to have branched into two parallel avenues of team attention (namely clustering model improvement/augmentation methods and more general Twitter data analysis), I elected to throw my efforts into the data analysis avenue, where I feel I can more effectively deliver tangible results and contributions to the project within the class timeframe.
+
+*	**Monday**
+    * Dr. E's tidyverse workshop
+    * Worked tidyverse module of r-bootcamp
+    
+*	**Tuesday**
+    * Brainstorming/reading for use cases for different statistical tests to figure out what's reasonable to do with our Twitter data (at least for valid statistical inference)
+    
+*	**Wednesday**
+    *	Attended Folsom library workshop on gathering found data, made note of several useful government data bases I hope to use for COVID-Twitter analyses
+    * Did a base-level evaluation of our vader sentiment analysis tool using a sample of Tweets geolocated to NYC and against a corpus of a random sample of geo-tagged Twitter data 
+      * This turned out to be a HUGE exercise in constructing/modifying
+    data frames with dplyr
+* **Thursday**
+    * After consultation with Abraham in lab, arrived at a concrete action item for the weekend/next week: Figuring out how to use Elasticsearch to directly filter/aggregate our mask-related data to meet certain criteria rather than taking individual samples by location
+    * Started Elasticsearch mini-orientation in light of aforesaid project idea
+
+* **Friday**
+    * Met with Abraham and Haniel to hash through ideas for how we can modify the current pipeline as to better take advantage of Elasticsearch query functionalities to more effectively gather/analyze/aggregate statistics on our new coronavirus-mask Tweet index
+* Weekend
+    * Continued reviewing Elasticsearch documentation for query deployment use cases and ideas
+    * Studied structure of the code in Elasticsearch.R to make sure I understand how the queries work
+    * Started practicing building a custom ES DSL query in JSON, using the functionalities of Abraham's new raw_search.Rmd (with success)
+  
+
+***
+##### **Github commits:**
+
+* Initial Evaluation of vader algorithm mask sentiment return against NYT survey data 
+    * Location (with branch name): COVID-Twitter/HACL-2020-Notebooks/hacl-whiter9
+      * Files: 
+        * NYT_mask_sentiment_experiment_whiter9_23072020.Rmd
+        * NYT_mask_sentiment_experiment_whiter9_23072020.html
+    * _To be re-factored with new ES capabilities_
+        
+ ***       
+##### **Presentations,  papers, or other outputs (with links)**
+
+* Notebook: Twitter-Based Sentiment Analysis with Vader against New York Times Survey Data
+    * Location: COVID-Twitter/HACL-2020-Notebooks  
+      * Files (2): NYT_mask_sentiment-experiment_whiter9_23072020.Rmd, .html
+      * https://htmlpreview.github.io/?https://raw.githubusercontent.com/TheRensselaerIDEA/COVID-Twitter/master/HACL-2020-Notebooks/NYT_mask_sent_experiment_whiter9_28072020.html
+  
+***
+##### **Use of group shared code base**
+
+* Built on copy of analysis/Twitter.Rmd for mask sentiment experiment notebook
+
+* Modified copy of Haniel's analysis/plot_tweet_sentiment_timeseries.R for personal inquiry
+  
+* Modified copy of analysis/Twitter.Rmd for personal inquiry
+
+* Modified copy of analysis/raw_search.Rmd for ES query testing
+
+***
+##### **Personal Learning / Workshops**
+
+  * Dr. Erickson's ggplot Workshop
+  * Dr. Erickson's R bootcamp (self-led)
+  * Folsom library workshop - Gathering Found Data
+    + I include this workshop because the understanding of database resources and data mining tools I acquired from it is, I feel, highly relevant to our tasks at hand with the COVID-Twitter project (big data mining, metadata filtering/parsing, etc) ) 
+  * Elasticsearch documentation dive
+  https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl.html
+
+***
+## II. Personal Contributions	
+
+* Brainstormed time-series models and implementation with Haniel
+* Found a GitHub repository outlining an application of a BERT model to a coronavirus-related text-based Twitter framework similar to ours, with a user-oriented training procedure included; forwarded it to Abraham in light of his interest in refining our semantic search mechanism (https://github.com/digitalepidemiologylab/covid-twitter-bert)
+* Helped turn lab discussion focus to revisiting the issue of small sample sizes returned by the current Tweet retrieval framework and how we could explore ways to remedy that (i.e. Elasticsearch)
+* Performed a base-level statistical analysis of mask sentiment in NY State (located in COVID-Twitter/HACL-2020-Notebooks), with the main outcome being the identification of concrete study design/data gathering issues that need attention for increasing statistical rigor
+
+
+***
+## III. Discussion of Primary Findings 	
+
+* This week I primarily focused on and invested background research in the following questions:
+
+    1. Does mask-related sentimentality index as calculated from Twitter data with vader reflect public opinion as reported national surveys (is our model actually effective at capturing public opinion about masks)?
+    2. In terms of improving our outlook and options for study design, how could we achieve greater sample sizes?
+    3. Would it be useful to employ Elasticsearch directly, for the purpose of being able to retrieve bodies of tweets from our data that meet a greater variety of search criteria and use thus have greater sample sizes of tweets per criteria combination? Specifically, could we use it to aggregate Tweet statistics/other metadata by location in order to conduct location-wise analysis?
+    4. How to use dplyr functions for data manipulation (or, translating stuff I know how to do in Python to R)
+      
+* Some fun with ggplot:
+
+```{r echo=FALSE}
+#Plot distribution of my attention/time allotment to these topics
+
+df <- data.frame(Topic=c("vader Performance \nStudy", "Elasticsearch Learning","Workshopping/Brainstorming \n Mask Study Design","Data Manip Exercises"), Approx_Quanity_of_Attention=c(0.5, 0.3, 0.1,0.1))
+
+p<-ggplot(data=df, aes(x=Topic, y=Approx_Quanity_of_Attention)) +
+  geom_bar(stat="identity") + labs(title="Rough distribution of my attention/time allotment this week") + scale_fill_manual(values=wes_palette(n=3, name="Royal1")) + theme_classic()
+
+p
+
+```
+       
+
+* Primary findings: 
+
+    1. TL;DR: Can't yet say with confidence. 
+        * Due most likely to the fact that the limited number of tweets I was able to extract at the county-level for the majority of NY counties resulted in a small overall sample size for the correlation,  I couldn't show that a significant relationship exists between Tweet-based mask-related sentiment and self-reported public openness to mask use based on this study. Larger case numbers on which to run the correlation (counties, in this case) would be necessary to verify the slightly negative relationship I found between vader sentiment output and actual reported sentiment indication.
+    
+        * One useful feature I found with this notebook is that entering the state abbreviation character as input to `location_filter` is a quick and easy way to filter tweet retrieval by state, as opposed to entering a longer list of state identifiers.
+
+    2. TL;DR: We could possibly increase Tweet sample sizes by modifying Elasticsearch queries case-by-case.
+    
+        * I was eager to dive in to some classical statistical analysis in light of the massive new index of mask-specific data we now have available, but I quickly hit a road block in terms of the assumptions of doing statistical tests for the relationships I wanted to investigate. Specifically, Pearson's coefficient is formulated as to reflect the nature of the relationships between observations taken from the _same set of individuals/cases_, and I had been planning to try to correlate all sorts of coronavirus-related trends to completely unrelated Twitter data that's only connected by the time period. 
+        
+        * So, the task became refiguring my study design so as to allow for case-by-case comparison of a) observations about Twitter discourse to b) observations about any other metric of interest. So far, the most statistically sound way of case-pairing for correlations that I have been able to conceive, based on methods I've come across in studies (especially the UPenn paper), is  to use individual locations as cases, because in this way it is possible to relate observations by a spatiotemporal common denominator. In other words, it seems reasonable to look at tweets posted within a certain time period and sourced from a given location, and see how statistics about those tweets vary with some other trend of interest taken from the same time period and specific to the same location.
+        * Doing this proved to restrict sample size significantly. See the next section for my idea of a possible solution.
+        
+    3. TL;DR: Yes, with a few modifications. 
+    
+        * It occured to me that aggregating statistics on Tweets by location using Elasicsearch's aggregation functionalities would be a convenient way to analyze Tweets on a grouped basis, at scale. One use case of personal interest is aggregating Tweets by the specific county from which they were sourced, in order to re-attempt my mask sentiment study with the New York Times dataset. 
+        * After reviewing the documentation and consulting with Abraham about the notebook-query pipeline, I've gained a working understanding of Elasticsearch queries and logic, as well as the mechanism of making a data retrieval, so I'm hoping to apply that knowledge to place some searches more tailored to study design. Conveniently, it seems that the aggregation approach is feasible, and as of today (Sunday 8/3) Abraham has written up and pushed a new function (see raw_search.R) that allows the user to pose a custom Elasticsearh query, thereby allowing for aggregation requests to be placed. My plan for this week is to start playing around with and using this new feature of our pipeline. [Example below].
+    4. Example below.
+
+#### Snippet of some twiddling I did for the mask-sentiment-NYT-survey study (https://htmlpreview.github.io/?https://raw.githubusercontent.com/TheRensselaerIDEA/COVID-Twitter/master/HACL-2020-Notebooks/NYT_mask_sent_experiment_whiter9_28072020.html):
+
+Taking the results of the ES query placed for the study, stored in the data frame `tweets.vectors.df` such as this one,
+
+```{r echo=TRUE}
+
+#example df
+tweet.vectors.df <- data.frame(c(1,2),c(0,2),c('New York','New York'),c(0.258,-0.340))
+colnames(tweet.vectors.df) <- c("tweet_id","score","user_location","sentiment")
+tweet.vectors.df
+
+```
+
+...you can filter the output down to the factors of just `location` and `sentiment` location like
+```{r}
+tweets.by.loc <- tweet.vectors.df %>% select(user_location,sentiment)
+tweets.by.loc
+
+```
+
+...or set up a table of the count of tweets for each location, ordered highest to lowest, like 
+```{r message=FALSE, warning=FALSE}
+place.counts <- tweets.by.loc %>% group_by(user_location) %>% summarise(frequency = length(user_location)) 
+place.counts <- arrange(place.counts, desc(frequency))
+head(place.counts)
+
+```
+
+
+***
+
+#### (Functional) Elasticsearch query I wrote up for my follow-up mask-sentiment-NYT regression
+* This query batch-retrieves the **complete** body of tweets within the specified date range and having the specified location fields from the `coronavirus-data-masks`index, rather than just calling a sample as the notebooks do now
+* It (as well as countless other variations) can be used in conjunction with `do_search_raw` to retrieve the tweets 
+
+```{r}
+
+
+# apply custom elasticsearch filters to query to maximize tweet return
+
+# #query <- sprintf('{
+#   "_source": ["created_at","text","full_text","place.id", "place.name", "place.full_name", "place.place_type", / #                 "place.country_code", "place.country"],
+#   "query": {
+#     "bool": {
+#       "filter": [
+#         {
+#           "range" : {
+#             "created_at" : {
+#               "gte": "%s",
+#               "lt": "%s",
+#               "format": "strict_date_hour_minute_second",
+#               "time_zone": "+00:00"
+#               }
+#             }
+#           },
+#           { 
+#           "exists": { 
+#             "field": "place.id" 
+#             }
+#           },
+#           {
+#           "simple_query_string": {
+#             "fields": ["place.country_code"],
+#             "query": "US"
+#             }
+#           },
+#           {
+#           "simple_query_string": {
+#             "fields": ["place.place_type"],
+#             "query": "city"
+#             }
+#           }
+#         ]
+#       }
+#     }
+#   }',gte_str,lt_str)
+
+
+```
+
+
+## Up Next
+### Big questions to be answered, hopefully this week:
+  + Is vader a good enough way of measuring mask-related sentiment?
+  + For a given region and time frame, is there a correlation between the negative sentimentality rate in relation to mask use/wearing and death rates/infection rates?
+
+## Blog Post Brainstorming
+
+  + In the short term, if there's interest, I could always vamp up this writeup from a few weeks ago into a mini- blog for general info of the clustering technique that we're using with COVId-Twitter (reducing the technicality of the language I used for sure):
+     + https://docs.google.com/document/d/1lVUxACL-rtnWBZeFA14n4ALLidCC-bPA-10B2_NEL8A/edit?usp=sharing
+  
+#### Structure:
+* Lede: [who, what, where, when, why, and how]
+
+  * Who: Who is the post about?
+  * What: What happened in the post?
+  * Where: Where did the work you’re writing about occur?
+  * When: When did it occur?
+  * Why: Why did this happen?
+  * How: How did this happen?
+
+* A screen shot or image that best illustrates your post
+
+https://files.slack.com/files-pri/T1YNKMMUH-F017WE0NGTU/image.png
+
+* Answer Mary’s “three questions”:
+
+What did you want to know?
+How did you go about finding it?
+What did you find?
+
+#### Draft
+
+[Lede]
+In a new study published [date] in [location], a team of data analytics researchers at Rensselaer Polytechnic Institute scrutinized a database of over [number] tweets, written anywhere from the first of the year through July, to draw conclusions about public attitudes towards mask usage in the U.S.over the course of the coronavirus pandemic. 
+
+[my side of the story//the personal appeal]
+As an undergraduate student studying Biochemistry and Biophysics at RPI, and a part of that team, I'm writing with the goal of shedding light on the research effort underlying that headline. 
+
+First of all, a disclaimer: I don't pretend to be an expert in either epidemiology or big data analytics (or even Twitter usage, for that matter). What I do love, though, is the practice of statistics; studying how large-scale emergent properties can arise out of a million smaller individual cases is very much an interest of mine, and I can happily waste hours of my free time writing up a neat computer program that computes some desirable stats. 
+
+In light of this, needless to say, when I learned of a research lab on campus that was combining those individually powerful tools to answer practical, weighty questions about the coronavirus pandemic in realtime, I enrolled for the summer session without a second thought.
+
+[what we did]
+[Give a lead-up and overview of the COVID-twitter Project, motivation, short background, etc]
+
+[cd ~ study content]
+So, we knew that previous research has looked at how social media and similar media-centric indicators, such as Google flu trends, can be used to track the focus of the public eye when disease runs rampant. For anyone who's gotten sick suddenly and out of the blue, this probably seems like an intuitive approach; how many times have we all turned to Google, or health websites, or friends on social media, in a panic to try and hunt down the cause of that weird side pain, or convince ourselves a headache isn't a precursor to some rare genetic disorder? 
+
+Our collective lab hypothesis became clear. Building on previous studies showing the effectiveness of using Twitter discourse as a flag for disease flare-ups, we could make use of a unique, algorithmic approach to attempt to answer the hot research question on everyone's minds:
+
+Do people's feelings towards masks across the U.S. map with trends in viral severity?
+
+[methodology]
+During our weekly lab breakouts, the team and I worked on developing a pipeline for transporting our Twitter data from its collection database into a statistical computing platform for analysis. We indexed a database of strictly coronavirus- and mask-usage-related tweets, posted between the first day of the year through the month of July, 2020, a range fittingly encompassing the disease progression of the coronavirus pandemic.
+
+[continued discussion]
+
+[findings]
+
+[takeaways]
+
+[looking forward]
+
+#### A more formal/research-report type version:
+
+In a new study published [date] in [location], a team of data analytics researchers at Rensselaer Polytechnic Institute scrutinized a database of over [number] tweets, written anywhere from the first of the year through July, to draw conclusions about public attitudes towards mask usage in the U.S.over the course of the coronavirus pandemic. 
+
+The team made use of sentiment analysis and powerful machine-learning-based visualizations to relay a dynamic story of how Twitter users' attitudes towards this simple, yet life-preserving, preventative measure have evolved over time. Crucially, how good those trends are at informing us of coronavirus-related indicents in the progression of the pandemic might prove to be an important consideration moving forward, as the threat of a second wave lurks grimly in the public consciousness. 
+
+[context]
+[what's been done before]
+Prior to this study, previous research has looked at how social media and similar media-centric indicators, such as Google flu trends, can be used to track the focus of the public eye when disease runs rampant. For anyone who's gotten sick suddenly and out of the blue, this probably seems like an intuitive approach; how many times have we all turned to Google in a panic to try and hunt down the cause of that weird side pain, or convince ourselves a headache isn't a precursor to some rare genetic disorder? 
+
+In recent months, in light of the gravity of the pandemic, a related body of literature has emerged that looks specifically at how such trends in people's online activity can predict the spread of devastating infectious disease.
+
+[methodology]
+
+[findings]
+
+[takeaways]
+
+[looking forward]
+
+  
+  
+  
+  

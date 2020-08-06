@@ -79,7 +79,7 @@ A semantic phrase causes retrieved tweets to be ordered by cosine similarity wit
 #### Result size
 Number of tweets to retrieve.
 ```{r}
-# number of results to return (max 10,000)
+# number of results to return (to return all results, set to NA)
 resultsize <- 10000
 ```
 
@@ -102,6 +102,8 @@ If `semantic_phrase` is blank, this flag indicates if tweets should be returned 
 # return results in chronological order or as a random sample within the range
 # (ignored if semantic_phrase is not blank)
 random_sample <- TRUE
+# if using random sampling, optionally specify a seed for reproducibility. For no seed, set to NA.
+random_seed <- NA
 ```
 
 #### Temporary clustering settings
