@@ -121,6 +121,7 @@ do_search <- function(indexname,
                       must_have_embedding=FALSE,
                       must_have_geo=FALSE,
                       random_sample=FALSE,
+                      random_seed=NA,
                       resultsize=10,
                       resultfields="",
                       elasticsearch_host="localhost",
@@ -158,7 +159,8 @@ do_search <- function(indexname,
                         location_filter, 
                         must_have_embedding, 
                         must_have_geo, 
-                        random_sample)
+                        random_sample,
+                        random_seed)
   } else {
     text_embedding <- embed_use_large(semantic_phrase, embed_use_large_url)
     query <- semantic_query(resultfields,

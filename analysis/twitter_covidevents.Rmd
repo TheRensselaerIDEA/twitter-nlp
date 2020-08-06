@@ -89,6 +89,8 @@ semantic_phrase <- ""
 # return results in chronological order or as a random sample within the range
 # (ignored if semantic_phrase is not blank)
 random_sample <- FALSE
+# if using random sampling, optionally specify a seed for reproducibility. For no seed, set to NA.
+random_seed <- NA
 # number of results to return (to return all results, set to NA)
 resultsize <- 10000
 # minimum number of results to return. This should be set according to the needs of the analysis (i.e. enough samples for statistical significance)
@@ -120,6 +122,7 @@ results <- do_search(indexname="covidevents-data",
                      must_have_embedding=TRUE,
                      must_have_geo=must_have_geo,
                      random_sample=random_sample,
+                     random_seed=random_seed,
                      resultsize=resultsize,
                      resultfields='"user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary", "dataset_file", "dataset_entry.annotation.part1.Response", "dataset_entry.annotation.part2-opinion.Response"',
                      elasticsearch_host="",

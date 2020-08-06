@@ -102,6 +102,8 @@ If `semantic_phrase` is blank, this flag indicates if tweets should be returned 
 # return results in chronological order or as a random sample within the range
 # (ignored if semantic_phrase is not blank)
 random_sample <- TRUE
+# if using random sampling, optionally specify a seed for reproducibility. For no seed, set to NA.
+random_seed <- NA
 ```
 
 #### Temporary clustering settings
