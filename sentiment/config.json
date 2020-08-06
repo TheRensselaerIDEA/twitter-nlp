@@ -1,0 +1,12 @@
+{
+    "py/object": "config.Config",
+    "elasticsearch_host": "localhost",
+    "elasticsearch_verify_certs": false,
+    "elasticsearch_index_name": "coronavirus-data2",
+    "elasticsearch_batch_size": 500,
+    "elasticsearch_timeout_secs": 30,
+    "sleep_idle_secs": 5,
+    "sleep_not_idle_secs": 0.01,
+    "log_level": "WARNING"
+
+}
