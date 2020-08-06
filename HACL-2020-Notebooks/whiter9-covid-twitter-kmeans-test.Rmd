@@ -1,0 +1,460 @@
+---
+title: 'A Visual Investigation of Vaccine Skepticism in Twitter Discussion during March-April 2020 with COVID Twitter'
+author: "Rachael White"
+date: "July 15, 2020"
+subtitle: Health Analytics Challenge Lab 2020
+output:
+  html_document:
+    toc: yes
+    toc_depth: 2
+---
+#enter elasticsearch host below (pinned to COVID Twitter slack channel):
+
+```{r}
+elasticsearch_host <- "lp01.idea.rpi.edu"
+```
+
+#  Overview
+
+The motivation of this COVID Twitter study is to inspect prominent discussion themes semantically related to vaccine skepticism, or anti-vax sentiment, via Twitter during the month of mid March->mid April 2020, one of the most pivotal months in the evolution of the coronavirus pandemic. 
+
+Specifically, the following semantic phrase is queried: "I would not get a vaccine for coronavirus. Vaccines are fake, and vaccination doesn't actually work."
+
+# Methodology
+
+In addition to exploring the extent to which this notebook turns relevant queries to a semantic search, I additionally wanted to play around with the kmeans functionality by which the program generates similarity clusters.
+
+The kmeans function in R, by default, takes arguments of the dataset to study, the number of clusters ‘k’, and the maximum number of iterations to be performed. In my notebook, I elected to experiment with one optional kmeans parameter ‘nstart’, the number of unique sets of clusters the kmeans function tests out. The R Documentation (and various additional literature) suggest that increasing the number of test initializations for the kmeans process better helps the function "hone in" on the optimal cluster organization fitting the data, so I wanted to experiment to see how differently the cluster plots would actually render if I did so.
+
+Moreover, in running this notebook, the number of clusters for k-means to generate must be selected manually via Elbow plot inspection (at least until a more refined/automated means of constructing the optimal number of clusters is implemented, as per the notebook author). In light of this, for my specific semantic search inquiry, I select and designate new values for cluster number (k) optimization accordingly.  
+
+## The dataset
+
+This notebook draws from the cure-and-prevention-classified Elasticsearch index 'covidevents-data', adapted from the following source:
+[Extracting COVID-19 Events from Twitter](https://arxiv.org/abs/2006.02567)
+
+## Analysis methods
+
+We use the default Hartigan-Wong k-means clustering technique via R's 'kmeans' function, with nstart = 30 instead of the default value of 1. See original Rmd 'covid-twitter-hacl-template' for a comparison of the master cluster plot generated. 
+
+# Results
+
+```{r setup, include=FALSE}
+# Required R package installation:
+# These will install packages if they are not already installed
+# Set the correct default repository
+r = getOption("repos")
+r["CRAN"] = "http://cran.rstudio.com"
+options(repos = r)
+
+if (!require("ggplot2")) {
+  install.packages("ggplot2")
+  library(ggplot2)
+}
+
+if (!require("knitr")) {
+  install.packages("knitr")
+  library(knitr)
+}
+
+if(!require('dplyr')) {
+  install.packages("dplyr")
+  library(dplyr)
+}
+
+if(!require('stringr')) {
+  install.packages("stringr")
+  library(stringr)
+}
+
+if(!require('Rtsne')) {
+  install.packages("Rtsne")
+  library(Rtsne)
+}
+
+if(!require('stopwords')) {
+  install.packages("stopwords")
+  library(stopwords)
+}
+
+if(!require('plotly')) {
+  install.packages("plotly")
+  library(plotly)
+}
+
+if (!require("kableExtra")) {
+  install.packages("kableExtra")
+  library(kableExtra)
+}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+source("Elasticsearch.R")
+```
+
+## Query setup
+```{r}
+# query start date/time (inclusive)
+rangestart <- "2020-03-17 00:00:00"
+
+# query end date/time (exclusive)
+rangeend <- "2020-04-16 00:00:00"
+
+# query semantic similarity phrase
+semantic_phrase <- "I would not get a vaccine for coronavirus. Vaccines are fake, and vaccination doesn't actually work."
+
+# return results in chronological order or as a random sample within the range
+# (ignored if semantic_phrase is not blank)
+random_sample <- FALSE
+
+# number of results to return (max 10,000)
+#**author suggests no more than 1000 for reasonable runtime:
+resultsize <- 1000
+```
+
+```{r, echo=FALSE}
+###############################################################################
+# Get the tweets from Elasticsearch using the search parameters defined above
+###############################################################################
+
+elasticsearch_indexname <- "covidevents-data"
+
+results <- do_search(indexname=elasticsearch_indexname, 
+                     rangestart=rangestart,
+                     rangeend=rangeend,
+                     semantic_phrase=semantic_phrase,
+                     must_have_embedding=TRUE,
+                     random_sample=random_sample,
+                     resultsize=resultsize,
+                     resultfields='"user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary", "dataset_file", "dataset_entry.annotation.part1.Response", "dataset_entry.annotation.part2-opinion.Response"',
+                     elasticsearch_host=elasticsearch_host,
+                     elasticsearch_path="elasticsearch",
+                     elasticsearch_port=443,
+                     elasticsearch_schema="https")
+
+# this dataframe contains the tweet text and other metadata
+tweet.vectors.df <- results$df[,c("full_text", "user_screen_name", "user_verified", "user_location", "place.country", "place.full_name", "dataset_file", "dataset_entry.annotation.part1.Response", "dataset_entry.annotation.part2-opinion.Response")]
+
+# this matrix contains the embedding vectors for every tweet in tweet.vectors.df
+tweet.vectors.matrix <- t(simplify2array(results$df[,"embedding.use_large.primary"]))
+```
+
+```{r, echo=FALSE}
+###############################################################################
+# Clean the tweet and user location text, and set up tweet.vectors.df 
+# the way we want it by consolidating the location field and computing
+# location type
+###############################################################################
+
+tweet.vectors.df$user_location <- ifelse(is.na(tweet.vectors.df$place.full_name), tweet.vectors.df$user_location, paste(tweet.vectors.df$place.full_name, tweet.vectors.df$place.country, sep=", "))
+tweet.vectors.df$user_location[is.na(tweet.vectors.df$user_location)] <- ""
+tweet.vectors.df$user_location_type <- ifelse(is.na(tweet.vectors.df$place.full_name), "User", "Place")
+tweet.vectors.df$class <- sapply(tweet.vectors.df$dataset_file, function(d) sub(".jsonl", "", d))
+colnames(tweet.vectors.df)[colnames(tweet.vectors.df) == "dataset_entry.annotation.part1.Response"] <- "is_specific_event"
+colnames(tweet.vectors.df)[colnames(tweet.vectors.df) == "dataset_entry.annotation.part2-opinion.Response"] <- "opinion"
+tweet.vectors.df <- tweet.vectors.df[, c("full_text", "user_screen_name", "user_verified", "user_location", "user_location_type", "class", "is_specific_event", "opinion")]
+
+clean_text <- function(text, for_freq=FALSE) {
+  text <- str_replace_all(text, "[\\s]+", " ")
+  text <- str_replace_all(text, "http\\S+", "")
+  if (isTRUE(for_freq)) {
+    text <- tolower(text)
+    text <- str_replace_all(text, "’", "'")
+    text <- str_replace_all(text, "_", "-")
+    text <- str_replace_all(text, "[^a-z1-9 ']", "")
+  } else {
+    text <- str_replace_all(text, "[^a-zA-Z1-9 `~!@#$%^&*()-_=+\\[\\];:'\",./?’]", "")
+  }
+  text <- str_replace_all(text, " +", " ")
+  text <- trimws(text)
+}
+tweet.vectors.df$full_text <- sapply(tweet.vectors.df$full_text, clean_text)
+tweet.vectors.df$user_location <- sapply(tweet.vectors.df$user_location, clean_text)
+```
+
+### Selection of optimal number of clusters and subclusters
+
+To find the optimal number of high-level theme clusters for this sample, an elbow plot is used:
+
+```{r, echo=FALSE}
+wssplot <- function(data, fc=1, nc=40, seed=20){
+  wss <- data.frame(k=fc:nc, withinss=c(0))
+  for (i in fc:nc){
+    set.seed(seed)
+    wss[i-fc+1,2] <- sum(kmeans(data, centers=i, iter.max=30)$withinss)}
+  ggplot(data=wss,aes(x=k,y=withinss)) + 
+    geom_line() + 
+    ggtitle("Quality (within sums of squares) of k-means by choice of k")
+}
+# Generate the plot
+wssplot(tweet.vectors.matrix)
+```
+
+The plot mostly represents a smooth curve, but it can be seen that there is a distinct "elbow" point around k=5, so I choose this value of k.
+
+```{r}
+k <- 5
+```
+
+```{r, echo=FALSE}
+###############################################################################
+# Run K-means on all the tweet embedding vectors with nstart = 30
+###############################################################################
+
+set.seed(300)
+km <- kmeans(tweet.vectors.matrix, centers=k, iter.max=30, nstart=30)
+
+tweet.vectors.df$vector_type <- factor("tweet", levels=c("tweet", "cluster_center", "subcluster_center"))
+tweet.vectors.df$cluster <- as.factor(km$cluster)
+
+#append cluster centers to dataset for visualization
+centers.df <- data.frame(full_text=paste("Cluster (", rownames(km$centers), ") Center", sep=""),
+                         user_screen_name="[N/A]",
+                         user_verified="[N/A]",
+                         user_location="[N/A]",
+                         user_location_type = "[N/A]",
+                         class = "[N/A]",
+                         is_specific_event = "[N/A]",
+                         opinion = "[N/A]",
+                         vector_type = "cluster_center",
+                         cluster=as.factor(rownames(km$centers)))
+tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
+tweet.vectors.matrix <- rbind(tweet.vectors.matrix, km$centers)
+```
+
+To find the optimal number of topic subclusters for each theme cluster, another elbow plot is generated with a separate curve for each theme cluster: 
+
+```{r, echo=FALSE}
+wssplot2 <- function(data, fc=1, nc=40, seed=20){
+  clusters <- max(data[,1])
+  wss <- data.frame(cluster=as.factor(sort(rep(1:clusters, nc-fc+1))), k=rep(fc:nc, clusters), withinss=c(0))
+  for (i in 1:clusters) {
+    for (j in fc:nc){
+      set.seed(seed)
+      wss[wss$cluster==i,][j,"withinss"] <- sum(kmeans(data[data[,1]==i,2:ncol(data)], centers=j, iter.max=30)$withinss)
+      }
+  }
+  wss$withinss.scaled <- unlist(lapply(1:clusters, function(n) scale(wss$withinss[wss$cluster==n])))
+  ggplot(data=wss,aes(x=k,y=withinss.scaled)) + 
+    geom_line(aes(color=cluster, linetype=cluster)) + 
+    ggtitle("Quality (scaled within sums of squares) of k-means by choice of k")
+}
+# Generate the plot
+wssplot2(cbind(tweet.vectors.df$cluster, tweet.vectors.matrix))
+```
+Each theme cluster follows a similar plot, again representing a smooth curve. This time there appears to be an "elbow" point at approximately k = 4, so this value is chosen for the topic subclusters.
+
+```{r}
+cluster.k <- 4
+```
+
+## Visualization of theme clusters and topic subclusters
+
+```{r include=FALSE}
+###############################################################################
+# Run K-means again on all the tweet embedding vectors in each cluster
+# to create subclusters of tweets
+###############################################################################
+
+tweet.vectors.df$subcluster <- c(0)
+
+for (i in 1:k){
+ print(paste("Subclustering cluster", i, "..."))
+ cluster.matrix <- tweet.vectors.matrix[tweet.vectors.df$cluster == i,]
+ set.seed(500)
+ cluster.km <- kmeans(cluster.matrix, centers=cluster.k, iter.max=30)
+ tweet.vectors.df[tweet.vectors.df$cluster == i, "subcluster"] <- cluster.km$cluster
+ 
+ #append subcluster centers to dataset for visualization
+ centers.df <- data.frame(full_text=paste("Subcluster (", rownames(cluster.km$centers), ") Center", sep=""),
+                         user_screen_name="[N/A]",
+                         user_verified="[N/A]",
+                         user_location="[N/A]",
+                         user_location_type = "[N/A]",
+                         class = "[N/A]",
+                         is_specific_event = "[N/A]",
+                         opinion = "[N/A]",
+                         vector_type = "subcluster_center",
+                         cluster=as.factor(i),
+                         subcluster=rownames(cluster.km$centers))
+ tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
+ tweet.vectors.matrix <- rbind(tweet.vectors.matrix, cluster.km$centers)
+}
+tweet.vectors.df$subcluster <- as.factor(tweet.vectors.df$subcluster)
+```
+
+```{r include=FALSE}
+###############################################################################
+# Compute labels for each cluster and subcluster based on word frequency
+# and identify the nearest neighbors to each cluster and subcluster center
+###############################################################################
+
+stop_words <- stopwords("en", source="snowball")
+stop_words <- union(stop_words, stopwords("en", source="nltk"))
+stop_words <- union(stop_words, stopwords("en", source="smart"))
+stop_words <- union(stop_words, stopwords("en", source="marimo"))
+stop_words <- union(stop_words, c(",", ".", "!", "-", "?", "&amp;", "amp"))
+
+get_word_freqs <- function(full_text) {
+  word_freqs <- table(unlist(strsplit(clean_text(full_text, TRUE), " ")))
+  word_freqs <- cbind.data.frame(names(word_freqs), as.integer(word_freqs))
+  colnames(word_freqs) <- c("word", "count")
+  word_freqs <- word_freqs[!(word_freqs$word %in% stop_words),]
+  word_freqs <- word_freqs[order(word_freqs$count, decreasing=TRUE),]
+}
+
+get_label <- function(word_freqs, exclude_from_labels=NULL, top_k=3) {
+  words <- as.character(word_freqs$word)
+  exclude_words <- NULL
+  if (!is.null(exclude_from_labels)) {
+    exclude_words <- unique(unlist(lapply(strsplit(exclude_from_labels, "/"), trimws)))
+  }
+  label <- paste(setdiff(words, exclude_words)[1:top_k], collapse=" / ")
+}
+
+get_nearest_center <- function(df, mtx, center) {
+  df$center_cosine_similarity <- apply(mtx, 1, function(v) (v %*% center)/(norm(v, type="2")*norm(center, type="2")))
+  nearest_center <- df[order(df$center_cosine_similarity, decreasing=TRUE),]
+  nearest_center <- nearest_center[nearest_center$vector_type=="tweet", c("center_cosine_similarity", "full_text", "user_location")]
+}
+
+master.word_freqs <- get_word_freqs(tweet.vectors.df$full_text)
+master.label <- get_label(master.word_freqs, top_k=6)
+```
+
+## Top most-frequent words returned for this semantic search:
+
+```{r echo=TRUE}
+head(master.word_freqs)
+```
+
+```{r include=FALSE}
+clusters <- list()
+for (i in 1:k) {
+  cluster.df <- tweet.vectors.df[tweet.vectors.df$cluster == i,]
+  cluster.matrix <- tweet.vectors.matrix[tweet.vectors.df$cluster == i,]
+    
+  cluster.word_freqs <- get_word_freqs(cluster.df$full_text)
+  cluster.label <- get_label(cluster.word_freqs, master.label)
+  cluster.center <- cluster.matrix[cluster.df$vector_type=="cluster_center",]
+  cluster.nearest_center <- get_nearest_center(cluster.df, cluster.matrix, cluster.center)
+  
+  cluster.subclusters <- list()
+  for (j in 1:cluster.k) {
+    subcluster.df <- cluster.df[cluster.df$subcluster == j,]
+    subcluster.matrix <- cluster.matrix[cluster.df$subcluster == j,]
+    
+    subcluster.word_freqs <- get_word_freqs(subcluster.df$full_text)
+    subcluster.label <- get_label(subcluster.word_freqs, c(master.label, cluster.label))
+    subcluster.center <- subcluster.matrix[subcluster.df$vector_type=="subcluster_center",]
+    subcluster.nearest_center <- get_nearest_center(subcluster.df, subcluster.matrix, subcluster.center)
+    
+    cluster.subclusters[[j]] <- list(word_freqs=subcluster.word_freqs, label=subcluster.label, nearest_center=subcluster.nearest_center)
+  }
+  
+  clusters[[i]] <- list(word_freqs=cluster.word_freqs, label=cluster.label, nearest_center=cluster.nearest_center, subclusters=cluster.subclusters)
+}
+
+```
+
+```{r echo=FALSE}
+###############################################################################
+# Run T-SNE on all the tweets and then again on each cluster to get
+# plot coordinates for each tweet. We output a master plot with all clusters
+# and a cluster plot with all subclusters for each cluster.
+###############################################################################
+
+set.seed(700)
+tsne <- Rtsne(tweet.vectors.matrix, dims=2, perplexity=25, max_iter=750, check_duplicates=FALSE)
+tsne.plot <- cbind(tsne$Y, tweet.vectors.df)
+colnames(tsne.plot)[1:2] <- c("X", "Y")
+tsne.plot$full_text <- sapply(tsne.plot$full_text, function(t) paste(strwrap(t ,width=60), collapse="<br>"))
+tsne.plot$cluster.label <- sapply(tsne.plot$cluster, function(c) clusters[[c]]$label)
+
+taglist <- htmltools::tagList()
+
+#Master high level plot
+fig <- plot_ly(tsne.plot, x=~X, y=~Y, 
+               text=~paste("Cluster:", cluster, "<br>Class:", class, "<br>IsSpecificEvent:", is_specific_event, "<br>Opinion:", opinion, "<br>Text:", full_text), 
+               color=~cluster.label, type="scatter", mode="markers")
+fig <- fig %>% layout(title=paste("Master Plot:", master.label, "(high level clusters)"), 
+                        yaxis=list(zeroline=FALSE), 
+                        xaxis=list(zeroline=FALSE))
+fig <- fig %>% toWebGL()
+taglist[[1]] <- fig
+
+#Cluster plots
+plot_index <- 2
+for (i in 1:k) {
+  print(paste("Plotting cluster", i, "..."))
+  cluster.matrix <- tweet.vectors.matrix[tsne.plot$cluster == i,]
+  
+  set.seed(900)
+  cluster.tsne <- Rtsne(cluster.matrix, dims=2, perplexity=12, max_iter=500, check_duplicates=FALSE)
+  cluster.tsne.plot <- cbind(cluster.tsne$Y, tsne.plot[tsne.plot$cluster == i,])
+  colnames(cluster.tsne.plot)[1:2] <- c("cluster.X", "cluster.Y")
+  cluster.tsne.plot$subcluster.label <- sapply(cluster.tsne.plot$subcluster, function(c) clusters[[i]]$subclusters[[c]]$label)
+  
+  #Cluster plot with regrouped positions by subcluster
+  fig <- plot_ly(cluster.tsne.plot, x=~cluster.X, y=~cluster.Y, 
+                 text=~paste("Subcluster:", subcluster, "<br>Class:", class, "<br>IsSpecificEvent:", is_specific_event, "<br>Opinion:", opinion, "<br>Text:", full_text), 
+                 color=~subcluster.label, type="scatter", mode="markers")
+  fig <- fig %>% layout(title=paste('Cluster ', i, ": ", clusters[[i]]$label, " (regrouped by subcluster)", sep=""), 
+                        yaxis=list(zeroline=FALSE), 
+                        xaxis=list(zeroline=FALSE))
+  #fig <- fig %>% toWebGL()
+  taglist[[plot_index]] <- fig
+  plot_index <- plot_index + 1
+}
+
+taglist
+```
+
+#### To illustrate the proportion of tweets which have location information associated, we filter the 1000 tweets selected down to only the tweets with user_location = 'Place' populated and display in a bar chart:
+
+```{r include=FALSE}
+
+ #################################################################
+#filter data by tweets with user_location = 'Place' populated only
+tweets_by_place <- split(tweet.vectors.df, tweet.vectors.df$user_location_type)
+
+user_location_type <- factor(tweet.vectors.df$user_location_type)
+tweet.vectors.df$user_location_type <- droplevels(user_location_type, exclude = '[N/A]')
+
+```
+
+```{r echo=TRUE}
+
+ggplot(tweet.vectors.df, aes(x=user_location_type, y = 'count'))+ geom_bar(stat="identity", width=0.7, fill="steelblue")+theme_minimal()
+
+```
+
+# Discussion
+
+By means of this exploratory notebook run, it can be observed that increasing 'nstart' (the number of random initializations of the chosen number of clusters (k) ) in the kmeans function implementation has significant influence on cluster output.
+
+Interestingly, regarding the semantic search returns, the results are not very clear in terms of the extent to which major themes are extracted which illustrate the public attitude towards or preoccupation with vaccine skepticism. This could potentially illustrate weaknesses in the topic-labelling mechanism currently employed to generate labels for the clusterplots (based on word frequencies). 
+
+An alternate hypothesis is that my semantic search query is potentially not specific enough to highlight disbelief surrounding or negative attitudes towards vaccines. Either way, this is a matter for follow-up experimentation, such as comparisons of similar but more singularly-themed and specifically-worded semantic searches. 
+
+# Limitations
+
+Regarding the limitations of this analysis, significant restrictions to search query date range and tweet number capacity had to be observed as per storage and processing constraints. I imagine that, ideally, it would be more insightful to explore trends over a longer period of time- especially in light of recent resurgences and recurring covid-related discussion via Twitter-  or to analyze a larger body of Tweets, for clearer overall illustration of clustering trends. I intend to follow up on this subject with the lab group.
+
+The barchart generated from the contents of tweet.vectors.df illustrates that geo-tagged tweets (tweets for which the 'Place' level of the user_location_type factor is populated) fall in a distinct minority in comparison to the remainder of the tweets in our sample. This feature of the data will be taken into consideration moving forward with any type of spatial analysis of Twitter discourse.
+
+# Future Prospects
+
+***Moving forward, I aim to  either a) methods of analyzing these plots with greater statistical rigor or b) simply extract the raw data from the semantic ordering themselves, pre-clustering, in order to draw some real conclusions from these semantic queries, especially in regards to what the relevant trending Twitter topics can tell us about the state of the pandemic and its societal impacts.
+
+***Brainstorming: 
+      -maybe conduct PCA/generate biplot, to better characterize/segregate individual subtopics?
+      -Could we do something with the locations? Maybe separate out only the twitter IDs with    locations associated, do cluster analyses within a given set of location IDs that specify the same geographic region, study covid-related social media discussion trends by region?
+      
+
+# References
+
+[1] https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/kmeans
+
+[2]  https://blog.exploratory.io/visualizing-k-means-clustering-results-to-understand-the-characteristics-of-clusters-better-b0226fb3dd10
+

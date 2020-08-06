@@ -65,21 +65,27 @@ get_query_filter <- function(gte_str, lt_str, text_filter, location_filter, must
   return(filter_clause)
 }
 
-base_query <- function(resultfields, gte_str, lt_str, text_filter, location_filter, must_have_embedding, must_have_geo, random_sample) {
+base_query <- function(resultfields, gte_str, lt_str, text_filter, location_filter, must_have_embedding, must_have_geo, random_sample, random_seed) {
   
   filter_clause <- get_query_filter(gte_str, lt_str, text_filter, location_filter, must_have_embedding, must_have_geo)
   
   if (isTRUE(random_sample)) {
+    if (isFALSE(is.null(random_seed)) && isFALSE(is.na(random_seed))) {
+      random_params <- sprintf(' "seed": %s, "field": "id_str.keyword" ', ifelse(is.character(random_seed), 
+                                sprintf('"%s"', random_seed), random_seed))
+    } else {
+      random_params <- ''
+    }
     query <- sprintf('{
        "_source": [%s],
        "query": {
          "function_score": {
             "query": %s,
-            "random_score": {},
+            "random_score": {%s},
             "boost_mode": "replace"
          }
       }
-    }', resultfields, filter_clause)
+    }', resultfields, filter_clause, random_params)
   } else {
     query <- sprintf('{
       "sort" : [
