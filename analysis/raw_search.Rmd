@@ -65,7 +65,7 @@ query <- '{
 results <- do_search_raw(indexname="coronavirus-data-masks", 
                      query,
                      resultsize=resultsize,
-                     elasticsearch_host="lp01.idea.rpi.edu",
+                     elasticsearch_host="",
                      elasticsearch_path="elasticsearch",
                      elasticsearch_port=443,
                      elasticsearch_schema="https")
