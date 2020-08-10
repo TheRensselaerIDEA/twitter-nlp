@@ -26,23 +26,27 @@ source("Elasticsearch.R")
 
 ```{r}
 # number of results to return (to return all results, set to NA)
-resultsize <- 50
+resultsize <- 0
 
 # raw JSON elasticsearch query
 query <- '{
-  "_source": ["place.name", "place.full_name", "place.place_type", "place.country_code", "place.country"],
+  "_source": false,
   "query": {
     "bool": {
       "filter": [
         {
           "simple_query_string": {
-            "fields": ["place.country_code"],
+            "fields": [
+              "place.country_code"
+            ],
             "query": "US"
           }
         },
         {
           "simple_query_string": {
-            "fields": ["place.place_type"],
+            "fields": [
+              "place.place_type"
+            ],
             "query": "admin city"
           }
         }
@@ -50,9 +54,59 @@ query <- '{
     }
   },
   "aggs": {
-    "states": {
+    "weekly": {
+      "date_histogram": {
+        "field": "created_at",
+        "calendar_interval": "week",
+        "format": "MM/dd/yyyy"
+      },
+      "aggs": {
+        "sentiment_stats": {
+          "extended_stats": {
+            "field": "sentiment.vader.primary"
+          }
+        }
+      }
+    },
+    "by_state": {
       "terms": {
-        "field": "place.name.keyword"
+        "field": "place.normalized_state.keyword", 
+        "order": {
+          "_key": "asc"
+        },
+        "size": 100
+      },
+      "aggs": {
+        "sentiment_stats": {
+          "extended_stats": {
+            "field": "sentiment.vader.primary"
+          }
+        }
+      }
+    },
+    "weekly_by_state": {
+      "date_histogram": {
+        "field": "created_at",
+        "calendar_interval": "week",
+        "format": "MM/dd/yyyy"
+      },
+      "aggs": {
+        "by_state": {
+          "terms": {
+            "field": "place.normalized_state.keyword",
+            "order": {
+              "_key": "asc"
+            },
+            "size": 100
+          },
+          "aggs": {
+            "sentiment_stats": {
+              "extended_stats": {
+                "field": "sentiment.vader.primary"
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -77,6 +131,6 @@ kable(counts.df) %>% kable_styling()
 hits.df <- results$hits$hits
 kable(hits.df) %>% kable_styling()
 
-buckets.df <- results$aggregations$states$buckets
+buckets.df <- results$aggregations$by_state$buckets
 kable(buckets.df) %>% kable_styling()
 ```

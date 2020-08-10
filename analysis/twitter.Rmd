@@ -42,6 +42,11 @@ if(!require('plotly')) {
   library(plotly)
 }
 
+if(!require('RColorBrewer')) {
+  install.packages("RColorBrewer")
+  library(RColorBrewer)
+}
+
 if (!require("kableExtra")) {
   install.packages("kableExtra")
   library(kableExtra)
@@ -50,6 +55,7 @@ if (!require("kableExtra")) {
 knitr::opts_chunk$set(echo = TRUE)
 
 source("Elasticsearch.R")
+source("Summarizer.R")
 ```
 
 ### Configure the search parameters here:
@@ -96,11 +102,23 @@ resultsize <- 10000
 # minimum number of results to return. This should be set according to the needs of the analysis (i.e. enough samples for statistical significance)
 min_results <- 500
 
+# plot mode - '2d' or '3d'
+plot_mode <- "2d"
+
+# If TRUE, cluster and subcluster summaries will be generated using nearest neighbors to the center.
+summarize_clusters <- FALSE
+# number of nearest neighbors to the center to use for cluster & subcluster summarization
+summarize_center_nn <- 20
+# summarization model inference hyperparameters
+summarize_max_len <- 60
+summarize_num_beams <- 4
+summarize_temperature <- 1.0
+
 ####TEMPORARY SETTINGS####
 # number of high level clusters (temporary until automatic selection implemented)
-k <- if (semantic_phrase=="") 8 else 5
+k <- if (semantic_phrase=="") 15 else 5
 # number of subclusters per high level cluster (temporary until automatic selection implemented)
-cluster.k <- 8
+cluster.k <- 15
 # show/hide extra info (temporary until tabs are implemented)
 show_original_subcluster_plots <- FALSE
 show_regrouped_subcluster_plots <- TRUE
@@ -125,7 +143,7 @@ results <- do_search(indexname="coronavirus-data-masks",
                      random_seed=random_seed,
                      resultsize=resultsize,
                      resultfields='"user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary"',
-                     elasticsearch_host="lp01.idea.rpi.edu",
+                     elasticsearch_host="",
                      elasticsearch_path="elasticsearch",
                      elasticsearch_port=443,
                      elasticsearch_schema="https")
@@ -194,7 +212,7 @@ set.seed(300)
 km <- kmeans(tweet.vectors.matrix, centers=k, iter.max=30)
 
 tweet.vectors.df$vector_type <- factor("tweet", levels=c("tweet", "cluster_center", "subcluster_center"))
-tweet.vectors.df$cluster <- as.factor(km$cluster)
+tweet.vectors.df$cluster <- km$cluster
 
 #append cluster centers to dataset for visualization
 centers.df <- data.frame(full_text=paste("Cluster (", rownames(km$centers), ") Center", sep=""),
@@ -203,7 +221,7 @@ centers.df <- data.frame(full_text=paste("Cluster (", rownames(km$centers), ") C
                          user_location="[N/A]",
                          user_location_type = "[N/A]",
                          vector_type = "cluster_center",
-                         cluster=as.factor(rownames(km$centers)))
+                         cluster=as.integer(rownames(km$centers)))
 tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
 tweet.vectors.matrix <- rbind(tweet.vectors.matrix, km$centers)
 ```
@@ -214,7 +232,7 @@ tweet.vectors.matrix <- rbind(tweet.vectors.matrix, km$centers)
 # to create subclusters of tweets
 ###############################################################################
 
-tweet.vectors.df$subcluster <- c(0)
+tweet.vectors.df$subcluster <- as.integer(c(0))
 
 for (i in 1:k){
  print(paste("Subclustering cluster", i, "..."))
@@ -230,12 +248,11 @@ for (i in 1:k){
                          user_location="[N/A]",
                          user_location_type = "[N/A]",
                          vector_type = "subcluster_center",
-                         cluster=as.factor(i),
-                         subcluster=rownames(cluster.km$centers))
+                         cluster=as.integer(i),
+                         subcluster=as.integer(rownames(cluster.km$centers)))
  tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
  tweet.vectors.matrix <- rbind(tweet.vectors.matrix, cluster.km$centers)
 }
-tweet.vectors.df$subcluster <- as.factor(tweet.vectors.df$subcluster)
 ```
 
 ```{r echo=FALSE}
@@ -286,6 +303,10 @@ get_nearest_center <- function(df, mtx, center) {
   nearest_center <- nearest_center[nearest_center$vector_type=="tweet", c("center_cosine_similarity", "full_text", "user_location")]
 }
 
+concat_text_for_summary <- function(nearest_center, k_nn) {
+  summary <- paste('"', paste(nearest_center[1:min(k_nn, nrow(nearest_center)), "full_text"], collapse='" "'), '"', sep="")
+}
+
 master.word_freqs <- get_word_freqs(tweet.vectors.df$full_text)
 master.label <- get_label(master.word_freqs, top_k=8)
 
@@ -315,6 +336,40 @@ for (i in 1:k) {
   clusters[[i]] <- list(word_freqs=cluster.word_freqs, label=cluster.label, nearest_center=cluster.nearest_center, subclusters=cluster.subclusters)
 }
 
+if (isTRUE(summarize_clusters)) {
+  #concatenate the nearest neighbor tweet text for each cluster & subcluster
+  summaries.df <- tweet.vectors.df[tweet.vectors.df$vector_type != "tweet", 
+                                   c("full_text", "vector_type", "cluster", "subcluster")]
+  summaries.df$text_for_summary <- mapply(function(vector_type, cluster, subcluster) {
+    if (vector_type == "cluster_center") {
+      return(concat_text_for_summary(clusters[[cluster]]$nearest_center, summarize_center_nn))
+    } else {
+      return(concat_text_for_summary(clusters[[cluster]]$subclusters[[subcluster]]$nearest_center,
+                                     summarize_center_nn))
+    }
+  }, summaries.df$vector_type, summaries.df$cluster, summaries.df$subcluster)
+  
+  #do the summarization for all clusters & subclusters in a single batch
+  summaries.df$summary <- summarize(text=summaries.df$text_for_summary,
+                                    max_len=summarize_max_len,
+                                    num_beams=summarize_num_beams,
+                                    temperature=summarize_temperature)
+  
+  #update the cluster & subcluster center vectors' text with summaries
+  tweet.vectors.df[rownames(summaries.df), "full_text"] <- 
+                              paste(summaries.df$full_text, ": [", summaries.df$summary, "]", sep="")
+  
+  #assign the summaries back to the cluster & subcluster lists
+  invisible(
+    mapply(function(vector_type, cluster, subcluster, summary) {
+      if (vector_type == "cluster_center") {
+        clusters[[cluster]]$summary <<- summary
+      } else {
+        clusters[[cluster]]$subclusters[[subcluster]]$summary <<- summary
+      }
+    }, summaries.df$vector_type, summaries.df$cluster, summaries.df$subcluster, summaries.df$summary))
+}
+
 ```
 
 ```{r, echo=FALSE}
@@ -324,24 +379,64 @@ for (i in 1:k) {
 # and a cluster plot with all subclusters for each cluster.
 ###############################################################################
 
+plot_tweets <- function(tsne.plot, title, type, mode, webGL) {
+  fig <- plot_ly(tsne.plot[tsne.plot$vector_type == "tweet",], 
+                 x=~if(type=="subclusters_regrouped") {cluster.X} else {X}, 
+                 y=~if(type=="subclusters_regrouped") {cluster.Y} else {Y}, 
+                 z=~if(type=="subclusters_regrouped") {cluster.Z} else {Z},
+                 hoverinfo = "text",
+                 text=~paste(if(type=="clusters") {"Cluster:"} else {"Subcluster:"}, 
+                             if(type=="clusters") {cluster} else {subcluster}, 
+                             "<br>Text:", full_text), 
+                 color=~if(type=="clusters") {cluster.label} else {subcluster.label}, 
+                 colors=colorRamp(brewer.pal(8, "Set2")), 
+                 type=if(mode=="3d") {"scatter3d"} else {"scatter"}, 
+                 mode="markers",
+                 marker=list(size=if(mode=="3d") {3} else {5}),
+                 legendgroup=~if(type=="clusters") {cluster.label} else {subcluster.label})
+  
+  centers_trace_vector_type <- if (type == "clusters") {"cluster_center"} else {"subcluster_center"}
+  fig <- fig %>% add_trace(data=tsne.plot[tsne.plot$vector_type == centers_trace_vector_type,],
+                           marker=list(size=if(mode=="3d") {6} else {10}, color='rgb(0, 0, 0)'),
+                           legendgroup=~if(type=="clusters") {cluster.label} else {subcluster.label},
+                           showlegend=FALSE)
+
+  if (mode == "3d") {
+    fig <- fig %>% layout(title=title, scene=list(xaxis=list(zeroline=FALSE, title="X"), 
+                                                  yaxis=list(zeroline=FALSE, title="Y"), 
+                                                  zaxis=list(zeroline=FALSE, title="Z")))
+  } else {
+    fig$x$attrs[[1]]$z <- NULL #remove unused z axis
+    fig$x$attrs[[2]]$z <- NULL
+    fig <- fig %>% layout(title=title, xaxis=list(zeroline=FALSE, title="X"), 
+                          yaxis=list(zeroline=FALSE, title="Y"),
+                          legend=list(traceorder="normal"))
+  }
+  
+  if (isTRUE(webGL) && mode=="2d") {
+    fig <- fig %>% toWebGL()
+  }
+  
+  return(fig)
+}
+
+tsne_dims <- ifelse(plot_mode=="3d", 3, 2)
+tsne_coords <- c("X","Y")
+if (tsne_dims == 3) {tsne_coords <- c(tsne_coords, "Z")}
+
 set.seed(700)
-tsne <- Rtsne(tweet.vectors.matrix, dims=2, perplexity=25, max_iter=750, check_duplicates=FALSE)
+tsne <- Rtsne(tweet.vectors.matrix, dims=tsne_dims, perplexity=25, max_iter=750, check_duplicates=FALSE)
 tsne.plot <- cbind(tsne$Y, tweet.vectors.df)
-colnames(tsne.plot)[1:2] <- c("X", "Y")
+colnames(tsne.plot)[1:tsne_dims] <- tsne_coords
 tsne.plot$full_text <- sapply(tsne.plot$full_text, function(t) paste(strwrap(t ,width=60), collapse="<br>"))
 tsne.plot$cluster.label <- sapply(tsne.plot$cluster, function(c) clusters[[c]]$label)
 
 taglist <- htmltools::tagList()
 
 #Master high level plot
-fig <- plot_ly(tsne.plot, x=~X, y=~Y, 
-               text=~paste("Cluster:", cluster, "<br>Text:", full_text), 
-               color=~cluster.label, type="scatter", mode="markers")
-fig <- fig %>% layout(title=paste("Master Plot:", master.label, "(high level clusters)"), 
-                        yaxis=list(zeroline=FALSE), 
-                        xaxis=list(zeroline=FALSE))
-fig <- fig %>% toWebGL()
-taglist[[1]] <- fig
+title <- paste("Master Plot:", master.label, "(high level clusters)")
+taglist[[1]] <- plot_tweets(tsne.plot, title=title,
+                            type="clusters", mode=plot_mode, webGL=TRUE)
 
 #Cluster plots
 plot_index <- 2
@@ -350,34 +445,24 @@ for (i in 1:k) {
   cluster.matrix <- tweet.vectors.matrix[tsne.plot$cluster == i,]
   
   set.seed(900)
-  cluster.tsne <- Rtsne(cluster.matrix, dims=2, perplexity=12, max_iter=500, check_duplicates=FALSE)
+  cluster.tsne <- Rtsne(cluster.matrix, dims=tsne_dims, perplexity=12, max_iter=500, check_duplicates=FALSE)
   cluster.tsne.plot <- cbind(cluster.tsne$Y, tsne.plot[tsne.plot$cluster == i,])
-  colnames(cluster.tsne.plot)[1:2] <- c("cluster.X", "cluster.Y")
+  colnames(cluster.tsne.plot)[1:tsne_dims] <- sapply(tsne_coords, function(c) paste("cluster.", c, sep=""))
   cluster.tsne.plot$subcluster.label <- sapply(cluster.tsne.plot$subcluster, function(c) clusters[[i]]$subclusters[[c]]$label)
   
   #Cluster plot with original positions
   if (isTRUE(show_original_subcluster_plots)) {
-    fig <- plot_ly(cluster.tsne.plot, x=~X, y=~Y, 
-                   text=~paste("Subcluster:", subcluster, "<br>Text:", full_text), 
-                   color=~subcluster.label, type="scatter", mode="markers")
-    fig <- fig %>% layout(title=paste('Cluster ', i, ": ", clusters[[i]]$label, " (as positioned in master plot)", sep=""), 
-                          yaxis=list(zeroline=FALSE), 
-                          xaxis=list(zeroline=FALSE))
-    #fig <- fig %>% toWebGL()
-    taglist[[plot_index]] <- fig
+    title <- paste('Cluster ', i, ": ", clusters[[i]]$label, " (as positioned in master plot)")
+    taglist[[plot_index]] <- plot_tweets(cluster.tsne.plot, title=title, 
+                                         type="subclusters_original", mode=plot_mode, webGL=FALSE)
     plot_index <- plot_index + 1
   }
   
   #Cluster plot with regrouped positions by subcluster
   if (isTRUE(show_regrouped_subcluster_plots)) {
-    fig <- plot_ly(cluster.tsne.plot, x=~cluster.X, y=~cluster.Y, 
-                   text=~paste("Subcluster:", subcluster, "<br>Text:", full_text), 
-                   color=~subcluster.label, type="scatter", mode="markers")
-    fig <- fig %>% layout(title=paste('Cluster ', i, ": ", clusters[[i]]$label, " (regrouped by subcluster)", sep=""), 
-                          yaxis=list(zeroline=FALSE), 
-                          xaxis=list(zeroline=FALSE))
-    #fig <- fig %>% toWebGL()
-    taglist[[plot_index]] <- fig
+    title <- paste('Cluster', i, ":", clusters[[i]]$label, "(regrouped by subcluster)")
+    taglist[[plot_index]] <- plot_tweets(cluster.tsne.plot, title=title, 
+                                         type="subclusters_regrouped", mode=plot_mode, webGL=FALSE)
     plot_index <- plot_index + 1
   }
   
@@ -389,7 +474,7 @@ for (i in 1:k) {
   
   # Print nearest neighbors of cluster center
   if (isTRUE(show_center_nn)) {
-    taglist[[plot_index]] <- htmltools::HTML(kable(clusters[[i]]$nearest_center[1:5,], caption=paste("Cluster", i, "nearest neighbors to center")) %>% kable_styling())
+    taglist[[plot_index]] <- htmltools::HTML(kable(clusters[[i]]$nearest_center[1:summarize_center_nn,], caption=paste("Cluster", i, "nearest neighbors to center")) %>% kable_styling())
     plot_index <- plot_index + 1
   }
   
@@ -402,7 +487,7 @@ for (i in 1:k) {
     
     # Print nearest neighbors of subcluster center
     if (isTRUE(show_center_nn)) {
-      taglist[[plot_index]] <- htmltools::HTML(kable(clusters[[i]]$subclusters[[j]]$nearest_center[1:5,], caption=paste("Subcluster", j, "nearest neighbors to center")) %>% kable_styling())
+      taglist[[plot_index]] <- htmltools::HTML(kable(clusters[[i]]$subclusters[[j]]$nearest_center[1:summarize_center_nn,], caption=paste("Subcluster", j, "nearest neighbors to center")) %>% kable_styling())
       plot_index <- plot_index + 1
     }
   }

@@ -1,0 +1,5 @@
+{
+    "py/object": "config.Config",
+    "transformers_model": "sshleifer/distilbart-xsum-12-6",
+    "batch_size": 32
+}
