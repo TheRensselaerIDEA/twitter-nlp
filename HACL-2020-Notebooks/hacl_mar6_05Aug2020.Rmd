@@ -1,0 +1,125 @@
+---
+title: "HACL Project Status Notebook"
+author: "Rufeng Ma"
+date: "05 August 2020"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+subtitle: "COVID Twitter"
+---
+
+## Weekly Work Summary	
+
+**NOTE:** Follow an outline format; use bullets to express individual points. 
+
+* RCS ID: mar6
+* Project Name: COVID-Twitter
+* Summary of work since last week 
+
+  I was working on 2 tasks:
+  1. I was continue working on the K auto determination. We would like to get the K automatically rather than manually chose it.
+  2. I start to work on the "For each cluster, slice by weekly time intervals and show how its subclusters evolve over time using a slider "
+
+    
+* Summary of github commits 
+All unmature codes are here: https://github.com/rufengma/DataAnalyticsResearch
+    
+* List of presentations,  papers, or other outputs
+
+Unmature notebook for silhoutte score method.
+
+https://htmlpreview.github.io/?https://raw.githubusercontent.com/rufengma/DataAnalyticsResearch/blob/master/update1_mar6.html
+    
+* List of references (if necessary) 
+
+    * Plot_ly: https://plotly.com/ggplot2/animations/
+    
+    * flexdashboard(tabset):https://rmarkdown.rstudio.com/flexdashboard/using.html
+    
+    * grid arrange: https://cran.r-project.org/web/packages/gridExtra/vignettes/arrangeGrob.html
+        
+    * Silhouette Score: https://towardsdatascience.com/silhouette-coefficient-validating-clustering-techniques-e976bb81d10c
+
+
+* Indicate any use of group shared code base
+
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/tree/master/analysis/Elasticsearch.R
+    
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/tree/master/analysis/flexdashboardsearch.R
+    
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/tree/master/analysis/twitter.Rmd
+    
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/tree/master/analysis/covid-twitter-hacl-template.Rmd
+
+* Indicate which parts of your described work were done by you or as part of joint efforts <p>
+     Until now, I have the unfinished two .Rmd <p>
+     One is the silhoutte score method to find K. <p>
+     Another one is the demo for build the animation respect to each week as time frames.<p>
+     They are all listed in my github where I have a directory contains all unmature code for this project. https://github.com/rufengma/DataAnalyticsResearch <p>
+
+## Personal Contribution	
+
+The code I contribute to the project are listed here:
+
+https://github.com/rufengma/DataAnalyticsResearch <p>
+
+* Automatically finding an optimal K is meaningful because we do not want a human interruption. 
+
+* Clusters slice by weekly time intervals is also meaningful because we would like to compare clusters size between different time slots. This kind of way to express will accelerate our comparison process. This user friendly app can let more investigators work on the data.
+
+## Discussion of Primary Findings 	
+
+* Discuss primary findings: <p>
+    <b>Task 1, Finding optimal K</b>:
+    * What did you want to know? <p>
+      Is the silhouette score a good choice for auto finding an optimal K?
+    * How did you go about finding it? <p>
+      I made a function which can do the following things:
+      1. Read twitter.vectors.matrix 
+      2. Using "parallel computing" to get kmean
+      3. Using kmean to get silhouette score
+      4. Append those silhouette scores to the list
+      5. Sort the list
+      6. Plot the each K's silhouette score (x-axis is k, y-axis is silhouette)
+    * What did you find?<p>
+    I found the <b>sscore_plot</b> function was running slower than the <b>wwplot</b> function. wwplot function is the elbow method plot function but need human interuption. But I compared the parallel computing with the for loop, I found parallel computing method is way faster especially when the kmean has higher maximum iterations.
+    
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<b>Task 2, Cluster time series analysis</b>:<p>
+    * What did you want to know? <p>
+      I will find the trend of the current clusters over the past several month.
+    * How did you go about finding it? <p>
+      I will do 2 things:
+      1. Make a notebook or an Rshiny app to show the time slides of clusters.
+      2. Observe each clusters size changing during time changing. 
+      3. The final result will be shown with statistics. 
+    * What did you find?<p>
+      I was trying plot_ly function using the created_at column in the dataframe as the frames. After talking with Abraham, he told me I could try other 2 functions to help show the time slides those are <b>"tabset"</b> and <b>"grid arrange"</b>.
+	
+* **Required:** Provide illustrating figures and/or tables
+Figure 1. This figure showed the silhoutte score method result of k=2:10.
+https://github.com/rufengma/DataAnalyticsResearch/blob/master/Silhoutte%20score%20plot.png
+Notebook with the code in update1_mar6.Rmd
+html with the plots in update1_mar6.html
+
+## NEW: Drafting your DAR/HACL Blog Post
+
+*Use this space to begin drafting your by-the-end-of-term Data INCITE blog post. As discussed in class, the "specs" for this post are...*
+
+My blog is about the COVID-Twitter project. The COVID-Twitter project includes 2 major aspects. One is the interperable clusters, the other one is the data analytic study. This project could help us use twitter users' posts to give us the information (i.e. the attitude of users on some special topics) related to COVID-19. If we would like to have an accuracy study, we need to have the unsupervised-text-clustering as accurate as possible. For reaching this goal, I will contribute to the project by working on 2 parts. 
+
+Currently, we are using the k-mean method to divide all messages into k clusters. In each cluster, all points in one cluster are more related to each other than with points in other clusters. Because this is unsupervised learning, we do not know exactly how many clusters we need. We must run the experiment from 1 to 40 times to choose the best one. In the current version code, for choosing an optimal K, we need a human interruption with manually choosing the K. This is time-consuming, and is a waste of human resources. So it is necessary to have a program that can automatically choose K. I am working on this one now. The method I am using is called the silhouette coefficient method it compares the average intra-cluster distance (a in Figure 2) and the average inter-cluster distance (b in Figure 2). 
+
+Figure 2.
+https://github.com/rufengma/DataAnalyticsResearch/blob/master/Silhoutte_coefficient_definition.jpeg
+
+The blog will also include another work of mine: the cluster time series analysis. The tweets sometimes reflect people's personal life. But a considerable part of tweets are discussions around the most popular topics. Topics are always timeliness. So this determined the time series analysis is the most important aspect in tweets analysis. We already have the clusters focused on sentiment words. We will ask several questions. How was people's sentiment changing over time? When people's sentiment changes, does the cluster size changing? We are planning to show the size of the cluster changing over time. Then have a quantification result to show the variation of people's tweets. The cluster size-changing will be the most obvious visual index.  What I am doing is to slice each cluster by weekly time intervals and show how its subclusters evolve over time using a slider. The way we show it can be a shiny app in a R Notebook. The function I could use are plot_ly, tabset and grid_arrange. 
+    
+    
+    
+    
+    
+    
+    
