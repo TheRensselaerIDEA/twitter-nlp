@@ -1,0 +1,383 @@
+---
+title: 'ANOVA 1/2: Analyses of Variance in Mask-Related Sentiment Across Weeks, based on All Tweets of Coronavirus-Data-Masks Index'
+author: "Rachael White // Health Analytics Challenge Lab 2020"
+date: "August 11, 2020"
+output:
+  html_document: 
+    df_print: tibble
+    toc: yes
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+# Required R package installation:
+# These will install packages if they are not already installed
+# Set the correct default repository
+r = getOption("repos")
+r["CRAN"] = "http://cran.rstudio.com"
+options(repos = r)
+
+
+if (!require("knitr")) {
+  install.packages("knitr")
+  library(knitr)
+}
+
+if (!require("kableExtra")) {
+  install.packages("kableExtra")
+  library(kableExtra)
+}
+if (!require("ggplot2")) {
+  install.packages("ggplot2")
+  library(ggplot2)
+}
+
+if(!require('dplyr')) {
+  install.packages("dplyr")
+  library(dplyr)
+}
+
+if(!require('rcompanion')) {
+  install.packages("rcompanion")
+  library(rcompanion)
+}
+
+if(!require("mctest")) {
+  install.packages("mctest")
+  library(mctest)
+}
+
+
+if(!require("MASS")) {
+  install.packages("MASS")
+  library(MASS)
+}
+if(!require("lawstat")) {
+  install.packages("lawstat")
+  library(lawstat)
+}
+
+if(!require("lmtest")) {
+  install.packages("lmtest")
+  library(lmtest)
+}
+
+if(!require("multcomp")) {
+  install.packages("multcomp")
+  library(multcomp)
+}
+
+
+knitr::opts_chunk$set(echo = TRUE)
+
+source("Elasticsearch.R")
+
+```
+
+## Overview
+
+### The following is the first in a two-part, one-way ANOVA analysis aiming to answer the following questions about the sentiment scores of tweets in our coronavirus-data-masks index:
+
+#### 1. Does mean mask-related tweet sentiment differ significantly across weeks, over the tweet collection time range (3/16/2020-8/1/2020)?
+* Null hypothesis: mean1 = mean2 = mean3 ... meanN
+
+#### 2. Does mean mask-related tweet sentiment differ significantly among states, over the same time range? (To be conducted separately)
+* Null hypothesis: mean1 = mean2 = mean3 ... meanN
+
+In this statistical suite 1 of 2, we find significant evidence to suggest that mean sentiment related to masks and mask-use, as expressed on Twitter, exhibited both month-to-month variability and an overall decreasing trend over the first five months of 2020.
+
+
+```{r include=FALSE}
+
+# Always remove before committing:
+elasticsearch_host=""
+
+```
+
+### Search configuration
+
+```{r}
+# query start date/time (inclusive)
+rangestart <- "2020-01-01 00:00:00"
+
+# query end date/time (exclusive)
+rangeend <- "2020-08-01 00:00:00"
+
+# text filter restricts results to only those containing words, phrases, or meeting a boolean condition. This query syntax is very flexible and supports a wide variety of filter scenarios:
+# words: text_filter <- "cdc nih who"  ...contains "cdc" or "nih" or "who"
+# phrase: text_filter <- '"vitamin c"' ...contains exact phrase "vitamin c"
+# boolean condition: <- '(cdc nih who) +"vitamin c"' ...contains ("cdc" or "nih" or "who") and exact phrase "vitamin c"
+#full specification here: https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-simple-query-string-query.html
+text_filter <- ""
+
+# location filter acts like text filter except applied to the location of the tweet instead of its text body.
+location_filter <- ""
+
+# if FALSE, location filter considers both user-povided and geotagged locations. If TRUE, only geotagged locations are considered.
+must_have_geo <- FALSE
+
+# query semantic similarity phrase
+semantic_phrase <- ""
+
+# return results in chronological order or as a random sample within the range
+# (ignored if semantic_phrase is not blank)
+random_sample <- TRUE
+# if using random sampling, optionally specify a seed for reproducibility. For no seed, set to NA.
+random_seed <- NA
+# number of results to return (to return all results, set to NA)
+resultsize <- NA
+# minimum number of results to return. This should be set according to the needs of the analysis (i.e. enough samples for statistical significance)
+min_results <- 1
+
+```
+
+## Results
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+results <- do_search(indexname="coronavirus-data-masks", 
+                     rangestart=rangestart,
+                     rangeend=rangeend,
+                     text_filter=text_filter,
+                     location_filter=location_filter,
+                     semantic_phrase=semantic_phrase,
+                     must_have_geo=must_have_geo,
+                     random_sample=random_sample,
+                     random_seed=random_seed,
+                     resultsize=resultsize,
+                     resultfields='"created_at", "user.screen_name", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "sentiment.vader.primary"',
+                     elasticsearch_host=elasticsearch_host,
+                     elasticsearch_path="elasticsearch",
+                     elasticsearch_port=443,
+                     elasticsearch_schema="https")
+
+required_fields <- c("created_at", "user_screen_name", "user_location", "place.full_name", "place.country", "full_text", "sentiment.vader.primary")
+validate_results(results$df, min_results, required_fields)
+results.df <- results$df
+results.df$vector_type <- "tweet"
+
+counts.df <- data.frame(results.tweet.count=paste(length(results.df$"_id")))
+kable(counts.df) %>% kable_styling()
+
+#Transform results for tweet display
+display.df <- results.df
+display.df$user_location <- ifelse(is.na(display.df$place.full_name), display.df$user_location, paste(display.df$place.full_name, display.df$place.country, sep=", "))
+display.df$user_location[is.na(display.df$user_location)] <- ""
+display.df$user_location_type <- ifelse(is.na(display.df$place.full_name), "User", "Place")
+display_fields <- c("full_text", "created_at", "user_screen_name", "user_location", "user_location_type", "sentiment.vader.primary")
+
+if (semantic_phrase != "") {
+  display_fields <- c("cosine_similarity", display_fields)
+}
+display.df <- display.df[,display_fields]
+
+tweets.df <- results.df[results.df$vector_type == "tweet",]
+tweets.df$created_at <- as.POSIXlt(strptime(tweets.df$created_at, format="%a %b %d %H:%M:%S +0000 %Y", tz="UTC"))
+tweets.df$week <- epiweek(tweets.df$created_at)  # find CDC epidemiological week
+tweets.df$date <- date(tweets.df$created_at)
+
+tweet.tibble <- tibble(sentiment = tweets.df$sentiment, week = tweets.df$week, date = tweets.df$date, datetime = tweets.df$created_at)
+
+tweet.tibble
+
+summary.tibble <- tweet.tibble %>% group_by(week) %>% summarize(mean_sentiment = mean(sentiment))
+
+ggplot(summary.tibble, aes(week,mean_sentiment)) + geom_bar(stat="identity",fill="steelblue") + labs(title = "Average Tweet Sentiment per Week from January to August, 2020", x = "Week", y = "Avg. Sentiment") + theme_minimal()
+
+
+```
+
+Average sentiment as represented in these tweets can be observed to decrease over the timeline of the pandemic.
+
+
+## Data Cleaning/Organizing
+
+We inspect the counts of tweets posted during each week, ordered least to greatest, to make sure all weeks are sufficiently represented:
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+counts.tibble <- tweet.tibble %>% group_by(week) %>% summarize(count = length(datetime)) %>% arrange(count)
+counts.tibble
+
+```
+
+```{r echo=FALSE}
+ggplot(tweet.tibble, aes(week)) + geom_bar(stat="count",fill="steelblue") + labs(title = "Tweet Counts by Week Posted", x = "CDC Epidemiological Week", y = "Tweets Sourced") + theme_minimal()
+
+```
+
+
+Clearly, the first few weeks of the year are pretty scant. We elect to filter out the weeks with tweet count < 100 to be safe (leaving CDC epidemiological weeks 11 - 31, roughly March 16 - July 27).
+
+```{r echo=FALSE}
+
+#filter out first few weeks of March with tweet count < 100
+tweet.tibble <- tweet.tibble %>% filter(week>11)
+print(tweet.tibble)
+
+```
+## Analysis
+
+We now check that our data holds up against the assumptions of running an ANOVA. 
+The key assumptions are:
+
+1. No major outliers
+2. Normality of residuals
+3. Homoscedascicity 
+
+We first check for outliers using boxplots for each week, and remove any if found.
+
+```{r echo=FALSE}
+
+#Check outliers
+
+tweet.tibble$week <- as.factor(tweet.tibble$week)
+boxplot(tweet.tibble$sentiment~tweet.tibble$week,data=tweet.tibble, main="Boxplot of Sentiment Scores for Tweets from All Weeks")
+
+```
+
+No apparent sentiment outliers across weeks, so assumption 1 is met. For convenience, we proceed with the ANOVA, then use the results to circle back and check the other two key assumptions of this test. 
+
+```{r}
+aov_results <- aov(tweet.tibble$sentiment~week, data=tweet.tibble);
+# 
+# #Output summarized results of ANOVA
+summary(aov_results)
+
+```
+
+Based on this highly significant result (p < 2e-16), we have reason to believe that the weekly sentiment average for at least one week differs significantly from the rest. We check our remaining two assumptions for running the ANOVA for posterity, to get an idea of how confident we can be in this finding.
+
+Starting from #2, we assess the normality of residuals from our ANOVA results.
+
+```{r}
+#CHECK ASSUMPTIONS
+
+#1. Normality of Residuals
+Residuals = resid(aov_results)
+
+###### Visual Check Normality of Residuals
+plotNormalHistogram(Residuals)
+
+```
+
+
+The standard procedure would usually involve conducting a Shapiro-Wilkes test of the residuals, to more thoroughly assess the error distribution. Unfortunately, Shapiro-Wilkes in R can only accomodate sample sizes up to 5000. We fall back on visual inspection of the residuals distribution as an alternate assessment method, and take the apparent symmetry/roughly unimodal nature of the residuals we observe in the plot as sufficient evidence this assumption is met.
+
+Next, we check homoscedascicity with a non-constant error variance test.
+
+```{r echo=FALSE}
+
+#2. Evaluate homoscedasticity
+
+#First Conduct ANOVA as Linear Regression
+LM_weekly_sentiment<-lm(sentiment~tweet.tibble$week,data=tweet.tibble)
+
+#Conduct Breusch-Pagan test for homgeneity of residuals 
+#If the test statistic has a significant p-value (e.g. p < 0.05), the null hypothesis of homoscedasticity is rejected and heteroscedasticity assumed.
+lmtest::bptest(LM_weekly_sentiment)  
+
+```
+
+The Breusch-Pagan test indicates that heteroscedasticity is present, so unfortunately, that assumption of ANOVA is violated.
+
+We normally would not proceed further with the analysis of beween-group differences given the instability of the ANOVA outcome itself, but in this case, we'll still investigate which weeks exactly were unusual. We'll use the standard Bonferroni's test to look at between-group differences; with this correction, significance level is adjusted for the quantity of comparisons being made.
+
+```{r echo=FALSE}
+
+#Determine which means significantly different using Bonferroni adjusted t-test
+pairwise.t.test(tweet.tibble$sentiment, tweet.tibble$week, p.adj = "bonf")
+
+```
+
+On inspection, it's difficult to draw conclusions about which weeks notably differ, based on the sheer quantity of pairwise differences in the data. We'll now re-factor the ANOVA to look at differences across months, to see if this paints a clearer picture of how mask-related sentiment has changed through time.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+# add a month column to original results data frame
+tweet.tibble2 <- tweet.tibble %>% mutate(month = month(datetime))
+
+sent_by_month <- tweet.tibble2 %>% group_by(month) %>% summarize(mean_sentiment = mean(sentiment))
+sent_by_month
+
+```
+
+
+```{r echo=FALSE}
+
+ggplot(sent_by_month, aes(month,mean_sentiment)) + geom_bar(stat="identity", fill="steelblue") + labs(title = "Average Tweet Sentiment per Month between February and August, 2020", x = "Month (Number)", y = "Avg. Sentiment") + theme_minimal()
+
+```
+
+```{r echo=FALSE}
+
+#Check outliers
+
+tweet.tibble2$month <- as.factor(tweet.tibble2$month)
+boxplot(tweet.tibble2$sentiment~tweet.tibble2$month,data=tweet.tibble2, main="Boxplot of Sentiment Scores for Tweets March-July")
+
+```
+
+We find no apparent sentiment outliers across months, so ANOVA assumption 1 is met. We continue with the same procedure as previously done for sentiment-by-week.
+
+```{r echo=FALSE}
+#conduct ANOVA
+aov2_results <- aov(sentiment~month, data=tweet.tibble2);
+
+# #Output summarized results of ANOVA
+summary(aov2_results)
+
+```
+
+The ANOVA result suggests that a significant difference exists, this time among the 5 months. We again perform the Bonferroni-corrected pairwise t-test to identify which months are significantly different from the rest:
+
+```{r echo=FALSE}
+
+#Determine which means significantly different using Bonferroni adjusted t-test
+pairwise.t.test(tweet.tibble2$sentiment, tweet.tibble2$month, p.adj = "bonf")
+
+```
+
+Based on the output, we find that mean sentiment scores for the month of March vs April differed with a borderline significant p of 0.059, that mean sentiment scores for May differed from March with a highly significant p of less than 2e-16, and so on. These results indicate overall that statistically significant differences in mean sentiment exist across, essentially, all months studied. 
+
+In the hopes of casting more light on this finding, we can follow up with a Dunnet's Correction test, which will compare the mean sentiment for each month to a control mean. We choose the average sentiment from March, the earliest period in the pandemic's development for which we have substantial Twitter data, as a baseline.
+
+```{r echo=FALSE}
+
+#perform comparisons
+dunnet_comparison <- glht(aov2_results, linfct = mcp(month = "Dunnett"))
+
+#view summary of comparisons
+summary(dunnet_comparison)
+
+```
+
+This output is interpreted as follows:
+
+* The difference in mean sentiment between month 4 (April) and month 3 (March) is significant at a significance level of .05; this difference has a p-value of 0.0143.
+* The difference in mean sentiment between month 5 (May) and month 3 (March) is _highly_ significant at a significance level of .05; this difference has a p-value of <0.001.
+* The latter conclusion also applies to the average sentiments found for months 6 and 7 (June and July), both of which differ in a highly significant fashion from the average sentiment found for March.
+
+In this run, we performed the Multiple Comparisons of Means test with the default two-sided alternative hypothesis of "any" difference. Based on previous indications in the data, as well as a real-world inclination to guess that mask-related sentiment might have grown more negative as the pandemic progressed, we elect to also run the Dunnett Contrasts with the alternative hypothesis that the mean sentiment for each month is **less** than the mean sentiment for March. 
+
+```{r echo=FALSE}
+
+#perform comparisons
+dunnet_comparison <- glht(aov2_results, linfct = mcp(month = "Dunnett"), alternative = c("g"))
+
+#view summary of comparisons
+summary(dunnet_comparison)
+
+```
+
+We see that this test assesses the null hypothesis that there was either an increase or stagnation in mean sentiment, between the month of March and each respective other month. We further observe that this null hypothesis was soundly rejected for each case. 
+
+## Takeaways
+
+While select of the assumptions for drawing sound inference from ANOVA were found to be violated in this study, it is estimated that the robustness of the ANOVA technique to departures from normality and unequal variance make the results found here not entirely invalid as evaluations of between-group variation.  
+
+Based on the findings of the by-month portion of this analysis, we can venture to say with considerable confidence that mean sentiment related to masks and mask use, as expressed on Twitter, did in fact decrease over the first five months of 2020.
+
+
+
+
+
+
