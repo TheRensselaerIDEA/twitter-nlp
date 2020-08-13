@@ -50,6 +50,12 @@ source("Summarizer.R")
 
 Note: large date ranges can take some time to process on initial search due to the sheer volume of data we have collected. Subsequent searches using the same date range should run quickly due to Elasticsearch caching.
 
+```{r, echo=FALSE}
+# Set server resource locations here:
+elasticsearch_host <- ""
+summarizer_url <- ""
+```
+
 ```{r}
 # query start date/time (inclusive)
 rangestart <- "2020-01-01 00:00:00"
@@ -86,18 +92,24 @@ min_results <- 500
 # plot mode - '2d' or '3d'
 plot_mode <- "2d"
 # If TRUE, cluster and subcluster summaries will be generated using nearest neighbors to the center.
-summarize_clusters <- FALSE
+summarize_clusters <- TRUE
 # number of nearest neighbors to the center to use for cluster & subcluster summarization
 summarize_center_nn <- 20
 # summarization model inference hyperparameters
 summarize_max_len <- 60
 summarize_num_beams <- 4
 summarize_temperature <- 1.0
+
 ####TEMPORARY SETTINGS####
 # number of high level clusters (temporary until automatic selection implemented)
 k <- if (semantic_phrase=="") 15 else 5
+
 # number of subclusters per high level cluster (temporary until automatic selection implemented)
-cluster.k <- 5
+cluster.k <- 15
+
+# nstart hyperparameter for kmeans:
+kmeans_nstart <- 1
+
 # show/hide extra info (temporary until tabs are implemented)
 show_original_subcluster_plots <- FALSE
 show_regrouped_subcluster_plots <- TRUE
@@ -121,7 +133,7 @@ results <- do_search(indexname="coronavirus-data-masks",
                      random_seed=random_seed,
                      resultsize=resultsize,
                      resultfields='"user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary"',
-                     elasticsearch_host="",
+                     elasticsearch_host=elasticsearch_host,
                      elasticsearch_path="elasticsearch",
                      elasticsearch_port=443,
                      elasticsearch_schema="https")
@@ -179,12 +191,16 @@ tweet.vectors.df$user_location <- sapply(tweet.vectors.df$user_location, clean_t
 #Generate the plot
 #wssplot(tweet.vectors.matrix)
 #```
+
 ```{r, echo=FALSE}
+
 ###############################################################################
 # Run K-means on all the tweet embedding vectors
 ###############################################################################
 set.seed(300)
-km <- kmeans(tweet.vectors.matrix, centers=k, iter.max=30)
+
+km <- kmeans(tweet.vectors.matrix, centers=k, iter.max=30, nstart=kmeans_nstart)
+
 tweet.vectors.df$vector_type <- factor("tweet", levels=c("tweet", "cluster_center", "subcluster_center"))
 tweet.vectors.df$cluster <- km$cluster
 #append cluster centers to dataset for visualization
@@ -209,7 +225,7 @@ for (i in 1:k){
  print(paste("Subclustering cluster", i, "..."))
  cluster.matrix <- tweet.vectors.matrix[tweet.vectors.df$cluster == i,]
  set.seed(500)
- cluster.km <- kmeans(cluster.matrix, centers=cluster.k, iter.max=30)
+ cluster.km <- kmeans(cluster.matrix, centers=cluster.k, iter.max=30, nstart=kmeans_nstart)
  tweet.vectors.df[tweet.vectors.df$cluster == i, "subcluster"] <- cluster.km$cluster
  
  #append subcluster centers to dataset for visualization
@@ -298,6 +314,14 @@ for (i in 1:k) {
   
   clusters[[i]] <- list(word_freqs=cluster.word_freqs, label=cluster.label, nearest_center=cluster.nearest_center, subclusters=cluster.subclusters)
 }
+```
+
+```{r, echo=FALSE}
+###############################################################################
+# Compute cluster and subcluster summaries using 
+# an abstractive summarization model (DistilBART)
+###############################################################################
+
 if (isTRUE(summarize_clusters)) {
   #concatenate the nearest neighbor tweet text for each cluster & subcluster
   summaries.df <- tweet.vectors.df[tweet.vectors.df$vector_type != "tweet", 
@@ -315,7 +339,8 @@ if (isTRUE(summarize_clusters)) {
   summaries.df$summary <- summarize(text=summaries.df$text_for_summary,
                                     max_len=summarize_max_len,
                                     num_beams=summarize_num_beams,
-                                    temperature=summarize_temperature)
+                                    temperature=summarize_temperature,
+                                    summarizer_url=summarizer_url)
   
   #update the cluster & subcluster center vectors' text with summaries
   tweet.vectors.df[rownames(summaries.df), "full_text"] <- 
