@@ -214,31 +214,6 @@ wssplot <- function(data, fc=1, nc=40, seed=20){
 wssplot(tweet.vectors.matrix)
 ```
 
-```{r, echo=FALSE}
-sscore_fn<- function(data,seed){
-  fc<-2
-  nc<-40
-  plan(multiprocess)
-  X<- fc:nc
-  y<-future_lapply(X,function(x){
-    set.seed(seed)
-    km <- kmeans(data, centers=x, iter.max=30)
-    SIL<- silhouette(km$cluster, dist(data))
-    new_mean<- mean(SIL[, 3])
-    return(new_mean)
-  })
-}
-sscore<-c(0)
-sscore<-c(sscore,sscore_fn(tweet.vectors.matrix,1))
-print(sscore)
-```
-```{r, echo=FALSE}
-x<-1:40
-plot(x=x,y=sscore,main="Silhoutte Score", sub="",
-  xlab="K", ylab="SSCORE, higher is better")
-
-```
-
 The plot mostly represents a smooth curve, although there is a distinct "elbow" point between k=8 and k=10. We will select k=8:
 
 ```{r}
