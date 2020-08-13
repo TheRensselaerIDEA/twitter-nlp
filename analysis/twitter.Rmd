@@ -99,7 +99,7 @@ random_sample <- TRUE
 # if using random sampling, optionally specify a seed for reproducibility. For no seed, set to NA.
 random_seed <- NA
 # number of results to return (to return all results, set to NA)
-resultsize <- 100000
+resultsize <- 10000
 # minimum number of results to return. This should be set according to the needs of the analysis (i.e. enough samples for statistical significance)
 min_results <- 500
 
@@ -188,24 +188,24 @@ tweet.vectors.df$full_text <- sapply(tweet.vectors.df$full_text, clean_text)
 tweet.vectors.df$user_location <- sapply(tweet.vectors.df$user_location, clean_text)
 ```
 
-```{r, echo=FALSE}
+#```{r, echo=FALSE}
 ##UNCOMMENT TO GENERATE ELBOW PLOT
-library(cluster)
-wssplot <- function(data, fc=2, nc=25, seed=20){
-  wss <- data.frame(k=fc:nc, withinss=c(0))
-  for (i in fc:nc){
-    set.seed(seed)
-    km<-kmeans(data, centers=i, iter.max=30)
-    SIL<-silhouette(km$cluster, dist(data))
-    wss[i-fc+1,2]<-mean(SIL[,3])
-  }
-    ggplot(data=wss,aes(x=k,y=withinss)) + 
-    geom_line() + 
-    ggtitle("Quality (within sums of squares) of k-means by choice of k")
-}
+#library(cluster)
+#wssplot <- function(data, fc=2, nc=25, seed=20){
+#  wss <- data.frame(k=fc:nc, withinss=c(0))
+#  for (i in fc:nc){
+#    set.seed(seed)
+#    km<-kmeans(data, centers=i, iter.max=30)
+#    SIL<-silhouette(km$cluster, dist(data))
+#    wss[i-fc+1,2]<-mean(SIL[,3])
+#  }
+#    ggplot(data=wss,aes(x=k,y=withinss)) + 
+#    geom_line() + 
+#    ggtitle("Quality (within sums of squares) of k-means by choice of k")
+#}
 #Generate the plot
-wssplot(tweet.vectors.matrix)
-```
+#wssplot(tweet.vectors.matrix)
+#```
 ```{r, echo=FALSE}
 ###############################################################################
 # Run K-means on all the tweet embedding vectors
