@@ -10,7 +10,7 @@ options(repos = r)
 if (!require("ggplot2")) {
   install.packages("ggplot2")
   library(ggplot2)
-}
+} 
 
 if (!require("knitr")) {
   install.packages("knitr")
@@ -51,6 +51,7 @@ if (!require("kableExtra")) {
   install.packages("kableExtra")
   library(kableExtra)
 }
+
 
 knitr::opts_chunk$set(echo = TRUE)
 
@@ -98,7 +99,7 @@ random_sample <- TRUE
 # if using random sampling, optionally specify a seed for reproducibility. For no seed, set to NA.
 random_seed <- NA
 # number of results to return (to return all results, set to NA)
-resultsize <- 10000
+resultsize <- 100000
 # minimum number of results to return. This should be set according to the needs of the analysis (i.e. enough samples for statistical significance)
 min_results <- 500
 
@@ -116,9 +117,9 @@ summarize_temperature <- 1.0
 
 ####TEMPORARY SETTINGS####
 # number of high level clusters (temporary until automatic selection implemented)
-k <- if (semantic_phrase=="") 15 else 5
+k <- if (semantic_phrase=="") 2 else 2
 # number of subclusters per high level cluster (temporary until automatic selection implemented)
-cluster.k <- 15
+cluster.k <- 2
 # show/hide extra info (temporary until tabs are implemented)
 show_original_subcluster_plots <- FALSE
 show_regrouped_subcluster_plots <- TRUE
@@ -143,7 +144,7 @@ results <- do_search(indexname="coronavirus-data-masks",
                      random_seed=random_seed,
                      resultsize=resultsize,
                      resultfields='"user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary"',
-                     elasticsearch_host="",
+                     elasticsearch_host="lp01.idea.rpi.edu",
                      elasticsearch_path="elasticsearch",
                      elasticsearch_port=443,
                      elasticsearch_schema="https")
@@ -189,19 +190,118 @@ tweet.vectors.df$user_location <- sapply(tweet.vectors.df$user_location, clean_t
 
 ```{r, echo=FALSE}
 ##UNCOMMENT TO GENERATE ELBOW PLOT
+library(cluster)
+library(future.apply)
 
-# wssplot <- function(data, fc=1, nc=40, seed=20){
-#   wss <- data.frame(k=fc:nc, withinss=c(0))
-#   for (i in fc:nc){
-#     set.seed(seed)
-#     wss[i-fc+1,2] <- sum(kmeans(data, centers=i, iter.max=30)$withinss)}
-#   ggplot(data=wss,aes(x=k,y=withinss)) + 
-#     geom_line() + 
-#     ggtitle("Quality (within sums of squares) of k-means by choice of k")
-# }
-# Generate the plot
-#wssplot(tweet.vectors.matrix)
+sscore_fn<- function(data,seed){
+  fc<-2
+  nc<-3
+  plan(multiprocess)
+  X<- fc:nc
+  tmp<-future_lapply(X,function(x){
+    set.seed(seed)
+    km <- kmeans(data, centers=x, iter.max=30)
+    SIL<- silhouette(km$cluster, dist(data))
+    c(mean(SIL[, 3]))
+  })
+  Y<-matrix(0, nrow = 1, ncol = length(X))
+  for (ii in seq_along(tmp)) {
+    Y[,ii] <- tmp[[ii]]
+  }
+  rm(tmp)
+  return(Y)
+}
+#Generate the plot
+sscore_23<-sscore_fn(tweet.vectors.matrix, 1)
 ```
+
+
+
+
+
+```{r, echo=FALSE}
+##UNCOMMENT TO GENERATE ELBOW PLOT
+library(cluster)
+wssplot <- function(data, fc=2, nc=25, seed=20){
+  wss <- data.frame(k=fc:nc, withinss=c(0))
+  for (i in fc:nc){
+    set.seed(seed)
+    km<-kmeans(data, centers=i, iter.max=30)
+    SIL<-silhouette(km$cluster, dist(data))
+    wss[i-fc+1,2]<-mean(SIL[,3])
+  }
+    ggplot(data=wss,aes(x=k,y=withinss)) + 
+    geom_line() + 
+    ggtitle("Quality (within sums of squares) of k-means by choice of k")
+}
+#Generate the plot
+wssplot(tweet.vectors.matrix)
+```
+
+
+```{r, echo=FALSE}
+sscore_fn<- function(data,seed){
+  fc<-2
+  nc<-3
+  plan(multiprocess)
+  X<- fc:nc
+  y<-future_lapply(X,function(x){
+    set.seed(seed)
+    km <- kmeans(data, centers=x, iter.max=30)
+    SIL<- silhouette(km$cluster, dist(data))
+    wss[i-fc+1,2]<-new_mean<- mean(SIL[, 3])
+    return(new_mean)
+  })
+}
+```
+
+```{r, echo=FALSE}
+fn_1<- function(seed=0){
+  plan(multiprocess)
+  X<- 1:10
+  tmp<- future_lapply(X, function(x){
+    c(x^2)
+    })
+  Y<-matrix(0, nrow = 1, ncol = length(X))
+  for (ii in seq_along(tmp)) {
+    Y[,ii] <- tmp[[ii]]
+  }
+  rm(tmp)
+  print(Y)
+}
+  
+fn_1()
+```
+```{r, echo=FALSE}
+
+
+```
+
+
+
+```{r, echo=FALSE}
+sscore_test<-sscore_fn(tweet.vectors.matrix,1)
+print(sscore_test)
+```
+
+
+```{r, echo=FALSE}
+sscore11<-c(0)
+sscore22<-c(0)
+sscore33<-c(0)
+sscore44<-c(0)
+
+sscore11<-c(sscore11,sscore_fn(tweet.vectors.matrix,1))
+
+
+
+
+sscore22<-c(sscore22,sscore_fn(tweet.vectors.matrix,2))
+sscore33<-c(sscore33,sscore_fn(tweet.vectors.matrix,3))
+sscore44<-c(sscore44,sscore_fn(tweet.vectors.matrix,4))
+```
+
+
 
 ```{r, echo=FALSE}
 ###############################################################################
