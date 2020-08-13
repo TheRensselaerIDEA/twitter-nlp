@@ -92,7 +92,7 @@ random_sample <- FALSE
 # if using random sampling, optionally specify a seed for reproducibility. For no seed, set to NA.
 random_seed <- NA
 # number of results to return (to return all results, set to NA)
-resultsize <- 100000
+resultsize <- 10000
 # minimum number of results to return. This should be set according to the needs of the analysis (i.e. enough samples for statistical significance)
 min_results <- 500
 
