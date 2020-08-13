@@ -1,0 +1,171 @@
+```{r setup, include=FALSE}
+# Required R package installation:
+# These will install packages if they are not already installed
+# Set the correct default repository
+r = getOption("repos")
+r["CRAN"] = "http://cran.rstudio.com"
+options(repos = r)
+
+
+if (!require("knitr")) {
+  install.packages("knitr")
+  library(knitr)
+}
+
+if (!require("kableExtra")) {
+  install.packages("kableExtra")
+  library(kableExtra)
+}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+#library(ggpubr)
+library(rcompanion)
+
+source("Elasticsearch.R")
+source("plot_tweet_sentiment_timeseries.R")
+```
+
+### Configure the search parameters here:
+
+```{r}
+# query start date/time (inclusive)
+rangestart <- "2020-01-01 00:00:00"
+
+# query end date/time (exclusive)
+rangeend <- "2020-08-01 00:00:00"
+
+# text filter restricts results to only those containing words, phrases, or meeting a boolean condition. This query syntax is very flexible and supports a wide variety of filter scenarios:
+# words: text_filter <- "cdc nih who"  ...contains "cdc" or "nih" or "who"
+# phrase: text_filter <- '"vitamin c"' ...contains exact phrase "vitamin c"
+# boolean condition: <- '(cdc nih who) +"vitamin c"' ...contains ("cdc" or "nih" or "who") and exact phrase "vitamin c"
+#full specification here: https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-simple-query-string-query.html
+text_filter <- ""
+
+# location filter acts like text filter except applied to the location of the tweet instead of its text body.
+location_filter <- ""
+
+# if FALSE, location filter considers both user-povided and geotagged locations. If TRUE, only geotagged locations are considered.
+must_have_geo <- FALSE
+
+# query semantic similarity phrase
+semantic_phrase <- ""
+
+# return results in chronological order or as a random sample within the range
+# (ignored if semantic_phrase is not blank)
+random_sample <- FALSE
+# if using random sampling, optionally specify a seed for reproducibility. For no seed, set to NA.
+random_seed <- NA
+# number of results to return (to return all results, set to NA)
+resultsize <- NA
+# minimum number of results to return. This should be set according to the needs of the analysis (i.e. enough samples for statistical significance)
+min_results <- 1
+```
+
+### Results:
+
+```{r, echo=FALSE}
+results <- do_search(indexname="coronavirus-data-masks", 
+                     rangestart=rangestart,
+                     rangeend=rangeend,
+                     text_filter=text_filter,
+                     location_filter=location_filter,
+                     semantic_phrase=semantic_phrase,
+                     must_have_geo=must_have_geo,
+                     random_sample=random_sample,
+                     random_seed=random_seed,
+                     resultsize=resultsize,
+                     resultfields='"created_at", "user.screen_name", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "sentiment.vader.primary"',
+                     elasticsearch_host="lp01.idea.rpi.edu",
+                     elasticsearch_path="elasticsearch",
+                     elasticsearch_port=443,
+                     elasticsearch_schema="https")
+
+required_fields <- c("created_at", "user_screen_name", "user_location", "place.full_name", "place.country", "full_text", "sentiment.vader.primary")
+validate_results(results$df, min_results, required_fields)
+
+
+#Transform results for sentiment plot
+results.df <- results$df
+colnames(results.df)[colnames(results.df) == "sentiment.vader.primary"] <- "sentiment"
+results.df$vector_type <- "tweet"
+
+#Transform results for tweet display
+display.df <- results.df
+display.df$user_location <- ifelse(is.na(display.df$place.full_name), display.df$user_location, paste(display.df$place.full_name, display.df$place.country, sep=", "))
+display.df$user_location[is.na(display.df$user_location)] <- ""
+display.df$user_location_type <- ifelse(is.na(display.df$place.full_name), "User", "Place")
+display_fields <- c("full_text", "created_at", "user_screen_name", "user_location", "user_location_type", "sentiment")
+if (semantic_phrase != "") {
+  display_fields <- c("cosine_similarity", display_fields)
+}
+display.df <- display.df[,display_fields]
+
+#print results
+params.df <- data.frame(from=results$params$rangestart, 
+                        to=results$params$rangeend,
+                        text.filter=results$params$text_filter,
+                        location.filter=results$params$location_filter,
+                        phrase=results$params$semantic_phrase,
+                        geo_only=results$params$must_have_geo,
+                        results.count=paste(nrow(results$df), "/", results$total))
+kable(params.df) %>% kable_styling()
+
+#show sentiment plots
+plot_tweet_sentiment_timeseries(results.df, group.by="week")
+
+#print up to 100 tweets
+#kable(display.df[1:min(100, nrow(display.df)),]) %>% kable_styling()
+
+#sort tweets
+tweets.df <- results.df
+tweets.df$created_at <- as.POSIXct(strptime(tweets.df$created_at, format="%a %b %d %H:%M:%S +0000 %Y", tz="UTC"))
+  tweets.df$week <- epiweek(tweets.df$created_at) 
+  tweets.df$date <- date(tweets.df$created_at)
+  tweet.tibble <- tibble(sentiment = tweets.df$sentiment, week = tweets.df$week, date = tweets.df$date, datetime = tweets.df$created_at)
+  
+    # Compute statistics
+    summary.tibble <- tweet.tibble %>% group_by(week) %>% summarize(mean_sentiment = mean(sentiment), sd_sentiment = sd(sentiment), count = length(datetime), divisiveness = divisiveness_score(sentiment)) 
+```    
+
+
+One Way Anova
+Results: F test significant because p < .05. We reject the null hypothesis of mean sentiments per week are the same. We conclude that at least one week mean sentiment differs significantly from another week mean.
+```{r}    
+    #one way anova for mean sentiment per week
+    aovret <- aov(summary.tibble$mean_sentiment ~ summary.tibble$week, data = summary.tibble)
+    aovret
+    summary(aovret)
+```
+
+
+Pairwise T Test to determine which means are significantly different
+```{r}
+    pairwise.t.test(summary.tibble$mean_sentiment, summary.tibble$week, p.adj = "bonf")
+```
+
+
+Plot of Mean Sentiment vs. Week
+```{r}
+    #check assumptions
+    boxplot(summary.tibble$mean_sentiment ~ summary.tibble$week, data = summary.tibble, main = "Mean Sentiment")
+```
+
+
+Assumptions of normal residuals are met because the Shapiro-Wilk Normality test has p >.05, indicating the residuals are normal 
+```{r}
+    #get residuals
+    residuals = resid(aovret)
+    
+    #check normality
+    plotNormalHistogram(residuals)
+    shapiro.test(residuals)
+```
+
+
+Residual Plots
+```{r}
+    #create residual plots
+    plot(aovret)
+  ```
+    
