@@ -268,7 +268,8 @@ plot_tweet_timeseries <- function(tweet.vectors.df, group.by = "week", sentiment
         top_neg_keywords = helper_negative_keywords(full_text, 
                                                     sentiment, 
                                                     stop_words = stop_words, 
-                                                    max_lookahead = keyword_max_lookahead)
+                                                    max_lookahead = keyword_max_lookahead),
+        .groups = 'drop'
       )
     summary.tibble <- summary.tibble %>% ungroup()
     if (is.na(title)) {
@@ -280,7 +281,6 @@ plot_tweet_timeseries <- function(tweet.vectors.df, group.by = "week", sentiment
     fig1 <- ggplot(summary.tibble, aes(x = week, y = count, fill = mean_sentiment)) + 
       geom_bar(stat = "identity", color = "azure3") + 
       scale_fill_gradient2(name = "Sentiment Average", limits = c(-1,1), low = "#D55E00", mid = "white", high = "#0072B2", midpoint = 0) +
-      ggtitle(title.name) + 
       ylab("Tweet Count") +
       theme(axis.title.x = element_blank())
     # Plot divisiness
@@ -303,7 +303,6 @@ plot_tweet_timeseries <- function(tweet.vectors.df, group.by = "week", sentiment
       scale_color_manual(values = setNames(c("#D55E00", "#000000", "#0072B2"), 
                                            c("NEGATIVE", "NEUTRAL", "POSITIVE"))) +
       geom_violin(data = tweet.tibble, aes(x = week, y = sentiment, group = week), fill = NA) +
-      ggtitle(paste("Sentiment by", group.by)) + 
       ylab("Avg Tweet Sentiment") +
       xlab("CDC Epidemiological Week") + 
       theme(legend.position = "none")
@@ -314,7 +313,8 @@ plot_tweet_timeseries <- function(tweet.vectors.df, group.by = "week", sentiment
                    nrows = 3, 
                    heights = c(0.4, 0.2, 0.4), 
                    shareX = TRUE, 
-                   titleY = TRUE))
+                   titleY = TRUE) %>%
+             layout(title = title.name))
   } else if (group.by == "day") {
     # Compute statistics
     data("stop_words")
@@ -332,7 +332,8 @@ plot_tweet_timeseries <- function(tweet.vectors.df, group.by = "week", sentiment
         top_neg_keywords = helper_negative_keywords(full_text, 
                                                     sentiment, 
                                                     stop_words = stop_words, 
-                                                    max_lookahead = keyword_max_lookahead)
+                                                    max_lookahead = keyword_max_lookahead),
+        .groups = 'drop'
       )
     summary.tibble <- summary.tibble %>% ungroup()
     if (is.na(title)) {
@@ -378,7 +379,8 @@ plot_tweet_timeseries <- function(tweet.vectors.df, group.by = "week", sentiment
                    nrows = 3, 
                    heights = c(0.4, 0.2, 0.4), 
                    shareX = TRUE, 
-                   titleY = TRUE))
+                   titleY = TRUE) %>%
+             layout(title = title.name))
   }
 }
 
