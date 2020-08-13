@@ -64,8 +64,8 @@ Note: large date ranges can take some time to process on initial search due to t
 
 ```{r, echo=FALSE}
 # Set server resource locations here:
-elasticsearch_host <- ""
-summarizer_url <- ""
+elasticsearch_host <- "lp01.idea.rpi.edu"
+summarizer_url <- "http://idea-node-05:0808/batchsummarize"
 ```
 
 ```{r}

@@ -1,0 +1,476 @@
+---
+title: "Week 5 Status Report (Final Project Notebook Template)"
+author: "Haniel Campos Alcântara Paulo "
+date: "12 August 2020"
+output:
+  html_document:
+    toc: yes
+subtitle: "COVID Twitter"
+---
+
+```{r setup, include=FALSE}
+# Required R package installation:
+# These will install packages if they are not already installed
+# Set the correct default repository
+r = getOption("repos")
+r["CRAN"] = "http://cran.rstudio.com"
+options(repos = r)
+
+
+if (!require("knitr")) {
+  install.packages("knitr")
+  library(knitr)
+}
+
+if (!require("kableExtra")) {
+  install.packages("kableExtra")
+  library(kableExtra)
+}
+
+if (!require("stringr")) {
+  install.packages("stringr")
+  library(stringr)
+}
+
+if (!require("dplyr")) {
+  install.packages("dplyr")
+  library(dplyr)
+}
+
+if (!require("tidytext")) {
+  install.packages("tidytext")
+  library(tidytext)
+}
+
+if (!require("Rtnse")) {
+  install.packages("Rtsne")
+  library(Rtsne)
+}
+
+if (!require("plotly")) {
+  install.packages("plotly")
+  library(plotly)
+}
+library(plotly)
+
+knitr::opts_chunk$set(echo = TRUE)
+
+source("Elasticsearch.R")
+source("plot_tweet_timeseries.R")
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# query start date/time (inclusive)
+rangestart <- "2020-01-01 00:00:00"
+
+# query end date/time (exclusive)
+rangeend <- "2020-08-01 00:00:00"
+
+# text filter restricts results to only those containing words, phrases, or meeting a boolean condition. This query syntax is very flexible and supports a wide variety of filter scenarios:
+# words: text_filter <- "cdc nih who"  ...contains "cdc" or "nih" or "who"
+# phrase: text_filter <- '"vitamin c"' ...contains exact phrase "vitamin c"
+# boolean condition: <- '(cdc nih who) +"vitamin c"' ...contains ("cdc" or "nih" or "who") and exact phrase "vitamin c"
+#full specification here: https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-simple-query-string-query.html
+text_filter <- ""
+
+# location filter acts like text filter except applied to the location of the tweet instead of its text body.
+
+# if FALSE, location filter considers both user-povided and geotagged locations. If TRUE, only geotagged locations are considered.
+must_have_geo <- FALSE
+
+# query semantic similarity phrase
+semantic_phrase <- ""
+
+# return results in chronological order or as a random sample within the range
+# (ignored if semantic_phrase is not blank)
+random_sample <- TRUE
+# if using random sampling, optionally specify a seed for reproducibility. For no seed, set to NA.
+random_seed <- 420
+# number of results to return (to return all results, set to NA)
+resultsize <- 20000
+# minimum number of results to return. This should be set according to the needs of the analysis (i.e. enough samples for statistical significance)
+min_results <- 1
+```
+
+```{r, cache=TRUE, echo=FALSE, message=FALSE}
+data(stop_words)
+clean_text <- function(text, for_freq=FALSE) {
+  text <- str_replace_all(text, "[\\s]+", " ")
+  text <- str_replace_all(text, "http\\S+", "")
+  if (isTRUE(for_freq)) {
+    text <- tolower(text)
+    text <- str_replace_all(text, "’", "'")
+    text <- str_replace_all(text, "_", "-")
+    text <- str_replace_all(text, "[^a-z1-9 ']", "")
+  } else {
+    text <- str_replace_all(text, "[^a-zA-Z1-9 `~!@#$%^&*()-_=+\\[\\];:'\",./?’]", "")
+  }
+  text <- gsub("[[:digit:]]+", "", text)
+  text <- str_replace_all(text, " +", " ")
+  text <- trimws(text)
+}
+
+interstate.results <- do_search(indexname="coronavirus-data-masks", 
+                                rangestart=rangestart,
+                                rangeend=rangeend,
+                                text_filter=text_filter,
+                                location_filter="",
+                                semantic_phrase=semantic_phrase,
+                                must_have_geo=must_have_geo,
+                                random_sample=random_sample,
+                                random_seed=random_seed,
+                                resultsize=10*resultsize,
+                                resultfields='"created_at", "user.screen_name", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "sentiment.vader.primary"',
+                                elasticsearch_host="lp01.idea.rpi.edu",
+                                elasticsearch_path="elasticsearch",
+                                elasticsearch_port=443,
+                                elasticsearch_schema="https")
+
+interstate.results.df <- interstate.results$df
+interstate.results.df$full_text <- sapply(interstate.results.df$full_text, clean_text)
+interstate.results.df$vector_type <- "tweet"
+
+intersate.words.df <- tibble(tweets = interstate.results.df$full_text) %>% 
+  unnest_tokens(word, tweets) %>% 
+  anti_join(stop_words) %>%
+  dplyr::count(word, sort = TRUE) %>%
+  mutate(prob = n / sum(n))
+```
+
+```{r, cache=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+location_filter <- 'NY "New York"'
+
+results <- do_search(indexname="coronavirus-data-masks", 
+                     rangestart=rangestart,
+                     rangeend=rangeend,
+                     text_filter=text_filter,
+                     location_filter=location_filter,
+                     semantic_phrase=semantic_phrase,
+                     must_have_geo=must_have_geo,
+                     random_sample=random_sample,
+                     random_seed=random_seed,
+                     resultsize=resultsize,
+                     resultfields='"created_at", "user.screen_name", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "sentiment.vader.primary", "embedding.use_large.primary"',
+                     elasticsearch_host="lp01.idea.rpi.edu",
+                     elasticsearch_path="elasticsearch",
+                     elasticsearch_port=443,
+                     elasticsearch_schema="https")
+
+required_fields <- c("created_at", "user_screen_name", "user_location", "place.full_name", "place.country", "full_text", "sentiment.vader.primary")
+validate_results(results$df, min_results, required_fields)
+
+results.matrix <- t(simplify2array(results$df[,"embedding.use_large.primary"]))
+n.tweets.NY <- dim(results.matrix)[1]
+
+
+#Transform results for sentiment plot
+results.df <- results$df
+results.df$vector_type <- "tweet"
+
+#Transform results for tweet display
+display.df <- results.df
+display.df$user_location <- ifelse(is.na(display.df$place.full_name), display.df$user_location, paste(display.df$place.full_name, display.df$place.country, sep=", "))
+display.df$user_location[is.na(display.df$user_location)] <- ""
+display.df$user_location_type <- ifelse(is.na(display.df$place.full_name), "User", "Place")
+```
+
+```{r, echo=FALSE, message=FALSE}
+############################
+# Get top k keywords for NY
+############################
+keywords.k <- 10
+max_lookahead <- 100
+
+display.df$full_text <- sapply(display.df$full_text, clean_text)
+display.df$created_at <- as.POSIXct(strptime(display.df$created_at, format="%a %b %d %H:%M:%S +0000 %Y", tz="UTC"))
+tweets.tibble.df <- tibble(week = epiweek(display.df$created_at), tweet = display.df$full_text)
+
+words.df <- tweets.tibble.df %>%
+  unnest_tokens(word, tweet) %>% 
+  anti_join(stop_words) %>%
+  dplyr::count(word, sort = TRUE) %>%
+  mutate(prob_state = n / sum(n)) %>% 
+  dplyr::arrange(desc(n))
+
+words.df <- words.df[1:max_lookahead,] %>%
+  inner_join(intersate.words.df, by = "word") %>%
+  mutate(score = prob_state * log(prob_state / prob)) %>%
+  dplyr::arrange(desc(score))
+
+keywords.df <- words.df[1:keywords.k,]
+
+#kable(keywords.df) %>% kable_styling()
+
+keywords.trend.df <- tweets.tibble.df %>%
+  unnest_tokens(word, tweet) %>%
+  inner_join(keywords.df, by = "word") %>%
+  group_by(week) %>%
+  dplyr::count(word, sort=TRUE)
+
+NY.keywords.plot <- ggplot(keywords.trend.df, aes(x = week, y = n, color = word)) + 
+  geom_smooth(se = FALSE) + 
+  ylab("Word Count / Week") + 
+  ggtitle(paste(substr(location_filter, 1, 2),"Weekly Keyword Count")) + 
+  theme(legend.position = "none")
+
+keywords.trend.df <- keywords.trend.df %>%
+  ungroup() %>%
+  group_by(word) %>%
+  mutate(n = n / max(n))
+
+NY.keywords.trend.plot <- ggplot(keywords.trend.df, aes(x = week, y = n, color = word)) + 
+  geom_smooth(se = FALSE) + 
+  xlab("CDC Epidemiological Week") + 
+  ylab("Normalized Word Count / Week") + 
+  ggtitle(paste("Trends for", substr(location_filter, 1, 2),"Keywords"))
+```
+
+```{r, echo=FALSE}
+k <- 12
+
+set.seed(300)
+km <- kmeans(results.matrix, centers=k)
+
+display.df$vector_type <- factor("tweet", levels=c("tweet", "cluster_center"))
+display.df$cluster <- as.factor(km$cluster)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+get_label <- function(full_text, corpus_text, top_k=3, max_lookahead=100) {
+  words.df <- tibble(tweet = full_text)
+  corpus.df <- tibble(tweets = corpus_text) %>% 
+    unnest_tokens(word, tweets) %>% 
+    anti_join(stop_words) %>%
+    dplyr::count(word, sort = TRUE) %>%
+    mutate(prob = n / sum(n))
+  words.df <- words.df %>%
+    unnest_tokens(word, tweet) %>% 
+    anti_join(stop_words) %>%
+    dplyr::count(word, sort = TRUE) %>%
+    mutate(prob_state = n / sum(n)) 
+  words.df <- words.df[1:max_lookahead,] %>%
+    inner_join(corpus.df, by = "word") %>%
+    mutate(score = prob_state * log(prob_state / prob)) %>%
+    dplyr::arrange(desc(score))
+  label <- paste((words.df[1:top_k,])$word, collapse=" / ")
+}
+
+NY.master.label <- get_label(display.df$full_text, display.df$full_text, top_k=6)
+
+NY.clusters <- list()
+for (i in 1:k) {
+  cluster.df <- display.df[display.df$cluster == i,]
+  cluster.matrix <- results.matrix[display.df$cluster == i,]
+  cluster.label <- get_label(cluster.df$full_text, display.df$full_text)
+  cluster.center <- cluster.matrix[cluster.df$vector_type=="cluster_center",]
+  
+  
+  NY.clusters[[i]] <- list(label=cluster.label)
+}
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, cache=TRUE}
+###############################################################################
+# Run T-SNE on all the tweets and then plot sentiment time series for clusters
+###############################################################################
+
+set.seed(700)
+
+NY.cluster.sentiment.plots <- list()
+
+NY.results.df <- results.df
+NY.display.df <- display.df 
+
+#Cluster sentiment plots
+for (i in 1:k) {
+  fig <- plot_tweet_timeseries(NY.results.df[NY.display.df$cluster == i,], sentiment.col = "sentiment.vader.primary", title = paste("New York Cluster",i,"Tweets by Week (", NY.clusters[[i]]$label,")"))
+  NY.cluster.sentiment.plots[[i]] <- fig
+}
+```
+
+## Work Summary	
+
+* RCS ID: **campoh**
+* Project Name: **COVID Twitter**
+
+### Summary of Work
+
+  * Describe the important aspects of what you worked on and accomplished
+  
+  * **Early experiments with NLP and clustering** : In the very early stages of the project I worked on alternative ways of clustering the tweet data and extracting topics from the text with NLP.
+  
+    One of my experiments was using a Latent Dirichlet Allocation to identify topics present in tweet clusters, which would in some ways eliminate the need to perform subclustering.
+    While the results were fairly interesting, it did not provide much benefit over subclustering with k-means and now pales in comparasion to the automatic text summarization provided by DistilBART, so I decided not to further pursue this idea.
+    
+    Another early interest of mine was looking at alternative ways of clustering the data with possible incorporation of sentiment. 
+    My first attempt consisted of using Laplacian Eigenmaps as a way of performing dimensionality reduction and clustering both at once, which would not make the k-means assumption that clusters are multidimensional Gaussian distributions with diagonal covariance matrix.
+    While this approach seemed promising at first, I ran into several problems discussed in **Discussion of Primary Findings**.
+  
+  * **VADER Algorithm for Sentiment Analysis**: Once the need for an algorithm to peform sentiment analysis arose, I researched and proposed VADER as an option, which the team agreed to run with.
+  This allowed us to look at the sentiment information as a continuous random variable between -1 and 1, which we found would be simpler to work with and more insightful than a discrete random variable.
+  I has shown very good performance and no major problems so far, however, being a lexicon based algorithm, it does seem to suffer from a sparsity-like problem, with many tweets being assined a score of 0.
+  My first experimentation with VADER was reported on [`twitter_sentiment_experiment_23072020.html`](https://htmlpreview.github.io/?https://raw.githubusercontent.com/TheRensselaerIDEA/COVID-Twitter/master/HACL-2020-Notebooks/twitter_sentiment_experiment_23072020.html) under the repository folder `COVID-Twitter/HACL-2020-Notebooks` and showed promising results.
+  
+    While VADER is allowing us to currently perform numerous analyses, it'd be beneficial to move to a more complex model in the future, such as a BERT model with continuous output as mentioned in the Personal Contributions section, in order to avoid the sparsity problem and obtain more concrete sentiment information.
+  
+  * **Sentiment Based Clustering**: I attempted to integrate the VADER sentiment scores into the clustering routine by considering each cluster individually, multiplying the embedding vectors by their sentiment score and then peforming subclustering afterwards, which is reported on [`twitter_sentiment_experiment_23072020.html`](https://htmlpreview.github.io/?https://raw.githubusercontent.com/TheRensselaerIDEA/COVID-Twitter/master/HACL-2020-Notebooks/twitter_sentiment_experiment_23072020.html).
+  This analysis, although relatively promising, did not line up well with the project objectives and was thus not further pursued.
+  
+  * **Visualizing Tweet Sentiment & Keywords Over Time**: This was my main final contribution to the project, initially through the R script [`plot_tweet_sentiment_timeseries.R`](https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/analysis/plot_tweet_sentiment_timeseries.R) and eventually culminating in the final R script [`plot_tweet_timeseries.R`](https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/analysis/plot_tweet_timeseries.R), both under `/COVID-Twitter/analysis`.
+  It contains two main visualization functions called `plot_tweet_timeseries` and `plot_keyword_timeseries`.
+  
+    * **[`plot_tweet_timeseries`](https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/analysis/plot_tweet_timeseries.R)**: This function provides a simple way of visualizing all of the following **through time**: tweet count; average sentiment; divisiveness; sentiment distribution; average sentiment class; keywords from the 25% most positive tweets; keywords from the 25% most negative tweets.
+    An example of the function output using 20,000 tweets located in New York is given below.
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+plot_tweet_timeseries(NY.results.df, sentiment.col = "sentiment.vader.primary")
+```
+    
+      The top plot shows the weekly tweet count over time, where a week is defined using the CDC definition of an epidemiological week defined [here](https://wwwn.cdc.gov/nndss/document/MMWR_Week_overview.pdf), with each bar being colored according to the weekly average sentiment.
+      Below it, there is the plot for the weekly tweet divisiveness scores, the definition of which is given under **Personal Contributions**, with values greater than 0 indicating division in sentiment, values equal to 0 indicating uniform sentiment across tweets and values lesse than 0 indicating a consensus of sentiment.
+      Further below it, there is also the line and violin plots for weekly tweet sentiment.
+      The line and dots show the average weekly sentiment, with the dot color indicating whether the average sentiment would be considered positive, neutral or negative using the standard VADER thresholds, and the violin plots showing the sentiment distribution for that week.
+      Furthermore, upon hovering over the point one can also see the keywords from the top and bottom sentiment quartiles, with the definition of a keyword being given under **Personal Contributions**.
+      Thus, `plot_tweet_timeseries` allows for the user not only to have a global understanding of how the sentiment, divisiveness and trendiness of a cluster evolves over time, but also to dig deeper into each week to know what potential topics were being discussed and how the sentiment around the discussion is distributed.
+      
+  
+    * **[`plot_keyword_timeseries`](https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/analysis/plot_keyword_timeseries.R)**: This function, which was added as an extra functionality, allows the user to visualize how the popularity of a desired number of top keywords evolves through time.
+    The output of this function for once again a sample of 20,000 New York tweets, using a larger sample of random tweets as reference (more details under **Personal Contributions**), is given below.
+    
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+plot_keyword_timeseries(NY.display.df$full_text, interstate.results.df$full_text, NY.display.df$created_at, title = "NY Keywords")
+```
+  
+      The left hand plot shows the keyword count per week in absolute terms, so that the user may have a notion of the most popular keywords in the sample differ in magnitude of use. The right hand plot, on the other hand, shows the normalized keyword count obtained by dividing each weekly keyword count by the maximum weekly count of that keyword, therfore allowing the user to have a better idea of the trends specific to each keyword.
+      To achieve the smooth lines shown, [Locally Estimated Scatterplot Smoothing](https://en.wikipedia.org/wiki/Local_regression) was used.
+    
+### Summary of github contributions 
+
+* [`twitter_sentiment_experiment_23072020.Rmd`](https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/HACL-2020-Notebooks/twitter_sentiment_experiment_23072020.Rmd) / [`twitter_sentiment_experiment_23072020.html`](https://htmlpreview.github.io/?https://raw.githubusercontent.com/TheRensselaerIDEA/COVID-Twitter/master/HACL-2020-Notebooks/twitter_sentiment_experiment_23072020.html): Notebook and knitted `.html` for the experiment using sentiment based clustering.
+
+* [`plot_tweet_sentiment_timeseries.R`](https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/analysis/plot_tweet_sentiment_timeseries.R): Preliminary/beta version of `plot_tweet_timeseries`.
+Left in the GitHub because teammembers were using it as a component of their work.
+
+* [`plot_tweet_timeseries.R`](https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/analysis/plot_tweet_timeseries.R): Script containing the visualization functions previously described in **Summary of Work**.
+
+* The R scripts were written solely by me, however, the experimeriment was largely based on already existing code written by [Abraham Sanders](https://github.com/AbrahamSanders).
+
+## Personal Contributions
+
+* All the GitHub code previously mentioned under **Summary of github contributions**.
+
+* **Divisiveness Score**: This score measures how divided a group of tweet sentiments is using the Sarle's Bimodal Coefficient (BC) as a basis. 
+A score of 0 indicates a uniform distribution of sentiment, a score greater than 0 indicates a divided sentiment distribution, such as a bimodal distribution, and a score lesser than 0 indicates a consensus of sentiment, such as a Gaussian distribution.
+A key idea behind the score calculation is that if a small number of sentiment samples are drawn, then even though the empirical BC may be high or low it offers little information as due to the small sample the true sentiment distribution may very well still be uniform frome what we know. 
+The computation of the divisiveness score is described below.
+
+  Let $\vec{s}$ be a vector of tweet sentiments such that the skewness $\gamma$ has mean $\mu_\gamma$ and variance $\sigma^2_\gamma$ and the kurtosis $\kappa$ has mean $\mu_\kappa$ and variance $\sigma^2_\kappa$.
+  The Sarles's BC is given by $BC = (\gamma^2 + 1) / \kappa$, so that $\mathbb{E}[BC] = (\mu^2_\gamma + 1) / \mu_\kappa$ and 
+  $$
+    \mathrm{Var}[BC] = \mathrm{Var}\left[ \frac{\gamma^2}{\kappa} \right] \approx \frac{\mathrm{Var}[\gamma^2]}{\mu^2_\kappa} + \frac{\mathrm{Var}[\kappa] \mu^4_\gamma}{\mu^4_\kappa}
+  $$
+  The BC value of a uniform distribution, our intented 0, is $\phi = 5/9$.
+  Assuming the BC to be approximately normally distributed, we compute the absolute z-score of $\phi$ as 
+  $$
+    z = \frac{|\mathbb{E}[BC] - \phi|}{\sqrt{\mathrm{Var}[BC]}}
+  $$
+and compute $w$ to be the probability that an absolute normalized deviance from the mean of $BC$ is lesser than or equal to $z$, which is given by the cumulative distribution function with input $z$ for a Gaussian of mean $0$ and unit variance truncated between 0 and $\infty$.
+As such, we have that $w = \mathrm{erf}(z / \sqrt{2})$, which we use to compute the corrected Sarle's BC as 
+$$
+  BCc = w \mathbb{E}[BC] + (1 - w) \phi
+$$
+which may be thought of as a weighted average between the observed value and the prior value, where the weight is given by the probability that $\phi$ is an observation from $\mathcal{N}(\mathbb{E}[BC], \mathbb{Var}[BC])$.
+
+  We then compute the divisiveness score as 
+$$
+  divisiveness = \mathrm{logit}(BCc) - \mathrm{logit}(\phi)
+$$
+
+* **Keyword Definition**: The idea behind a keyword is dependent on having a sample text which is a subset of a greater reference text or corpus.
+The word distribution between the sample and corpus should be largely the same, especially when it comes to high frequency words, however, we wish to find keywords which appear in the sample more often than they do in the corpus.
+To evaluate this, let the word probability distribution for the sample be given by $W_S$ and for the corpus by $W_C$.
+The top $k$ keywords are then defined to be the top $k$ words that most contribute to $KL(W_S || W_C)$, the Kullback-Leible Divergence between $W_S$ and $W_C$, which can by achieved by ranking each word $w$ accoring to their score
+
+$$
+  \mathrm{score}(w) = P(W_S = w) \log  \frac{P(W_S = w)}{P(W_C = w)} 
+$$
+  and taking the $k$ words with the highest score.
+
+  From this definition alone, we can identify some interesting properties.
+  If the probability of a word appearing in the sample is lesser than that of appearing in the corpus, meaning this word is relatively rare, its score quickly decreases to the negative range. 
+  Conversely, if a word has higher probability of occurring in the sample, its score will be positive and it will be ranked according to its sample probability times a scaling factor.
+  Otherwise, if the probabilities are the same, then the word is ranked simply by its probability of appearing in the sample.
+
+* **Idea of using VADER to perform sentiment analysis**.
+
+* **Converting Discrete Sentiment Analysis to Continuous**: Since it would be of our interest to move away from VADER and to a more sophisticated sentiment analysis algorithm in the future, I proposed a simple idea for converting the BERT style POSITIVE NEGATIVE NEUTRAL discrete output into a continuous output ranging between -1 and 1 so as to not change our analysis.
+
+  The idea is to simply take the output from the final BERT softmax activation layer, i.e. the probabilities of the sentiment $S$ being POSITIVE, NEUTRAL or NEGATIVE, and letting the continuous output be the expected value of a random variable $X$ where $X(S = \text{POSITIVE}) = 1$, $X(S = \text{NEUTRAL}) = 0$ and $X(S = \text{NEGATIVE}) = -1$, which is in some ways similar to the final steps in VADER.
+The output then summarizes to $P(S = \text{POSITIVE}) - P(S = \text{NEGATIVE})$.
+
+## Discussion of Primary Findings 
+
+My findings may be firstly grouped into two broad categories: **ideas that didn't work out well** and **promising ideas and findings**
+
+### Ideas that didn't work / recommend to avoid.
+
+* **Alternative Clustering Methods & Dimensionality Reduction**: My first idea was to try to apply a different clustering method that did not impose the rigid assumptions of k-means and therefore could provide better clusters, with my decision being to try Laplacian Eigenmaps and EM Clustering.
+  The problems I ran into when trying to use them were threefold: speed, addition of new data and cluster quality.
+  Running both EM Clustering and Laplacian Eigenmap clustering was extremely slow using the 512 dimensions, and in the case of the latter, once the data was clustered there was no quick, ready implemennted way to assign a cluster to a new data point coming in like k-means.
+  Instead, it would be required to recluster the data again but now with the new point which I foresaw could cause major scalability problems.
+  While I was aware that there were ways to do this faster, I did not find an R library able to perform this, so I would be required to divert much effort to implementing this possibly from scratch, which I didn't think was worth the time.
+    
+  Lastly, and probably the biggest reason why *I think the project should go forward with k-means*, is that, even with Laplacian Eigenmaps, it is highly unlikely that the clusters would show any significant improvement at all with the very high dimensional data.
+  The L2 norm in high dimensional data makes it so data points considered to be "close" by any distance based algorithm are approximately the same as those chosen by k-means, and using a possibly more robust L1 norm would lead to several optimization problems.
+  Thus, I settled on the fact that, unless someone could find a clustering algorithm that generated significantly better clusters than k-means, it would not be worth it to pursue these more complex clustering techniques.
+  
+* **Sentiment Based Clustering**: The approach of incorporating sentiment into clustering was rather successful, producing very tight and clear subclusters, however, it did not match the overall goal of the team analysis.
+  Our approach is to group tweets with similar topics together and then identify if those clusters show different trends in sentiment, while on the other hand the sentiment based clustering would be more fitting to an approach of grouping tweets with similar sentiment together and then identify if those clusters contain distinct topics.
+  Therefore, this analysis is not inherently flawed, it just did not match the project's approach.
+  
+  In hindsight, another problem with this analysis, which could be fixed by using a more sophisticated sentiment analysis approach, is that due to VADER's sparsity problems many tweets with non-neutral sentiment are clustered with neutral tweets. 
+  Thus, the positive and negative sentiment clusters are either composed of tweets which happened to have many words in the lexicon or extreme samples of sentiment.
+  
+### Promising Ideas 
+
+* **Temporal Sentiment Analysis**: After the initial ideas, I settled on the following questions: *Did mask related tweet sentiment information change over time? Was this trend different for the different clusters?*
+  In order to answer these questions, I needed an efficient way to visualize tweet sentiment information over time, which was the main motivator behind writing [`plot_tweet_timeseries.R`](https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/analysis/plot_tweet_timeseries.R).
+  A plot output for the whole dataset is shown below.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+plot_tweet_timeseries(interstate.results.df, sentiment.col = "sentiment.vader.primary")
+```
+  
+  From this, I could immediately see increasing trends in tweet count and negativity, which indicates that the sentiment profile has indeed been changing over time, with the initial weeks of the pandemic showing more positive sentiment, while the sentiment during the later stages of the crisis being more negative.
+  Furthermore, we also note the initial increase in the number of tweets, followed by a decrease around week 23 (early June) and then another increase which produces a global peak around week 29 (mid July).
+  The divisiveness scores also seem to increase over time, which I highly suspect comes from people shifting the conversation from simply urging others to wear masks to the current one centered around "anti-maskers".
+  
+  Although there exists a visible trend here, it is not too extreme, so I thought that maybe if each cluster had a distinct sentiment profile, then we could possibly extract some interesting information about how the sentiment around specific topics were changing over time.
+  The following plots are from a sample of 20,000 tweets with location filters "NY" and "New York" which were clustered into 12 clusters, done as part of an analysis for my blog post.
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+plot_tweet_timeseries(NY.results.df[NY.display.df$cluster == 1,], sentiment.col = "sentiment.vader.primary", title = "NY Cluster 1")
+plot_tweet_timeseries(NY.results.df[NY.display.df$cluster == 2,], sentiment.col = "sentiment.vader.primary", title = "NY Cluster 2")
+plot_tweet_timeseries(NY.results.df[NY.display.df$cluster == 3,], sentiment.col = "sentiment.vader.primary", title = "NY Cluster 3")
+plot_tweet_timeseries(NY.results.df[NY.display.df$cluster == 4,], sentiment.col = "sentiment.vader.primary", title = "NY Cluster 4")
+plot_tweet_timeseries(NY.results.df[NY.display.df$cluster == 5,], sentiment.col = "sentiment.vader.primary", title = "NY Cluster 5")
+plot_tweet_timeseries(NY.results.df[NY.display.df$cluster == 6,], sentiment.col = "sentiment.vader.primary", title = "NY Cluster 6")
+plot_tweet_timeseries(NY.results.df[NY.display.df$cluster == 7,], sentiment.col = "sentiment.vader.primary", title = "NY Cluster 7")
+plot_tweet_timeseries(NY.results.df[NY.display.df$cluster == 8,], sentiment.col = "sentiment.vader.primary", title = "NY Cluster 8")
+plot_tweet_timeseries(NY.results.df[NY.display.df$cluster == 9,], sentiment.col = "sentiment.vader.primary", title = "NY Cluster 9")
+plot_tweet_timeseries(NY.results.df[NY.display.df$cluster == 10,], sentiment.col = "sentiment.vader.primary", title = "NY Cluster 10")
+plot_tweet_timeseries(NY.results.df[NY.display.df$cluster == 11,], sentiment.col = "sentiment.vader.primary", title = "NY Cluster 11")
+plot_tweet_timeseries(NY.results.df[NY.display.df$cluster == 12,], sentiment.col = "sentiment.vader.primary", title = "NY Cluster 12")
+```
+  
+  Thus, we can clearly see that several clusters have very distinct temporal trends in count, sentiment and divisiveness, with these trends being much stronger than the global trend.
+  Upon manual ispection of the tweet contents, I have, for instance, noticed tweets about the topic of not wearing masks have had a rapidly increasing count, decreasing sentiment and increasing divisiveness, which suggests that there are more people complaining about using masks, more people refusing to wear masks and more people clashing with those who don't wear masks.
+  I must also stress that this sentiment information is very different when looking at different regions of the US, as observed in my blog post.
+  As an example, tweets about Donald Trump and Mike Pence in New York showed a consistent highly negative sentiment, with a lot of those being complaints about mishandling of the pandemic and the two not following CDC guidelines, while the same conversation in Alabama had a more neutral sentiment and much higher divisiveness, indicating a higher level of support for the President's actions and attitude.
+  
+  In researching the dataset tweets, I have found clear trends in tweet sentiment over time, as well as clear differences in trends between clusters.
+  This area shows clear signs of promise and stands to benefit from improvements in sentiment analysis techniques and such.
+
+
+## Final DAR/HACL Blog Post
+
+My final blog post draft can be found [here]((https://htmlpreview.github.io/?https://raw.githubusercontent.com/TheRensselaerIDEA/COVID-Twitter/master/analysis/campoh_blog_test.html)) under `/COVID-Twitter/analysis`.
+    
