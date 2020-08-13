@@ -1,0 +1,329 @@
+---
+title: "HACL Assignment 7: Week 5 Project Summary Notebook Final"
+author: "Rachael White // whiter9"
+date: "10 August 2020"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+subtitle: COVID Twitter Project
+---
+***       
+
+## I. Weekly Work Summary	
+
+##### **Verbal summary of work completed while on COVID-Twitter:**
+
+* In Week 1, when the COVID-Twitter project was first introduced, Lauren's top piece of advice to those of us considering getting involved was to get familiar with the data before just diving in to analysis. So, I made this task a personal goal for myself that week, and I have run with this data-centric focus throughout my involvement with COVID-Twitter. For example, out of an interest in looking at Twitter-based trends by region and having reviewed a lot of literature on how other research had studied coronavirus trends on Twitter from a geospatial standpoint, I suggested the addition of a location filter to the COVID-Twitter notebooks. On that same strain, I wrote up a Python script that references a few file resources leant from government databases to effectively filter Tweets into county-level bins (a granularity which often comes in handy for statistical testing). This tool proved useful when I next dug into some evaluation of our chosen sentiment analysis algorithm, vader, against an external, more standard means of measuring public sentiment (specifically, a New York Times survey). I felt it was important to investigate the question of how accurate vader might actually be, in light of the fact that this algorithm would serve as the foundation onto which much of our analysis pipeline would subsequently be built.
+
+* Building on my work from previous weeks on the project, in week 5 up to now, I made use of the expanded access to the data to add to and improve a set of exploratory analyses I have been conducting, using our curated and topic-specific coronavirus-data-masks tweet index. This week, as we move towards a consolidated and presentation-worthy project outcome, I've also invested time and thought into collecting my own objectives, and I've come up with a concrete action list of contributions to COVID-Twitter that I intend to deliver in my remaining time on the project. 
+
+* Firstly, there's to help complete and tidy up several visuals and statistical summaries that offer general insight into the Twitter data leveraged in this project, with respect to geography, sentiment, and time. Secondly, in keeping with the theme of my personal contributions thus far, my remaining efforts with the project will  focus on compiling the knowledgebase of statistically-derived trends in mask-sentiment variation that I have already begun to build. The general intention is that the results found from statistical tests can serve as an empirical reference points and additional sources of credibility, for any conclusions drawn visually and manually based on cluster trend observations moving forward.
+
+
+***
+##### **Github commits:**
+
+* Kmeans Experiment
+    * Location: COVID-Twitter/HACL-2020-Notebooks
+      * Files: whiter9-covid-twitter-kmeans-test.Rmd, .html
+      https://htmlpreview.github.io/?https://raw.githubusercontent.com/TheRensselaerIDEA/COVID-Twitter/master/HACL-2020-Notebooks/whiter9-covid-twitter-kmeans-test.html
+
+* Notebook: Twitter-Based Sentiment Analysis with Vader against New York Times Survey Data
+    * Location: COVID-Twitter/HACL-2020-Notebooks  
+      * Files : NYT_mask_sentiment-experiment_whiter9_23072020.Rmd, .html
+      * https://htmlpreview.github.io/?https://raw.githubusercontent.com/TheRensselaerIDEA/COVID-Twitter/master/HACL-2020-Notebooks/NYT_mask_sent_experiment_whiter9_28072020.html
+      
+* Notebook(Revised): Twitter-Based Sentiment Analysis with Vader against New York Times Survey Data
+    * Location: COVID-Twitter/HACL-2020-Notebooks  
+      * Files: mask_sent_NYTsurvey_revised_whiter9.Rmd, html
+    *https://htmlpreview.github.io/?https://raw.githubusercontent.com/TheRensselaerIDEA/COVID-Twitter/master/HACL-2020-Notebooks/mask_sent_NYTsurvey_revised_whiter9.html
+    
+* Notebook: ANOVA 1/2: Analyses of Variance in Mask-Related Sentiment Across Weeks, based on All Tweets of Coronavirus-Data-Masks Index
+    * Location: COVID-Twitter/HACL-2020-Notebooks  
+      * Files: sentiment_ANOVA_1_byweek_whiter9.Rmd, html
+    *https://htmlpreview.github.io/?https://raw.githubusercontent.com/TheRensselaerIDEA/COVID-Twitter/master/HACL-2020-Notebooks/sentiment_ANOVA_1_byweek_whiter9.html
+
+* Notebook: ANOVA 2/2: Analyses of Variance in Mask-Related Sentiment Across Select U.S. States, using Geo-Located Tweets of Coronavirus-Data-Masks Index
+    * [in progress at time of writing]
+    * Intended Location: COVID-Twitter/HACL-2020-Notebooks  
+    * Files to be committed: sentiment_ANOVA_2_whiter9.Rmd, html
+
+* HACL weekly updates:
+    * Notebook: Weekly Update 1
+      * Location: COVID-Twitter/HACL-2020-Notebooks  
+      * Files: hacl_whiter9_24July2020.Rmd, html
+      *https://htmlpreview.github.io/?https://raw.githubusercontent.com/TheRensselaerIDEA/COVID-Twitter/master/HACL-2020-Notebooks/hacl_whiter9_24July2020.html
+
+    * Notebook: Weekly Update 2
+      * Location: COVID-Twitter/HACL-2020-Notebooks  
+      * Files: hacl_whiter9_03Aug2020.Rmd, html
+      *https://htmlpreview.github.io/?https://raw.githubusercontent.com/TheRensselaerIDEA/COVID-Twitter/master/HACL-2020-Notebooks/hacl_whiter9_03Aug2020.html
+      
+
+ ***       
+##### **Presentations,  papers, or other outputs (with links)**
+
+* Writeup of K-Means Clustering with COVID Twitter Notebook Experiment
+    * https://docs.google.com/document/d/1lVUxACL-rtnWBZeFA14n4ALLidCC-bPA-10B2_NEL8A/edit?usp=sharing  
+  
+* Team Resources Document
+    * https://docs.google.com/document/d/1NuaVFeayGsvhiWx71m_QqK8awb5AzXQomanVDL6clS0/edit?usp=sharing
+    
+  
+***
+##### **Use of group shared code base**
+
+* Built on copy of analysis/covid-twitter-hacl-template.Rmd for KMeans Experiment
+
+* Built on copy of analysis/Twitter.Rmd for mask sentiment experiment notebooks
+
+* Took inspiration from data-organizing code in Haniel's analysis/plot_tweet_sentiment_timeseries.R for my ANOVA 1 (mask-sentiment differences across pandemic months)
+  
+* Modified copies of analysis/covid-twitter-hacl-template.Rmd, analysis/Twitter.Rmd, analysis/semantic_search.Rmd, analysis/plot_tweet_sentiment_timeseries.R for personal inquiries and experimentation
+
+* Modified copy of analysis/raw_search.Rmd for ES query testing
+
+
+***
+## II. Personal Contributions	
+
+* In roughly chronological order, concrete action items I've pursued and produced while on this project include:
+
+    1. Performed an exploratory analysis assessing how a parameter modification to kmeans clustering technique (increasing nstart) might change/improve cluster results
+
+    2. Suggested addition of a location filter to the then-current set of Elasticsearch query capabilities in Twitter notebooks, for use in potential future analysis of regional coronavirus trends 
+
+    3. Conducted (inexaustive) literature review of methodologies for analyzing Twitter data with geospatial attributes, gathered and consolidated ideas for hypotheses to explore with our data set and semantic clustering capabilities
+
+    4. Brainstormed and researched time-series models and implementation with Haniel
+
+    5. Found a GitHub repository outlining an application of a BERT model to a coronavirus-related text-based Twitter framework similar to ours, with a user-oriented training procedure included; the resource has been logged as a potential future implementation for refining COVID-Twitter's semantic power (https://github.com/digitalepidemiologylab/covid-twitter-bert)
+
+    6. Performed a base-level statistical analysis of mask sentiment in NY State (located in COVID-Twitter/HACL-2020-Notebooks), with the main outcome being the identification of concrete study design/data gathering issues that need attention for increasing statistical rigor
+
+    7. Completed a follow-up analysis of the aforesaid study (located in COVID-Twitter/HACL-2020-Notebooks) with larger sample size, and in which I introduce code that automates the county-level tweet-binning task involved in the original study design (and thus scales it to be replicable for any state)
+
+    8. Conducted an ANOVA assessing differences through time in mean sentiment, as computed from mask- and coronavirus-related Tweets from coronavirus-data-masks
+
+    9. _In progress: Conducted an ANOVA assessing differences in mean sentiment, as computed from mask- and coronavirus-related Tweets, across several key states in the U.S. that have been most severely impacted by the virus_
+
+
+***
+
+## III. Discussion of Primary Findings 	
+
+* Topic numbers referenced are sourced from the contributions list above
+
+    1. Regarding the kmeans study, I found highly prominent visual differences in the clustering scheme and organization between the uses of nstart = 1 and nstart = 30. This fluctuation was likely  at least partially an effect of the limited tweet sample size used for this early experiment. Follow-up evaluations with the complete corpus of coronavirus-data-masks tweets have shown that for such massive samples, number of restarts makes little to no difference for the performance of kmeans. We actually concluded as a group based on this fact that our data is reasonably stable, especially in terms of the specific cluster topics on which it converges for a selected value of k.
+    
+    6. Regarding the first New York Times Survey analysis, I couldn't show that a significant relationship exists between Tweet-based mask-related sentiment and self-reported public openness to mask use. I hypthesized that larger case numbers on which to run the correlation (I used tweets by county per state) would be necessary to rule out the lack of a relationship between the two variables.
+    
+    7. Regarding the follow-up analysis of my attempt to correlate mask-related survey results for NY State to vader-computed mask sentiment, which made use of a more substantial body of tweets, I concluded no meaningful relationship at low significance.
+    
+    
+![](/home/whiter9/whiter9-weekly-status-reports/nytresults.jpg)
+
+Some of the code I wrote up for this correlation study that I'm particulary happy with; this one bins tweets into counties:
+
+```{python echo=TRUE}
+
+# create reference dictionary of cities with the counties they are in as values 
+# to use for binning tweets into correct counties (by their city name)   
+# city_to_county_matcher = dict()
+# 
+# with open('us_cities_states_counties.csv') as file:
+#     for line in file:
+#         line = line.strip().split('|')
+#         if line != ['City', 'State short', 'State full', 'County', 'City alias'] and line != ['#N/A']:
+#             city_name = ', '.join([line[0],line[1]])
+#             county_name = line[3].lower().title()+', '+line[1]
+#             city_to_county_matcher.update({city_name : county_name})
+#             
+```
+So if you had a tweet from the city of 'Holtsville, NY' for example, you could get the county it's in:
+
+```{python echo=TRUE}
+
+# city_to_county_matcher['Holtsville, NY']
+
+```
+
+Suffolk, NY
+
+
+  8. Regarding the ANOVA for mean sentiment through time in coronavirus-data-masks tweets, after first attempting the analysis by weekly grouping, it quickly became evident that the post-hoc results would be unclear and difficult to interpret. I switched to month-wise, running the test for March through July. Based on a Dunnett's Correction evaluation, I found significant evidence (p < 0.001 across 3 months) to suggest that mean sentiment related to masks and mask-use, as expressed on Twitter, exhibited an overall decrease over the first five months of 2020.
+    
+    
+     Simultaneous Tests for General Linear Hypotheses
+
+Multiple Comparisons of Means: Dunnett Contrasts
+
+Fit: aov(formula = sentiment ~ month, data = tweet.tibble2)
+
+Linear Hypotheses:
+            Estimate Std. Error t value Pr(>|t|)    
+4 - 3 == 0 -0.008583   0.003118  -2.752   0.0143   
+5 - 3 == 0 -0.070406   0.003031 -23.225   <0.001 
+6 - 3 == 0 -0.102836   0.003003 -34.246   <0.001 
+7 - 3 == 0 -0.110246   0.002926 -37.673   <0.001 
+
+
+
+![](/home/whiter9/whiter9-weekly-status-reports/avg_tweet_sent_perweek.jpg)
+
+_Data: coronavirus-data-masks, complete_
+
+
+Another relevant one:
+
+![](/home/whiter9/whiter9-weekly-status-reports/000003.png)
+
+_Data: coronavirus-data-masks, complete_
+
+
+* Other findings:
+       
+  * In designing the New York Times Survey and vader sentiment study, a question arose as to set up a case-by-case comparison of the two variables I aimed to study. The most statistically- sound approach to case-pairing for correlations that I was able to find in the literature was to use individual locations as cases, because in this way it's possible to relate observations by a spatiotemporal common denominator. In other words, it seems reasonable to look at tweets posted within a certain time period and sourced from a given location, and see how statistics about those tweets vary with some other trend of interest taken from the same time period and specific to the same location.
+        
+  * Elasticsearch's aggregation functionalities provide a highly convenient way to analyze Tweets on a grouped basis, at scale (i.e. for studying trends in the entire 1-million-tweet coronavirus-data-masks index). For example, here's the Elasticsearch query I wrote up for my follow-up mask-sentiment-NYT regression:
+
+*** 
+```{r}
+
+
+# apply custom elasticsearch filters to query to maximize tweet return
+
+# #query <- sprintf('{
+#   "_source": ["created_at","text","full_text","place.id", "place.name", "place.full_name", "place.place_type", / #                 "place.country_code", "place.country"],
+#   "query": {
+#     "bool": {
+#       "filter": [
+#         {
+#           "range" : {
+#             "created_at" : {
+#               "gte": "%s",
+#               "lt": "%s",
+#               "format": "strict_date_hour_minute_second",
+#               "time_zone": "+00:00"
+#               }
+#             }
+#           },
+#           { 
+#           "exists": { 
+#             "field": "place.id" 
+#             }
+#           },
+#           {
+#           "simple_query_string": {
+#             "fields": ["place.country_code"],
+#             "query": "US"
+#             }
+#           },
+#           {
+#           "simple_query_string": {
+#             "fields": ["place.place_type"],
+#             "query": "city"
+#             }
+#           }
+#         ]
+#       }
+#     }
+#   }',gte_str,lt_str)
+
+
+```
+
+*** 
+
+* This query batch-retrieves the **complete** body of tweets within the specified date range and having the specified location fields from the `coronavirus-data-masks`index, rather than just calling a sample as the notebooks did originally, when I joined the project.
+* This layout (as well as countless other variations) can be used in conjunction with `do_search_raw` to retrieve specific sub-datasets of tweets.
+
+
+*** 
+***
+
+## Final Blog Post
+
+### Rachael White
+### August 11, 2020
+### COVID-Twitter Project
+
+#### Breaking:
+
+In an investigational study on the lineup for publication this week, a team of data analytics researchers at Rensselaer Polytechnic Institute scrutinize a database of over a million tweets, posted anywhere from the first of the year through July, to draw conclusions about public attitudes towards mask usage in the U.S. amidst the coronavirus pandemic.  
+
+Got your attention? If so, stick around. As an undergraduate student studying at RPI, and a short-term member of the research team mentioned, I’m writing with the goal of shedding light on the dynamic research effort underlying that headline.  
+
+First of all, a disclaimer: My major at RPI is Biochemistry and Biophysics (minor: Computer Science). I don’t pretend to be an expert in epidemiology, big data, or even Twitter usership, for that matter. What I do love, though, is statistics. The fact that large-scale emergent properties can arise out of a million smaller individual cases fascinates me to no end, and I can happily waste hours of my free time writing up a neat computer program that computes some desirable stats.  
+
+So, needless to say, when I learned of a research lab on campus- the Health Analytics Challenges Lab, a part of the Rensselaer Institute for Data Exploration and Applications- that was combining the individually powerful tools of Computer Science and Statistics to answer weighty questions about the coronavirus pandemic, I enrolled for the summer session without a second thought.
+In Week 1 as a member of HACL, I joined the COVID-Twitter project, a research pipeline developed by the IDEA that uses Twitter data to identify and visually represent topic clusters in social media discussion. 
+
+For context, this project does not stand alone in its motivations and approach. It’s no secret that in this new pandemic-era reality, wherein social distancing has become the necessary norm, social media is playing a bigger role than ever in keeping people connected and informed. In recent months, in light of the pandemic, a body of literature and suite of programming tools have emerged that look specifically at how trends in people’s online activity and conversations can help study the spread of infectious disease. For anyone who’s gotten sick suddenly and out of the blue, this probably seems intuitive; how many times have we all turned to Google, or health websites, or friends on social media, in a panic to try and convince ourselves that weird side pain isn’t a precursor to some rare genetic disorder?
+
+Now, considering the scale at which the COVID-Twitter project analyzes Tweets, I realized that getting involved would mean a pretty steep learning curve for me. After all, I had only a vague idea of what a Tweet even looks like at the code-level. But I was intrigued by the project and excited to jump in, so I made getting familiar with the data a personal goal. 
+
+I began by doing some background reading, digesting info about how previous research has analyzed Twitter data to draw meaningful conclusions. I read into how databases work, and learned how to query them. I consulted in-depth with a senior lab member, and found out a lot about the specific details of the project workflow (hopefully, I didn’t annoy him too much with my never-ending supply of questions). 
+
+Essentially, this is how it works. The Tweets we’re studying in COVID-Twitter are harvested from Twitter’s API (Application Programming Interface), augmented with a powerful machine learning tool called a Universal Sentence Encoder that computes the textual similarities among them, then posited in a statistical computing platform for analysis. There, they can be rendered visually as three-dimensional clusters, for display and accentuation of the central discussion themes they contain. 
+
+![](/home/whiter9/whiter9-weekly-status-reports/tsne_clusterplot.png)
+
+_T-SNE cluster plot with generated topic labels_
+
+During our weekly lab breakouts, the HACL team and I worked on developing and refining this project pipeline. 
+
+As I reflected on the potential use cases of such a powerful informational tool, a big question arose for me: What geographic area were we actually studying the Twitter activity of? At that point, the project worked in batches of samples, pushed to us in a random and location-general fashion by Twitter’s API. If we knew the location our tweets came from, could we use that information to study coronavirus-related conversation by region?
+
+In light of this question, I decided to venture my thoughts in lab. Taking my vaguely-conjured vision of how we could introduce geospatial analysis in a user-convenient way, I suggested the addition of a location filter to the current set of query capabilities we were using at the time to retrieve tweets. With rapid-fire efficacy, one lab member jumped on the task, and had the feature up and running the next day.
+
+![](/home/whiter9/whiter9-weekly-status-reports/geo_tweets_map.png)
+
+_City-level geolocated Tweets in our coronavirus-data-masks index_
+
+Now, we had a fully-functioning paradigm for studying and visualizing trends in pandemic-era Twitter discourse, on a state-by-state basis. Taking hints from the national news cycles, we decided as a lab to move the analysis forward with a unique and potentially revealing angle. We would zero in on the conversation about mask usage across the United States.
+With no delay, a new database was indexed to serve this focus. We selected all of the Tweets that were strictly coronavirus- and mask-usage-related from our larger overall collection, all of which were posted between the first day of the year through the month of July, 2020, a range encompassing the disease progression of the pandemic.
+
+In our surge towards getting some good results, all lab members powered forward with parallel contributions. I had to restrain the urge to nerd out over each new addition. For example, one lab member incorporated a stellar sentiment analysis tool we could use to study people’s attitudes towards mask usage based on Tweet text, in addition to purely semantic trends. Another explored ways we could optimize the clustering method we were using to summarize and display the Tweets (k-nearest-neighbors, for those interested). I personally worked on a Python script that would help us filter Tweets into county-level bins (a granularity which often comes in handy for statistical testing), and also dug into some evaluation of our chosen sentiment analysis tool against other known means of measuring of public sentiment.
+
+In one pivotal project moment early-August, a much-anticipated analysis feature was introduced:  automatic cluster labeling, courtesy of a nifty neural net tool one lab member discovered. In our lab group meeting that week, we watched in not-inconsiderable awe as the clever text interpreter went to town producing highly accurate and informative cluster summaries for our visualizations. We knew, in that instance, that COVID-Twitter had really hit it big. 
+
+
+![](/home/whiter9/whiter9-weekly-status-reports/DistilBART_at_work.png)
+
+
+_DistilBART model deciphering a master cluster topic_
+
+
+To sum up, when studying something as complex as a pandemic, the nature of the available data to be used is a factor that must be carefully weighed. Consider the official reports of infection and death rates, reported by invaluable institutions such as the CDC, the WHO and Johns Hopkins University. The numbers reported by these institutions can tell us the scope of the pandemic from an objective, biological standpoint, and are unquestionably the gold standards on which epidemiological conclusions should be drawn. However, using these data to study the pandemic comes with drawbacks; for example, the data are collected on primarily older data-logging systems, and reported with lagtimes of anywhere between 5 and 14 days. 
+
+In comparison to these sources, there’s something incredibly attractive about the accessibility of information in the form of the organic discourse played out in real time, town-hall style, over a public forum such as Twitter. When we consider the broader scope of the pandemic’s impact on society, the silent, foreboding reported numbers alone can really only tell us part of the story. This is where the true value in studying Twitter discourse trends can be seen to lie; with the aid of powerful visualizations like the COVID-Twitter clusters, we can learn what people are actually saying and feeling amidst the viral chaos and destruction. Such social factors will likely prove equally, if not more, predictive of how quickly and effectively society and the economy will recover than the running disease tolls alone.
+
+To leave you with a personal note, in my academic life, I generally prefer to work independently. But what I’ve found being a part of the IDEA lab, even for this short period over the summer, is that the teamwork and accountability lab membership encourages have been extremely helpful in accelerating me forward. It’s an incredible feeling of community to be in a working group of equally motivated people, all focusing a collective beam of attention on solving a problem, or just overall working to make the project the best it can be. 
+
+
+
+#### Draft of a more formal/research-report type version, in case the need arises
+
+In a new study published [date] in [location], a team of data analytics researchers at Rensselaer Polytechnic Institute scrutinized a database of over [number] tweets, written anywhere from the first of the year through July, to draw conclusions about public attitudes towards mask usage in the U.S.over the course of the coronavirus pandemic. 
+
+The team made use of sentiment analysis and powerful machine-learning-based visualizations to relay a dynamic story of how Twitter users' attitudes towards this simple, yet life-preserving, preventative measure have evolved over time. Crucially, how good those trends are at informing us of coronavirus-related indicents in the progression of the pandemic might prove to be an important consideration moving forward, as the threat of a second wave lurks grimly in the public consciousness. 
+
+[what's been done before]
+Prior to this study, previous research has looked at how social media and similar media-centric indicators, such as Google flu trends, can be used to track the focus of the public eye when disease runs rampant. In recent months, in light of the gravity of the pandemic, a related body of literature has emerged that looks specifically at how such trends in people's online activity can predict the spread of devastating infectious disease.
+
+[methodology]
+Notaby, recent weeks have seen a distinct culmination point for the analytical power of the  COVID-Twitter pipeline, as its various bold new feautures have come together over Summer 2020. During week 5, the introduction of several key data retrieval improvements opened the floodgates to the accessibility of the data to the notebook user. For example, the upper cap on number of tweets that could previously be retrieved in any given session was discontinued with the help of the ES scroll API, and a massive overall reduction in computation/knit time was made possible as a result of offloading some of the tweet-embedding compute to GPU power. Automatic cluster summarization was even impemented, really boosting the project to a new tier. 
+
+[findings]
+
+[takeaways]
+
+[looking forward]
+
+  
+  
+  
+  

@@ -1,0 +1,557 @@
+---
+title: 'Is Public Sentiment around Mask Usage on Twitter (As Computed with Vader) Consistent with Actual Survey Responses?'
+author: "Rachael White // Health Analytics Challenge Lab 2020"
+date: "August 3, 2020"
+subtitle: Twitter-Based Sentiment Analysis with Vader Regressed with New York Times Survey Data
+output:
+  html_document: 
+    df_print: tibble
+    toc: yes
+    toc_depth: 2
+---
+```{r setup, include=FALSE}
+# Required R package installation:
+# These will install packages if they are not already installed
+# Set the correct default repository
+r = getOption("repos")
+r["CRAN"] = "http://cran.rstudio.com"
+options(repos = r)
+
+if (!require("ggplot2")) {
+  install.packages("ggplot2")
+  library(ggplot2)
+}
+
+if (!require("knitr")) {
+  install.packages("knitr")
+  library(knitr)
+}
+
+if(!require('dplyr')) {
+  install.packages("dplyr")
+  library(dplyr)
+}
+
+if(!require('stringr')) {
+  install.packages("stringr")
+  library(stringr)
+}
+
+if(!require('Rtsne')) {
+  install.packages("Rtsne")
+  library(Rtsne)
+}
+
+if(!require('stopwords')) {
+  install.packages("stopwords")
+  library(stopwords)
+}
+
+if(!require('plotly')) {
+  install.packages("plotly")
+  library(plotly)
+}
+
+if (!require("kableExtra")) {
+  install.packages("kableExtra")
+  library(kableExtra)
+}
+
+if (!require("vader")) {
+  install.packages("vader")
+  library(vader)
+}
+
+if (!require("gridExtra")) {
+  install.packages("gridExtra")
+  library(NbClust)
+}
+
+if(!require('reticulate')) {
+  install.packages("reticulate")
+  library(reticulate)
+}
+
+
+
+knitr::opts_chunk$set(echo = TRUE)
+
+
+
+
+source("Elasticsearch.R") 
+
+
+```
+
+### Overview
+
+#### What follows is a regression-based approach to evaluating the effectiveness of the sentiment analysis algorithm vader against a recent survey of public attitudes towards mask usage conducted by the New York Times, which can be accessed here: https://github.com/nytimes/covid-19-data/tree/master/mask-use. 
+* Description from the survey webpage:
+  + "This data comes from a large number of interviews conducted online by the global data and survey firm Dynata at the request of The New York Times. The firm asked a question about mask use to obtain 250,000 survey responses between July 2 and July 14, enough data to provide estimates more detailed than the state level. (Several states have imposed new mask requirements since the completion of these interviews.)
+
+  + Specifically, each participant was asked: How often do you wear a mask in public when you expect to be within six feet of another person?"
+  
+* The following summarizes the survey results:
+
+![](/home/whiter9/masksent_check_with_NYT_whiter9/NYT_mask_map.jpg)
+  
+### Methodology
+
+* In this notebook, treating individual counties as cases in keeping with the New York Times Survey, we perform a simple linear regression to determine the nature of the relationship between negative mask-related sentiment scores and negative survey responses for each represented U.S. county. Here, the proportion of respondants per county who 'never' or 'rarely' wear masks around other people is hypothesized to be an indicator of negative sentiment towards mask usage, on the assumption that individuals who report their ulikeliness to wear a mask likely harbor some degree of negative sentiment for this action. We choose to study the negative slant, because it is further assumed that although an individual may feel positively towards mask usage, they might not express that sentiment as verbally on social media. 
+
+* This notebook draws from our custom **coronavirus-data-masks** index, a body of tweets collected between January 1 and August 1, 2020, and which is tailored to contain strictly coronavirus- and mask- related tweets. From this index, we select for analysis the complete subset of tweets meeting the following criteria:
+
+  + Posted within the date range of **July 2 to July 14**, the same time frame as the NYT survey
+  + Geo-located (not user-located) as posted within the United States
+  + Geo-located Geo-located (not user-located) at the granularity of the city level (the broadest level that facilitates a per-county analysis)
+  
+* We then use VADER to compute the sentiment score of each retrieved tweet. Vader assigns a sentence a compound sentiment score in the range [-1,1], -1 being very negative, 0 neutral and 1 very positive.
+
+* Finally, we run the regression and interpret the results. 
+
+### Search configuration:
+
+```{r include=FALSE}
+#delete this before commit:
+elasticsearch_host <- ""
+```
+
+
+```{r}
+
+# query start date/time (inclusive)
+rangestart <- "2020-07-02 00:00:00"
+
+# query end date/time (exclusive)
+rangeend <- "2020-07-14 00:00:00"
+
+rangestart <- ymd_hms(rangestart)
+rangeend <- ymd_hms(rangeend)
+
+gte_str <- format(rangestart, "%Y-%m-%dT%H:%M:%S")
+lt_str <- format(rangeend, "%Y-%m-%dT%H:%M:%S")
+  
+# number of results to return (max 10,000)
+resultsize <- NA
+
+# apply custom elasticsearch filters to query to maximize tweet return
+query <- sprintf('{
+  "_source": ["created_at","text","full_text","place.id", "place.name", "place.full_name", "place.place_type", "place.country_code", "place.country"],
+  "query": {
+    "bool": {
+      "filter": [
+        {
+          "range" : {
+            "created_at" : {
+              "gte": "%s",
+              "lt": "%s",
+              "format": "strict_date_hour_minute_second",
+              "time_zone": "+00:00"
+              }
+            }
+          },
+          { 
+          "exists": { 
+            "field": "place.id" 
+            }
+          },
+          {
+          "simple_query_string": {
+            "fields": ["place.country_code"],
+            "query": "US"
+            }
+          },
+          {
+          "simple_query_string": {
+            "fields": ["place.place_type"],
+            "query": "city"
+            }
+          }
+        ]
+      }
+    }
+  }',gte_str,lt_str)
+
+
+```
+
+
+
+### Results
+
+The following is a selection of the tweets and associated metadata retrieved from the query:
+
+```{r include=FALSE}
+results <- do_search_raw(indexname="coronavirus-data-masks", 
+                     query,
+                     resultsize=resultsize,
+                     elasticsearch_host=elasticsearch_host,
+                     elasticsearch_path="elasticsearch",
+                     elasticsearch_port=443,
+                     elasticsearch_schema="https")
+
+#print total hits
+counts.df <- data.frame(results.count=paste(nrow(results$hits$hits), "/", results$hits$total$value))
+kable(counts.df) %>% kable_styling()
+
+# this dataframe contains the tweet text and other metadata
+results.df <- results$hits$hits[,3:ncol(results$hits$hits)]
+colnames(results.df) <- c("tweet_id","score","created_at","tweet_text", "country_code","country","city_title","place_type", "city_name", "place_id")
+results.df <- results.df %>% select(tweet_id,city_title,country,place_type,tweet_text,created_at)
+kable(results.df) %>% kable_styling()
+
+# required_fields <- c("_source.created_at","_source.text","_source.place.country", "_source.place.full_name","_source.place.place_type")
+# results.df <- results$df[,required_fields]
+
+
+```
+
+
+
+```{r echo=FALSE}
+head(results.df)
+```
+
+
+
+```{r include=FALSE}
+###############################################################################
+# Clean the tweet text
+###############################################################################
+
+
+clean_text <- function(text, for_freq=FALSE) {
+  text <- str_replace_all(text, "[\\s]+", " ")
+  text <- str_replace_all(text, "http\\S+", "")
+  if (isTRUE(for_freq)) {
+    text <- tolower(text)
+    text <- str_replace_all(text, "’", "'")
+    text <- str_replace_all(text, "_", "-")
+    text <- str_replace_all(text, "[^a-z1-9 ']", "")
+  } else {
+    text <- str_replace_all(text, "[^a-zA-Z1-9 `~!@#$%^&*()-_=+\\[\\];:'\",./?’]", "")
+  }
+  text <- str_replace_all(text, " +", " ")
+  text <- trimws(text)
+}
+results.df$tweet_text <- sapply(results.df$tweet_text, clean_text)
+
+```
+
+#### Here are some of the most frequently-occurring words in the tweet text:
+
+```{r echo=FALSE}
+###############################################
+# Compute word frequency, excluding stopwords
+###############################################
+
+stop_words <- stopwords("en", source="snowball")
+stop_words <- union(stop_words, stopwords("en", source="nltk"))
+stop_words <- union(stop_words, stopwords("en", source="smart"))
+stop_words <- union(stop_words, stopwords("en", source="marimo"))
+stop_words <- union(stop_words, c(",", ".", "!", "-", "?", "&amp;", "amp"))
+
+get_word_freqs <- function(full_text) {
+  word_freqs <- table(unlist(strsplit(clean_text(full_text, TRUE), " ")))
+  word_freqs <- cbind.data.frame(names(word_freqs), as.integer(word_freqs))
+  colnames(word_freqs) <- c("word", "count")
+  word_freqs <- word_freqs[!(word_freqs$word %in% stop_words),]
+  word_freqs <- word_freqs[order(word_freqs$count, decreasing=TRUE),]
+}
+
+word_freqs <- get_word_freqs(results.df$tweet_text)
+head(word_freqs,10)
+
+```
+
+*** 
+
+#### Sentiment score generation with Vader
+
+We compute a new vector consisting of the `vader` compound sentiment score for each tweet, and append to the results dataframe.  
+
+_It should be noted that since this notebook was written, sentiment scores are now generated and applied to tweets directly in Elasticsearch._
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+results.df$sentiment <- c(0)
+results.df$sentiment <- vader_df(results.df$tweet_text)[,"compound"]
+head(results.df)
+```
+
+
+#### Consolidate results data for analysis
+
+For general inspection of the location distribution of our tweet sample, we summarize the count of tweets for each location and order highest to lowest:
+```{r message=FALSE, warning=FALSE}
+
+# get count of tweets for each location and order highest to lowest, for general inspection
+
+tweets.per.city <- results.df %>% select(city_title,sentiment)
+tweets.per.city <- tweets.per.city %>% group_by(city_title) %>% summarise(tweet_count = length(city_title)) 
+tweets.per.city <- arrange(tweets.per.city, desc(tweet_count))
+head(tweets.per.city,10)
+
+```
+
+***
+
+### Moving forward, we aggregate the tweets by county and set up our county-level statistics for the regression analysis.
+
+#### First, we create a reference dictionary of cities with the counties they are in as values, based on an external database :
+
+
+```{r include=FALSE}
+
+#export df for some organizing in Python (personal preference), including
+### addition of survey results
+### binning of tweets into counties
+### computation and appendage of average negative sentiment associated with each county
+
+tweets.for.binning <- results.df %>% select(city_title,tweet_text,sentiment)
+
+write.csv(tweets.for.binning, file = "tweets_cities_sent_from_ES.csv")
+
+```
+
+```{python echo=TRUE}
+
+# create reference dictionary of cities with the counties they are in as values 
+# to use for binning tweets into correct counties (by their city name)   
+city_to_county_matcher = dict()
+
+with open('us_cities_states_counties.csv') as file:
+    for line in file:
+        line = line.strip().split('|')
+        if line != ['City', 'State short', 'State full', 'County', 'City alias'] and line != ['#N/A']:
+            city_name = ', '.join([line[0],line[1]])
+            county_name = line[3].lower().title()+', '+line[1]
+            city_to_county_matcher.update({city_name : county_name})
+            
+file.close()
+
+```
+Now, if have a tweet from the city of 'Holtsville, NY' for example, we can get the county it's in:
+
+```{python echo=TRUE}
+city_to_county_matcher['Holtsville, NY']
+
+```
+
+
+With this sorting tool working, we now read in the New York Times survey results, which will serve as a correlate to mask-related sentiment in this study.  
+
+
+```{python echo=FALSE}
+import csv
+
+# Some data organizing, done in Python by personal preference:
+        
+###############################################################################   
+# data gathering       
+
+# read in NYT survey results and store in a list of dictionaries, 
+# one for each county    
+mask_use_by_county = []    
+with open('mask-use-by-county.csv',newline='') as csvfile0:
+    contents = csv.reader(csvfile0)
+    for line in contents:
+        if line != ['COUNTYFP','NEVER','RARELY','SOMETIMES','FREQUENTLY','ALWAYS']:
+            next_dict = {'county_fp':line[0],'never':line[1],'rarely':line[2],'sometimes':line[3],'frequently':line[4],'always':line[5]}
+            mask_use_by_county.append(next_dict)
+
+csvfile0.close()
+
+print(mask_use_by_county[0:5])
+
+```
+
+Note that only county FIPS codes were given in the survey, so we also to attach the county names (drawing from an external file) to be able to accurately sort the tweets.
+
+```{python echo=FALSE}
+#read in fips codes with county names and
+#append county name to correct county in the survey results dictionary
+with open('fips_county_state.csv',newline='') as csvfile1:
+    contents = csv.reader(csvfile1)
+    for line in contents:
+        if line != []:
+            county_fp = line[0]
+            county = ', '.join([line[1],line[2]])
+            for member in mask_use_by_county:
+                if member['county_fp'] == county_fp:
+                    member['county_name'] = county
+csvfile1.close()
+print(mask_use_by_county[0:3])   
+
+```
+
+Now, we can compute and attach the mean negative sentiment score from the tweets for each county. Then, from the NYT survey results, we also find and attach the proportion of respondants who 'never' or 'rarely' wear masks around other people for the corresponding county. This completes our preparation and assembly of the two datasets to be correlated. 
+
+```{python echo=TRUE}
+#get a list of counties that were represented in the survey, for later reference 
+
+counties_surveyed = []
+for member in mask_use_by_county:
+    ID = member.get('county_name')
+    counties_surveyed.append(ID)
+      
+
+###############################################################################
+# data processing     
+
+#read in tweet.vectors.df, a df of user city and sentiment 
+
+# Now, for each tweet in tweet.vectors.df:
+    # if the city it's geolocated to is in the city-to-county-matcher dictionary:
+        # 1. add the tweet sentiment to that county in mask-us-by-county dict
+# Next, separately:
+        # 2. compute the average [negative] tweet sentiment for each county and 
+        #    update its value in counties_sent_surv_rec dict
+        # 3. compute the proprotion of 'never' or 'rarely' (total negative) survey response 
+        #    for each county and add this value to that county in counties_sent_surv_rec dict (or a new dict maybe)
+# Finally, export the dict to a csv for analysis wrapped in an [array] 
+# (that's just how csv.DictWriter expects to receive it)
+
+######### 1.
+# bin tweet sentiment scores by county, 
+# storing sentiment record list for each county in a dict
+counties_sent_surv_rec = dict()
+with open('tweets_cities_sent_from_ES.csv',newline='') as csvfile2:
+    contents = csv.reader(csvfile2)
+    for line in contents:
+        if line != ['', 'city_title', 'tweet_text', 'sentiment']:
+            city_name = line[1].strip()
+            sent = line[3].strip()
+            sent = float(sent)
+            if sent < 0:
+                county_matched = city_to_county_matcher.get(city_name,-1)
+                if county_matched in counties_surveyed:
+                    if county_matched not in counties_sent_surv_rec:
+                        counties_sent_surv_rec.update({county_matched:[sent]})
+                    elif county_matched in counties_sent_surv_rec:
+                        counties_sent_surv_rec[county_matched].append(sent)
+csvfile2.close()
+```
+
+```{python echo=FALSE}
+#print hits summary
+print('\nNote: {} counties were surveyed, and {} counties are represented in this sample of tweets.'.format(len(counties_surveyed), len(counties_sent_surv_rec)))
+
+```
+Some entries in our new data frame:
+```{python include=FALSE}
+      
+########## 2.
+# compute the average [negative] tweet sentiment for each county and 
+# update its value in counties_sent_surv_rec dict
+count = 0
+for county in counties_sent_surv_rec:
+    if len(counties_sent_surv_rec[county])>30:
+        count+=1
+    avg_neg_sent = (sum(counties_sent_surv_rec[county]))/(len(counties_sent_surv_rec[county]))
+    counties_sent_surv_rec[county]=[("avg_neg_sent",avg_neg_sent)]
+
+# uncomment next line to view the number of counties for which more than 30 tweets were found
+# print(count)
+
+
+########## 3.
+# compute the proportion of 'never' or 'rarely' (total negative) 
+# survey response for each county, and put this value in a tuple 
+# in that county's record list in counties_sent_surv_rec dict
+
+for member in mask_use_by_county:
+    name = member.get('county_name')
+    prop_never = member.get('never')
+    prop_never = float(prop_never)
+    prop_rarely = member.get('rarely')
+    prop_rarely = float(prop_rarely)
+    total_prop = prop_never + prop_rarely
+    if counties_sent_surv_rec.get(name,-1) != -1:
+        counties_sent_surv_rec[name].append(('total_prop_negative',total_prop))
+
+
+
+#Export as csv for simplicity (might come back to figure out a better method for this later)
+
+export_frame = []
+for member in counties_sent_surv_rec:
+    dct = {'county_name': member,'avg_neg_sentiment':counties_sent_surv_rec[member][0][1], 'total_prop_negative':counties_sent_surv_rec[member][1][1]}
+    export_frame.append(dct)
+    
+
+field_names = ['county_name', 'avg_neg_sentiment','total_prop_negative'] 
+with open('cor_data.csv', 'w', newline='') as csvfile: 
+      writer = csv.DictWriter(csvfile, fieldnames = field_names) 
+      writer.writeheader() 
+      writer.writerows(export_frame)  
+
+```
+
+```{r echo=FALSE}
+
+# Read the summarized data back into R 
+
+cor_data <- read.csv('cor_data.csv')
+head(cor_data)
+  
+```
+
+***
+#### Finally, with the data assembled, we can run the correlation.
+
+First check normality assumption for both populations studied
+
+```{r echo=FALSE}
+
+####### normality test: Shapiro-Wilkes
+Ntestsent<-shapiro.test(cor_data$avg_neg_sentiment)
+Ntestprop<-shapiro.test(cor_data$total_prop_negative)
+```
+Sentiment distribution:
+```{r echo=FALSE}
+
+print(Ntestsent)
+
+```
+Dist. of proportion of negative responses to mask-usage inquiry:
+
+```{r echo=FALSE}
+
+print(Ntestprop)
+
+```
+***
+
+```{r echo=FALSE}
+
+#### do pretty color
+ggplot(data=cor_data, aes(x=total_prop_negative,y=avg_neg_sentiment)) + geom_point(color='aquamarine3') + labs(y = 'Mean Negative Mask Sentiment', title = 'Negative Mask-Related Tweet Sentiment per County versus\nProportion of Residents Self-Reported as Unlikely to Wear a Mask', caption = 'Tweets and Responses from July 2 - July 14 2020',x = 'Proportion Reporting Little/No Mask Use')
+
+```
+
+```{r echo=FALSE}
+
+cor.test(cor_data$total_prop_negative, cor_data$avg_neg_sentiment)
+
+```
+
+To conclude, we find a correlation of 0.037 for the mask-sentiment survey-result interaction studied. The p-value of 0.5 for this test further supports that the relation is superficial; however, it should be noted that one of the assumptions of the Pearson's correlation method was violated for this test, as the distribution of negative survey responses towards masks significantly departed from normality. 
+
+### Takeaways
+
+Overall, nothing much interesting to see here in terms of meaningful takeaways to apply to our original hypothesis. Based on the methods described for studying the sentiment-score-survey-result interaction in relation to mask usage, we do not find sufficient evidence for a linear relationship between the two factors. However, we cannot say definitively the nature of the relationship, as it may follow some other curve. 
+
+Regardless, this notebook provides a replicable tool for studying samples/index subsets of tweets at the county level, and thus aims to contribute additional functionality to the COVID-Twitter analysis pipeline.
+
+
+### References
+
+* Link to the NYT Github repository: https://github.com/nytimes/covid-19-data/tree/master/mask-use
+* Ref for subsetting NYT data by location, using the provided FIPS (Federal Information Processing System) Codes for States and Counties: https://transition.fcc.gov/oet/info/maps/census/fips/fips.txt
+* list of NY counties/cities: http://www.nysl.nysed.gov/genealogy/townlist.htm
+* Info on vader algorithm: https://cran.r-project.org/web/packages/vader/vader.pdf
+* On when using small sample sizes for correlations is reasonable: https://towardsdatascience.com/sample-size-and-correlation-eb1581227ce2
+
+
+
