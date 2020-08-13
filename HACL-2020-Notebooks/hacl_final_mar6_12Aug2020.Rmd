@@ -1,0 +1,131 @@
+---
+title: "HACL Final Project Notebook"
+author: "Rufeng Ma"
+date: "10 August 2020"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+subtitle: "COVID Twitter"
+---
+## Work Summary	
+
+**NOTE:** Follow an outline format; use bullets to express individual points. 
+
+* RCS ID: mar6
+* Project Name: COVID Twitter
+* Summary of Work
+ I was working on 2 tasks:
+
+    Determine the optimal K for our small 10,000 and large 100,000 dateset.
+    Cluster weekly time inverval plot visualization and analysis.
+
+    
+* Summary of github contributions 
+
+Finally the updated notebook will be the twitter.Rmd. But now the raw version is on my github repo. https://github.com/rufengma/DataAnalyticsResearch
+    
+* List of presentations,  papers, or other outputs
+
+  Will have the final paper for submitting to AMIA conference later.
+    
+* List of references (if necessary) 
+
+
+  Plot_ly: https://plotly.com/ggplot2/animations/
+
+  flexdashboard(tabset):https://rmarkdown.rstudio.com/flexdashboard/using.html
+
+  grid arrange: https://cran.r-project.org/web/packages/gridExtra/vignettes/arrangeGrob.html
+
+  Silhouette Score: https://towardsdatascience.com/silhouette-coefficient-validating-clustering-techniques-e976bb81d10c
+
+* Indicate any use of group shared code base
+
+
+  https://github.com/TheRensselaerIDEA/COVID-Twitter/tree/master/analysis/Elasticsearch.R
+
+  https://github.com/TheRensselaerIDEA/COVID-Twitter/tree/master/analysis/flexdashboardsearch.R
+
+  https://github.com/TheRensselaerIDEA/COVID-Twitter/tree/master/analysis/twitter.Rmd
+  https://github.com/TheRensselaerIDEA/COVID-Twitter/tree/master/analysis/covid-twitter-hacl-template.Rmd
+
+* Indicate which parts of your described work were done by you or as part of joint efforts
+One is the silhoutte score method to find K.
+
+Another one is the demo for build the animation respect to each week as time frames.
+
+They are all listed in my github where I have a directory contains all unmature code for this project. https://github.com/rufengma/DataAnalyticsResearch 
+
+## Personal Contributions
+
+The code I contribute to the project are listed here:
+https://github.com/rufengma/DataAnalyticsResearch
+
+Automatically finding an optimal K is meaningful because we do not want a human interruption.
+
+Clusters slice by weekly time intervals is also meaningful because we would like to compare clusters size between different time slots. This kind of way to express will accelerate our comparison process. This user friendly app can let more investigators work on the data.
+
+
+## Discussion of Primary Findings 	
+
+* Discuss primary findings:<p> 
+What did you want to know?<p> 
+<p>
+Is the silhouette score a good choice for auto finding an optimal K?<p> 
+ How did you go about finding it?<p> 
+I made a function which can do the following things:<p> 
+* Read twitter.vectors.matrix<p>
+* Using “parallel computing” to get kmean
+* Using kmean to get silhouette score
+* Append those silhouette scores to the list
+* Sort the list<p>
+* Plot the each K’s silhouette score (x-axis is k, y-axis is silhouette)<p>
+What did you find?<p>
+  For the 10,000 sample size. I found the sscore_plot function was running slower than the wwplot function. wwplot function is the elbow method plot function but need human interuption. But I compared the parallel computing with the for loop, I found parallel computing method is way faster especially when the kmean has higher maximum iterations.<p>
+I also found in the 10,000 points dataset, the silhouette curve has a local minimum point between k=2 and k=10. I gave 10 randomseeds to do 10 duplicable experiments. The final plot is the mean at each K. The error bar is the standard deviation at each K. When K is smaller than 10, the error bars are way longer than the error bar when K>10.
+
+	
+* **Required:** <p>
+Provide illustrating figures and/or tables https://github.com/rufengma/DataAnalyticsResearch<p>
+
+## Your Final DAR/HACL Blog Post
+<b>Introduction:</b><p>
+Clustering is an important part of the Natural Language Processing (NLP). As the name suggests, clustering helps us to group similar data together by calculating the distance between points. There are two types of traditional clustering are predominantly used, they are<p>
+<p>
+* K-means clustering
+* Hierarchical clustering<p>
+<p>
+In our COVID-Twitter project, we use the K-means method to determine top-level clusters and sub-clusters. K-means look for a fixed number of clusters in a dataset by identifying ‘K’ numbers of centroids. THen allocates every data point to the nearest cluster. The ‘means’ refers to averaging of the data, Figure 1.
+However, here is an obvious question:
+
+How do we determine the feasible number of clusters?
+Answering this question is critical. Correctly choice of K is often ambiguous, if we increase the K, the error in the resulting clustering will be lower. The extreme case is considering each data point as a cluster, then the error will be zero. But if the K is too small, the clustering could not give us too much useful information. In our practice, we summarized the theme of the big cluster. We found the summarization of those big clusters is too general, so they are not too valuable for further study. In summary, we must consider and balance the following aspects, when we are choosing the optimal K:
+
+*Low error (prefer big K)
+*Data compression, or computation efficiency (prefer small K)
+*Meaningful for sentiment study (prefer proper K, not too general, and not too specific)
+
+<b>Elbow method and Silhouette coefficient</b>
+
+In the previous version clustering for the COVID-Twitter project, we used the elbow method. This is the most common method to determine K. The objective function is the relation between the average intra-cluster distance and the average inner-cluster distance. This method is rapid and accurate. But it needs manually choosing the K after the elbow plot is done, Figure 2.
+
+More importantly, if we would like to use an interactive R notebook to generate the clusters with frequently updated twitter data, we would like to have an automatic method to choose the best K. Then the new method
+
+Then we are considering changing the elbow method to the silhouette coefficient method. This method is also calculating the goodness of a clustering technique. Here a is the average intra-cluster distance, and b is the average inter-cluster distance, like Figure 3. For choosing the next K, we just need to choose the maximum one in the score list for the following clustering process.
+
+Code please see here https://github.com/rufengma/DataAnalyticsResearch
+
+We set seed 10 times to have a statistical plot, Figure 4. We plotted all the average silhouette scores with the standard deviations after run 10 experiments. The datasets are tweets from Jan-01-2020 to Aug-01-2020. The tweet.vectors.matrix contains 10,000 data points that were randomly chosen from the whole dataset.
+
+<b>Results:</b><p>
+From the silhouette score plot, we have multiple findings:<p>
+
+* When the K is larger than about 10. error bars are shorter. This means each small clusters are overlapping or not too compact.
+
+* When the K is within 2 and 10, the error bar is large. The silhouette scores have a fluctuation. It worth going to visualize and analyze the clusters when K=2:10 to see what is happening.
+
+* The weirdest point is when K=2. The standard deviation equals to zero. That means all silhouette scores for K=2 are exactly the same.
+
+Figures are all listed in https://github.com/rufengma/DataAnalyticsResearch
