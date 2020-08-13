@@ -1,0 +1,52 @@
+---
+title: "HACL Final Project Notebook Template"
+author: "Yucheng Zhang"
+date: "10 August 2020"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+subtitle: "COVID-Twitter"
+---
+
+## Work Summary	
+
+**NOTE:** Follow an outline format; use bullets to express individual points. 
+
+* RCS ID: zhangy68
+* Project Name: COVID-Twitter
+* Summary of Work
+
+    * Researched articles on coronavirus tweet data analysis and mask sentiment in the US
+    * Did statistical analysis on mean sentiment of tweets per week over time, and will do a statstical analysis on mean sentiment of anti and positive mask sentiment tweets per week over time
+    
+* Summary of github contributions 
+    * Weekly notebook: https://htmlpreview.github.io/?https://raw.githubusercontent.com/TheRensselaerIDEA/COVID-Twitter/master/HACL-2020-Notebooks/hacl_final_zhangy68_10aug2020.html
+    * Statistical analysis: https://htmlpreview.github.io/?https://raw.githubusercontent.com/TheRensselaerIDEA/COVID-Twitter/master/analysis/sentiment_search-zhangy68.html
+    * COVID-Twitter/analysis/sentiment_search-zhangy68.Rmd
+    * Use of shared code base for sorting data into weeks and sentiment plot and divisiveness plot
+    * Statistical analysis code such as ANOVA, Pairwise T Test, and Normality tests done by me
+    
+* List of presentations,  papers, or other outputs
+
+    * https://docs.google.com/document/d/1sDrV-FwJdIDu9zCbH8lNN0ncK14clOCueyj5xcLzIFc/edit?usp=sharing
+    
+
+## Personal Contributions
+
+  * Researched articles on coronavirus tweet data analysis and mask sentiment in the US
+  * Did statistical analysis on mean sentiment of tweets per week over time, and will do a statstical analysis on mean sentiment of anti and positive mask sentiment tweets per week over time
+  * Usage of statistical analysis code such as ANOVA, Pairwise T Test, Residuals vs Fit Plot, and Normality tests
+
+## Discussion of Primary Findings 	
+
+* Discuss primary findings: 
+
+    * What did you want to know? I wanted to know whether there was significant differences in mean sentiment of twitter mask data per week over time
+    * How did you go about finding it? Used an ANOVA and associated assumption tests
+    * What did you find? I found that there is a statistical difference between mean sentiments per week, and that assumptions of normal residuals, no outliers, and homogeneity of variances were met.
+	
+![One Way ANOVA](zhangy68images/anova.PNG)
+![Normality of Residuals](zhangy68images/anova2.PNG)
+![Homofeneity of Variances](zhangy68images/anova3.PNG)
