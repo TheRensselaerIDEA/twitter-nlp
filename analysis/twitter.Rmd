@@ -95,9 +95,9 @@ summarize_num_beams <- 4
 summarize_temperature <- 1.0
 ####TEMPORARY SETTINGS####
 # number of high level clusters (temporary until automatic selection implemented)
-k <- if (semantic_phrase=="") 2 else 2
+k <- if (semantic_phrase=="") 15 else 5
 # number of subclusters per high level cluster (temporary until automatic selection implemented)
-cluster.k <- 2
+cluster.k <- 5
 # show/hide extra info (temporary until tabs are implemented)
 show_original_subcluster_plots <- FALSE
 show_regrouped_subcluster_plots <- TRUE
