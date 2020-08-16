@@ -81,7 +81,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 source("Elasticsearch.R")
 source("Summarizer.R")
-source("plot_tweet_sentiment_timeseries.R")
+source("sentiment_graphs.R")
 ```
 
 ### Configure the search parameters here:
@@ -90,8 +90,8 @@ Note: large date ranges can take some time to process on initial search due to t
 
 ```{r, echo=FALSE}
 # Set server resource locations here:
-elasticsearch_host <- ""
-summarizer_url <- ""
+elasticsearch_host <- "lp01.idea.rpi.edu"
+summarizer_url <- "http://idea-node-05:8080/batchsummarize"
 ```
 
 ```{r}
@@ -160,15 +160,15 @@ show_word_freqs <- FALSE
 show_center_nn <- FALSE
 
 # visualize sentiment and divisiveness
-show_overall_sentiment <- TRUE
+show_overall_sentiment_discrete <- TRUE
+show_overall_sentiment_continuous <- TRUE
 show_cluster_sentiment <- TRUE
-show_subcluster_sentiment <- FALSE
 
 # used to turn sentiment into a variable with discrete values
 sentiment_threshold <- 0.05 # 0.05 recommended for VADER sentiment
 
 # plot type fo sentiment graphs
-graph_shape <- "stack" # "dodge" for grouped, "stack" for stacked
+graph_shape <- "dodge" # "dodge" for grouped, "stack" for stacked
 ```
 
 ```{r, echo=FALSE}
@@ -311,7 +311,7 @@ for (i in 1:k){
 }
 ```
 
-```{r echo=FALSE}
+```{r, echo=FALSE}
 ##UNCOMMENT TO OUTPUT FILES FOR TENSORBOARD
 
 # tweet.vectors.df$cluster_str <- paste("(", tweet.vectors.df$cluster, ")", sep="")
@@ -435,93 +435,40 @@ if (isTRUE(summarize_clusters)) {
 }
 ```
 
+```{r, echo=FALSE, fig.width=10, fig.height=6}
+###############################################################################
+# Run a plot showing discretized sentiment over time, for the entire sample
+###############################################################################
+
+# overall sentiment plot, grouped barplot
+if (isTRUE(show_overall_sentiment_discrete)) {
+  discrete_sentiment_barplot(tweet.vectors.df, graph_shape, sentiment_threshold)
+}
+
+```
+
 ```{r, echo=FALSE}
 ###############################################################################
-# Run plots showing sentiment over time. This can be done for the entire sample, or
-# comparatively for each high-level cluster. Sentiment has been categorized to help
-# with visualization. Divisiveness over time as well as comparison inside the high-
-# level clusters have not been implemented yet.
+# Run a plot showing sentiment over time, as a continuous variable, for the entire sample
 ###############################################################################
 
-# overall sentiment plot
-if (isTRUE(show_overall_sentiment)) {
-  # throw out cluster and subcluster centers
-  tweets.df <- tweet.vectors.df[tweet.vectors.df$vector_type == "tweet",]
-  tweets.df$created_at <- as.POSIXct(strptime(tweets.df$created_at, format="%a %b %d %H:%M:%S +0000 %Y", tz="UTC"))
-  tweets.df$week <- epiweek(tweets.df$created_at)  # find CDC epidemiological week
-  tweets.df$date <- date(tweets.df$created_at)
-  
-  # create the data frame which will be used for the bar plot
-  num_weeks <- max(tweets.df$week)
-  summary.df <- data.frame(week = rep(c(1:num_weeks), each=3), sentiment = factor(rep(c("positive", "neutral", "negative"), num_weeks), ordered=TRUE), count = 0)
-  
-  # because summarize() brings about mysterious errors
-  # take counts and mean of sentiment
-  for (i in 1:length(tweets.df$week)) {
-    # temporary hack / TODO
-    j <- tweets.df[i,]$week
-    
-    if (tweets.df[i,]$sentiment >= sentiment_threshold) {
-      summary.df[3*j-2,]$count = summary.df[3*j-2,]$count + 1
-    } else if (tweets.df[i,]$sentiment <= - sentiment_threshold) {
-      summary.df[3*j,]$count = summary.df[3*j,]$count + 1
-    } else {
-      summary.df[3*j -1,]$count = summary.df[3*j -1,]$count + 1
-    }
-  }
-  
-  # colors  source: Color Brewer 2.0
-  colors <- c("positive" = "#91BFDB", "neutral" = "#FFFFBF", "negative" = "#FC8D59") # colorblind friendly
-
-  # bar plot showing sentiment over time
-  ggplot(summary.df, aes(x = week, y = count, fill=sentiment)) + 
-      geom_bar(stat = "identity", color = "azure3", position = graph_shape) + 
-      scale_color_manual(values = colors, aesthetics = c("colour", "fill")) +
-      #scale_fill_gradient2(name = "Sentiment Average", limits = c(-1,1), low = "black", mid = "white", high = "red", midpoint = 0) +
-      coord_cartesian(xlim = c(10, num_weeks + 1)) +
-      ggtitle("Tweets by Week") + 
-      ylab("Tweet Count") +
-      theme(axis.title.x = element_blank())
+# overall sentiment plot, continuous
+if (isTRUE(show_overall_sentiment_continuous)) {
+  continuous_sentiment_barplot(tweet.vectors.df)
 }
+```
+
+
+```{r, echo=FALSE, fig.width=10, fig.height=10}
+###############################################################################
+# Compare sentiment between high-level clusters
+###############################################################################
 
 # high-level cluster sentiment plots
 if (isTRUE(show_cluster_sentiment)) {
-  # filter out centers from the dataframe
-  tweets.df <- tweet.vectors.df[tweet.vectors.df$vector_type == "tweet",]
-  tweets.df$created_at <- as.POSIXct(strptime(tweets.df$created_at, format="%a %b %d %H:%M:%S +0000 %Y", tz="UTC"))
-  tweets.df$week <- epiweek(tweets.df$created_at)  # find CDC epidemiological week
-  tweets.df$date <- date(tweets.df$created_at)
-
-  num_weeks <- max(tweets.df$week)
-  
-  # create the data frame which will be used for the bar plot
-  summary.df <- data.frame(week = rep(c(1:num_weeks), k), cluster = rep(c(1:k), each=num_weeks), count = 0, sentiment_mean = 0, divisiveness = 0)
-  for (i in 1:length(tweets.df$week)) {
-    wk <- tweets.df[i,]$week
-    cl <- tweets.df[i,]$cluster
-    # temporary hack
-    j <- (cl - 1) * num_weeks + wk
-    #summary.df[summary.df$week == wk && summary.df$cluster == cl,]$count = summary.df[summary.df$week == wk && summary.df$cluster == cl,]$count + 1
-    ##summary.df$count <- (summary.df %>% filter(week == wk & cluster == cl))$count + 1
-    summary.df[j,]$count = summary.df[j,]$count + 1
-    #summary.df[summary.df$week == wk && summary.df$cluster == cl,]$sentiment_mean = summary.df[summary.df$week == wk && summary.df$cluster == cl,]$sentiment_mean + tweets.df[i,]$sentiment
-    summary.df[j,]$sentiment_mean = summary.df[j,]$sentiment_mean + tweets.df[i,]$sentiment
-  }
-  summary.df$sentiment_mean = summary.df$sentiment_mean / summary.df$count
-  
-  #set NaNs to 0
-  summary.df$sentiment_mean[is.na(summary.df$sentiment_mean)] <- 0
-  summary.df$divisiveness[is.na(summary.df$divisiveness)] <- 0
-  
-  # bar plot showing sentiment over time
-  ggplot(summary.df, aes(x = week, y = count, fill = sentiment_mean)) + 
-      geom_bar(stat = "identity", color = "azure3") + 
-      scale_fill_gradient2(name = "Sentiment Average", limits = c(-0.5,0.5), low = "red", mid = "white", high = "blue", midpoint = 0) +
-      ggtitle("Tweets by Week") + 
-      ylab("Tweet Count") +
-      theme(axis.title.x = element_blank()) +
-      facet_wrap(~ cluster, ncol = 3)
+  cluster_sentiments_plots(tweet.vectors.df)
 }
+
 ```
 
 
