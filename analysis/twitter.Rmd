@@ -51,7 +51,7 @@ Note: large date ranges can take some time to process on initial search due to t
 
 ```{r}
 # query start date/time (inclusive)
-rangestart <- "2020-01-01 00:00:00"
+rangestart <- "2020-03-01 00:00:00"
 
 # query end date/time (exclusive)
 rangeend <- "2020-08-01 00:00:00"
@@ -127,6 +127,14 @@ show_original_subcluster_plots <- FALSE
 show_regrouped_subcluster_plots <- TRUE
 show_word_freqs <- FALSE
 show_center_nn <- FALSE
+
+# visualize sentiment and divisiveness
+show_overall_sentiment_discrete <- TRUE
+show_overall_sentiment_continuous <- TRUE
+show_cluster_sentiment <- TRUE
+
+# plot type for sentiment graphs
+sentiment_graph_shape <- "dodge" # "dodge" for grouped, "stack" for stacked
 ```
 
 ### Configure the hyperparameters here:
@@ -185,8 +193,8 @@ tsne_subclusters_max_iter <- 500
 # SENTIMENT HYPERPARAMS
 #--------------------------
 # threshold that represents the cutoff from neutral to positive above zero
-# and neutral to negative below zero.
-sentiment_threshold <- 0.05
+# and neutral to negative below zero. Used to turn sentiment into a variable with discrete values
+sentiment_threshold <- 0.05 # 0.05 recommended for VADER sentiment
 ```
 
 ```{r, echo=FALSE}
@@ -194,7 +202,7 @@ sentiment_threshold <- 0.05
 # Get the tweets from Elasticsearch using the search parameters defined above
 ###############################################################################
 
-resultfields <- '"user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary"'
+resultfields <- '"created_at", "user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary"'
 
 results <- do_search(indexname=elasticsearch_index, 
                      rangestart=rangestart,
@@ -218,7 +226,7 @@ results <- do_search(indexname=elasticsearch_index,
 
 # this dataframe must contains the tweet text and other metadata.
 # validate that all necessary fields exist in the queried index and were returned:
-required_fields <- c("full_text", "user_screen_name", "user_verified", "user_location", "place.country", "place.full_name", "sentiment")
+required_fields <- c("full_text", "created_at", "user_screen_name", "user_verified", "user_location", "place.country", "place.full_name", "sentiment")
 validate_results(results$df, min_results, required_fields)
 
 tweet.vectors.df <- results$df[,required_fields]
@@ -240,7 +248,7 @@ tweet.vectors.df$user_location <- ifelse(is.na(tweet.vectors.df$place.full_name)
                                                tweet.vectors.df$place.country, sep=", "))
 tweet.vectors.df$user_location[is.na(tweet.vectors.df$user_location)] <- ""
 tweet.vectors.df$user_location_type <- ifelse(is.na(tweet.vectors.df$place.full_name), "User", "Place")
-tweet.vectors.df <- tweet.vectors.df[, c("full_text", "user_screen_name", "user_verified", "user_location", "user_location_type", "sentiment")]
+tweet.vectors.df <- tweet.vectors.df[, c("created_at", "full_text", "user_screen_name", "user_verified", "user_location", "user_location_type", "sentiment")]
 
 tweet.vectors.df$full_text <- sapply(tweet.vectors.df$full_text, clean_text)
 tweet.vectors.df$user_location <- sapply(tweet.vectors.df$user_location, clean_text)
@@ -281,6 +289,7 @@ tweet.vectors.df$cluster <- km$cluster
 
 #append cluster centers to dataset for visualization
 centers.df <- data.frame(full_text=paste("Cluster (", rownames(km$centers), ") Center", sep=""),
+                         created_at="[N/A]",
                          user_screen_name="[N/A]",
                          user_verified="[N/A]",
                          user_location="[N/A]",
@@ -326,6 +335,7 @@ for (i in 1:k){
  
  #append subcluster centers to dataset for visualization
  centers.df <- data.frame(full_text=paste("Subcluster (", rownames(cluster.km$centers), ") Center", sep=""),
+                         created_at="[N/A]",
                          user_screen_name="[N/A]",
                          user_verified="[N/A]",
                          user_location="[N/A]",
@@ -415,6 +425,42 @@ if (isTRUE(summarize_clusters)) {
         clusters[[cluster]]$subclusters[[subcluster]]$summary <<- summary
       }
     }, summaries.df$vector_type, summaries.df$cluster, summaries.df$subcluster, summaries.df$summary))
+}
+
+```
+
+```{r, echo=FALSE, fig.width=10, fig.height=6}
+###############################################################################
+# Run a plot showing discretized sentiment over time, for the entire sample
+###############################################################################
+
+# overall sentiment plot, grouped barplot
+if (isTRUE(show_overall_sentiment_discrete)) {
+  discrete_sentiment_barplot(tweet.vectors.df, sentiment_graph_shape, sentiment_threshold)
+}
+
+```
+
+```{r, echo=FALSE}
+###############################################################################
+# Run a plot showing sentiment over time, as a continuous variable, for the entire sample
+###############################################################################
+
+# overall sentiment plot, continuous
+if (isTRUE(show_overall_sentiment_continuous)) {
+  continuous_sentiment_barplot(tweet.vectors.df, sentiment_graph_shape, sentiment_threshold)
+}
+```
+
+
+```{r, echo=FALSE, fig.width=10, fig.height=10}
+###############################################################################
+# Compare sentiment between high-level clusters
+###############################################################################
+
+# high-level cluster sentiment plots
+if (isTRUE(show_cluster_sentiment)) {
+  cluster_sentiments_plots(tweet.vectors.df, k)
 }
 
 ```
