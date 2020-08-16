@@ -120,6 +120,9 @@ do_search <- function(indexname,
                       semantic_phrase="",
                       must_have_embedding=FALSE,
                       must_have_geo=FALSE,
+                      sentiment_type="",
+                      sentiment_lower=NA,
+                      sentiment_upper=NA,
                       random_sample=FALSE,
                       random_seed=NA,
                       resultsize=10,
@@ -146,7 +149,13 @@ do_search <- function(indexname,
             "retweet_count", "favorited", "entities.hashtags", "extended_tweet.entities.hashtags",
             "entities.urls", "extended_tweet.entities.urls"'
   }
-   
+  
+  sentiment_field <- NULL
+  if (!is.null(sentiment_type) && sentiment_type != "") {
+    sentiment_field <- paste("sentiment.", sentiment_type, ".primary", sep="")
+    resultfields <- paste(resultfields, ', "', sentiment_field, '"', sep="")
+  }
+  
   #Do the search
   gte_str <- format(rangestart, "%Y-%m-%dT%H:%M:%S")
   lt_str <- format(rangeend, "%Y-%m-%dT%H:%M:%S")
@@ -158,7 +167,10 @@ do_search <- function(indexname,
                         text_filter, 
                         location_filter, 
                         must_have_embedding, 
-                        must_have_geo, 
+                        must_have_geo,
+                        sentiment_field,
+                        sentiment_lower,
+                        sentiment_upper,
                         random_sample,
                         random_seed)
   } else {
@@ -169,6 +181,9 @@ do_search <- function(indexname,
                             text_filter,
                             location_filter,
                             must_have_geo,
+                            sentiment_field,
+                            sentiment_lower,
+                            sentiment_upper,
                             toJSON(text_embedding))
   }
   
@@ -202,6 +217,14 @@ do_search <- function(indexname,
     colnames(results.df) <- sub("extended_tweet.", "", colnames(results.df))
     colnames(results.df) <- sub("entities.", "", colnames(results.df))
     colnames(results.df) <- sub("user.", "user_", colnames(results.df))
+    if (!is.null(sentiment_field)) {
+      if (sentiment_field %in% colnames(results.df)) {
+        colnames(results.df)[colnames(results.df) == sentiment_field] <- "sentiment"
+      } else {
+        results.df$sentiment <- NA
+      }
+    }
+    
     #merge 'text' and 'full_text'
     if ("text" %in% colnames(results.df)) {
       if ("full_text" %in% colnames(results.df)) {

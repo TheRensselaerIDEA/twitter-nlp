@@ -2,7 +2,8 @@ fix_text_filter <- function(text_filter) {
   return(gsub("\"", "\\\"", text_filter, fixed=TRUE))
 }
 
-get_query_filter <- function(gte_str, lt_str, text_filter, location_filter, must_have_embedding, must_have_geo) {
+get_query_filter <- function(gte_str, lt_str, text_filter, location_filter, must_have_embedding, 
+                             must_have_geo, sentiment_field, sentiment_lower, sentiment_upper) {
   if (isTRUE(must_have_embedding)) {
     embedding_clause <- '{
       "exists": { "field": "embedding.use_large.primary" }
@@ -31,10 +32,26 @@ get_query_filter <- function(gte_str, lt_str, text_filter, location_filter, must
   } else {
     geo_clause <- ''
   }
+  if(!is.null(sentiment_field) && (!is.na(sentiment_lower) || !is.na(sentiment_upper))) {
+    sentiment_clause <- sprintf('{
+      "range": {
+            "%s": {
+              %s
+              %s
+            }
+          }
+    },', sentiment_field, 
+         ifelse(!is.na(sentiment_lower), sprintf('"gte": %s%s', sentiment_lower, 
+                                                 ifelse(!is.na(sentiment_upper), ",", "")), ""),
+         ifelse(!is.na(sentiment_upper), sprintf('"lte": %s', sentiment_upper), ""))
+  } else{
+    sentiment_clause <- '' 
+  }
   
   filter_clause <- sprintf('{
     "bool": {
       "filter": [
+        %s
         %s
         %s
         %s
@@ -60,14 +77,17 @@ get_query_filter <- function(gte_str, lt_str, text_filter, location_filter, must
         }
       ]
     }
-  }', text_query_string, loc_query_string, embedding_clause, geo_clause, gte_str, lt_str)
+  }', text_query_string, loc_query_string, embedding_clause, geo_clause, sentiment_clause, gte_str, lt_str)
   
   return(filter_clause)
 }
 
-base_query <- function(resultfields, gte_str, lt_str, text_filter, location_filter, must_have_embedding, must_have_geo, random_sample, random_seed) {
+base_query <- function(resultfields, gte_str, lt_str, text_filter, location_filter, must_have_embedding, 
+                       must_have_geo, sentiment_field, sentiment_lower, sentiment_upper, random_sample, 
+                       random_seed) {
   
-  filter_clause <- get_query_filter(gte_str, lt_str, text_filter, location_filter, must_have_embedding, must_have_geo)
+  filter_clause <- get_query_filter(gte_str, lt_str, text_filter, location_filter, must_have_embedding, 
+                                    must_have_geo, sentiment_field, sentiment_lower, sentiment_upper)
   
   if (isTRUE(random_sample)) {
     if (isFALSE(is.null(random_seed)) && isFALSE(is.na(random_seed))) {
@@ -99,9 +119,11 @@ base_query <- function(resultfields, gte_str, lt_str, text_filter, location_filt
   return(query)
 }
 
-semantic_query <- function(resultfields, gte_str, lt_str, text_filter, location_filter, must_have_geo, text_embedding) {
+semantic_query <- function(resultfields, gte_str, lt_str, text_filter, location_filter, must_have_geo, 
+                           sentiment_field, sentiment_lower, sentiment_upper, text_embedding) {
   
-  filter_clause <- get_query_filter(gte_str, lt_str, text_filter, location_filter, TRUE, must_have_geo)
+  filter_clause <- get_query_filter(gte_str, lt_str, text_filter, location_filter, TRUE, must_have_geo,
+                                    sentiment_field, sentiment_lower, sentiment_upper)
   
   query <- sprintf('{
     "_source": [%s],
