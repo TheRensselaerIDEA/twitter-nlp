@@ -32,6 +32,7 @@ source("Elasticsearch.R")
 source("Summarizer.R")
 source("text_helpers.R")
 source("plot_helpers.R")
+source("plot_tweet_timeseries.R")
 ```
 
 ```{r, echo=FALSE}
@@ -194,7 +195,7 @@ sentiment_threshold <- 0.05
 # Get the tweets from Elasticsearch using the search parameters defined above
 ###############################################################################
 
-resultfields <- '"user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary"'
+resultfields <- '"user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary", "created_at"'
 
 results <- do_search(indexname=elasticsearch_index, 
                      rangestart=rangestart,
@@ -218,7 +219,7 @@ results <- do_search(indexname=elasticsearch_index,
 
 # this dataframe must contains the tweet text and other metadata.
 # validate that all necessary fields exist in the queried index and were returned:
-required_fields <- c("full_text", "user_screen_name", "user_verified", "user_location", "place.country", "place.full_name", "sentiment")
+required_fields <- c("full_text", "user_screen_name", "user_verified", "user_location", "place.country", "place.full_name", "sentiment", "created_at")
 validate_results(results$df, min_results, required_fields)
 
 tweet.vectors.df <- results$df[,required_fields]
@@ -240,7 +241,7 @@ tweet.vectors.df$user_location <- ifelse(is.na(tweet.vectors.df$place.full_name)
                                                tweet.vectors.df$place.country, sep=", "))
 tweet.vectors.df$user_location[is.na(tweet.vectors.df$user_location)] <- ""
 tweet.vectors.df$user_location_type <- ifelse(is.na(tweet.vectors.df$place.full_name), "User", "Place")
-tweet.vectors.df <- tweet.vectors.df[, c("full_text", "user_screen_name", "user_verified", "user_location", "user_location_type", "sentiment")]
+tweet.vectors.df <- tweet.vectors.df[, c("full_text", "user_screen_name", "user_verified", "user_location", "user_location_type", "sentiment", "created_at")]
 
 tweet.vectors.df$full_text <- sapply(tweet.vectors.df$full_text, clean_text)
 tweet.vectors.df$user_location <- sapply(tweet.vectors.df$user_location, clean_text)
@@ -287,6 +288,7 @@ centers.df <- data.frame(full_text=paste("Cluster (", rownames(km$centers), ") C
                          user_location_type = "[N/A]",
                          sentiment = NA,
                          vector_type = "cluster_center",
+                         created_at = "[N/A]",
                          cluster=as.integer(rownames(km$centers)))
 tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
 tweet.vectors.matrix <- rbind(tweet.vectors.matrix, km$centers)
@@ -332,6 +334,7 @@ for (i in 1:k){
                          user_location_type = "[N/A]",
                          sentiment = NA,
                          vector_type = "subcluster_center",
+                         created_at = "[N/A]",
                          cluster=as.integer(i),
                          subcluster=as.integer(rownames(cluster.km$centers)))
  tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
@@ -347,14 +350,20 @@ for (i in 1:k){
 
 master.word_freqs <- get_word_freqs(tweet.vectors.df$full_text)
 master.label <- get_label(master.word_freqs, top_k=master_label_top_k)
+master.word_freqs <- master.word_freqs %>%
+  mutate(count = count / sum(count))
 
 clusters <- list()
 for (i in 1:k) {
   cluster.df <- tweet.vectors.df[tweet.vectors.df$cluster == i,]
   cluster.matrix <- tweet.vectors.matrix[tweet.vectors.df$cluster == i,]
     
-  cluster.word_freqs <- get_word_freqs(cluster.df$full_text)
-  cluster.label <- get_label(cluster.word_freqs, master.label, top_k=cluster_label_top_k)
+  cluster.word_freqs <- get_word_freqs(cluster.df$full_text) %>%
+    mutate(count = count / sum(count)) %>%
+    inner_join(master.word_freqs, by = "word") %>%
+    mutate(score = count.x * log(count.x / count.y)) %>%
+    dplyr::arrange(desc(score)) 
+  cluster.label <- get_label(cluster.word_freqs, top_k=cluster_label_top_k)
   cluster.center <- cluster.matrix[cluster.df$vector_type=="cluster_center",]
   cluster.nearest_center <- get_nearest_center(cluster.df, cluster.matrix, cluster.center)
   
@@ -363,9 +372,12 @@ for (i in 1:k) {
     subcluster.df <- cluster.df[cluster.df$subcluster == j,]
     subcluster.matrix <- cluster.matrix[cluster.df$subcluster == j,]
     
-    subcluster.word_freqs <- get_word_freqs(subcluster.df$full_text)
-    subcluster.label <- get_label(subcluster.word_freqs, c(master.label, cluster.label),
-                                  top_k=subcluster_label_top_k)
+    subcluster.word_freqs <- get_word_freqs(subcluster.df$full_text) %>%
+      mutate(count = count / sum(count)) %>%
+      inner_join(cluster.word_freqs, by = "word") %>%
+      mutate(score = count.x * log(count.x / count.y)) %>%
+      dplyr::arrange(desc(score)) 
+    subcluster.label <- get_label(subcluster.word_freqs, top_k=subcluster_label_top_k)
     subcluster.center <- subcluster.matrix[subcluster.df$vector_type=="subcluster_center",]
     subcluster.nearest_center <- get_nearest_center(subcluster.df, subcluster.matrix, subcluster.center)
     
@@ -477,7 +489,7 @@ for (i in 1:k) {
     plot_index <- plot_index + 1
   }
   
-  # Print cluster word frequencies
+  # Print cluster keywords
   if (isTRUE(show_word_freqs)) {
     taglist[[plot_index]] <- htmltools::HTML(kable(clusters[[i]]$word_freqs[1:5,], caption=paste("Cluster", i, "word frequencies")) %>% kable_styling())
     plot_index <- plot_index + 1
@@ -490,7 +502,7 @@ for (i in 1:k) {
   }
   
   for (j in 1:cluster.k) {
-    # Print subcluster word frequencies
+    # Print subcluster keywords
     if (isTRUE(show_word_freqs)) {
       taglist[[plot_index]] <- htmltools::HTML(kable(clusters[[i]]$subclusters[[j]]$word_freqs[1:5,], caption=paste("Subcluster", j, "word frequencies")) %>% kable_styling())
       plot_index <- plot_index + 1
@@ -514,4 +526,34 @@ for (i in 1:k) {
 
 ```{r, echo=FALSE}
 taglist
+```
+
+```{r, echo=FALSE}
+divisiveness.df <- tweet.vectors.df %>% filter(vector_type == "tweet")
+divisiveness.df$created_at <- as.POSIXct(strptime(divisiveness.df$created_at, format="%a %b %d %H:%M:%S +0000 %Y", tz="UTC"))
+divisiveness.df$week <- epiweek(divisiveness.df$created_at)  # find CDC epidemiological week
+divisiveness.df <- divisiveness.df %>%
+  dplyr::group_by(week, cluster) %>%
+  dplyr::summarise(
+    divisiveness = divisiveness_score(sentiment)) %>%
+  ungroup()
+
+fig1 <- ggplot(divisiveness.df, mapping = aes(x = week, y = divisiveness, color = factor(cluster))) + 
+  geom_line() +
+  ylab("Divisiveness") +
+  xlab("CDC Epidemiological Week") +
+  ggtitle("Cluster Divisiveness by Week") +
+  scale_color_discrete(name = "Cluster")
+
+fig2 <- ggplot(divisiveness.df, mapping = aes(x = week, y = divisiveness)) + 
+  geom_bar(aes(fill = divisiveness < 0), stat = "identity") +
+  ylab("Divisiveness") +
+  xlab("CDC Epidemiological Week") +
+  ggtitle("Cluster Divisiveness by Week") +
+  facet_wrap(~cluster) +
+  theme(legend.position = "none")
+
+fig1
+
+fig2
 ```
