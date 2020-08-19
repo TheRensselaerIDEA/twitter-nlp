@@ -51,16 +51,8 @@ if (!require("kableExtra")) {
 
 knitr::opts_chunk$set(echo = TRUE)
 
-unlockBinding("params", env = .GlobalEnv)
-
-source("Elasticsearch.R")
-source("Summarizer.R")
-source("text_helpers.R")
-source("plot_helpers.R")
-```
-
-```{r, echo=FALSE}
 #Load snapshot if snapshot mode is 'load'
+unlockBinding("params", env = .GlobalEnv)
 snapshot_loaded <- FALSE
 params$snapshot_name <- ifelse(params$snapshot_name == "", 
                                paste("twitter_snapshot_", format(Sys.time(), "%Y%m%d%H%M%S"), sep=""), 
@@ -73,6 +65,11 @@ if (params$snapshot_mode == "load") {
   params$snapshot_mode <- "load"
   snapshot_loaded <- TRUE
 }
+
+source("Elasticsearch.R")
+source("Summarizer.R")
+source("text_helpers.R")
+source("plot_helpers.R")
 ```
 
 ```{r, echo=FALSE}
