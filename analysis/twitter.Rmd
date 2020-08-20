@@ -11,7 +11,7 @@ params:
   snapshot_mode:
     input: select
     choices: ["none", "save", "load"]
-    value: "none"
+    value: ""
   # file name (without extension) of the snapshot to save or load. This field must be provided in 'load' mode.
   # in save mode, this field may be provided or left blank. If provided, the snapshot will be saved
   # using the given name and overwrite it if it already exists. If blank, the snapshot will be saved
@@ -79,7 +79,7 @@ if (params$snapshot_mode == "load") {
 if (!snapshot_loaded) {
   # Set server resource locations here:
   elasticsearch_index <- "coronavirus-data-masks"
-  elasticsearch_host <- ""
+  elasticsearch_host <- "lp01.idea.rpi.edu"
   elasticsearch_path <- "elasticsearch"
   elasticsearch_port <- 443
   elasticsearch_schema <- "https"
