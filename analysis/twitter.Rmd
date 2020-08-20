@@ -11,12 +11,12 @@ params:
   snapshot_mode:
     input: select
     choices: ["none", "save", "load"]
-    value: ""
+    value: "none"
   # file name (without extension) of the snapshot to save or load. This field must be provided in 'load' mode.
   # in save mode, this field may be provided or left blank. If provided, the snapshot will be saved
   # using the given name and overwrite it if it already exists. If blank, the snapshot will be saved
   # using a timestamp as the name.
-  snapshot_name: "none"
+  snapshot_name: ""
   # name of the directory in which snapshots are located.
   snapshot_path: "/data/COVID-Twitter/analysis/snapshots"
 ---
