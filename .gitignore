@@ -8,3 +8,4 @@ twitter_monitor/tmlog.txt
 embedder/embedderlog.txt
 twitter_monitor/jdllog.txt
 sentiment/sentimentlog.txt
+analysis/snapshots/*.Rdata
