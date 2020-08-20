@@ -65,6 +65,17 @@ get_label <- function(word_freqs, exclude_from_labels=NULL, top_k=3) {
 }
 
 ################################################################
+# Formats cluster or subcluster labels for display
+################################################################
+format_label <- function(label, cluster, subcluster=NULL) {
+  if (is.null(subcluster)) {
+    paste(cluster, ". ", label, sep="")
+  } else {
+    paste(cluster, ".", subcluster, ". ", label, sep="")
+  }
+}
+
+################################################################
 # Orders a list of tweet metadata by cosine similarity to a 
 # cluster or subcluster center in descending order (closest first).
 ################################################################

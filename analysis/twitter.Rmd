@@ -68,6 +68,7 @@ if (params$snapshot_mode == "load") {
 
 source("Elasticsearch.R")
 source("Summarizer.R")
+source("general_helpers.R")
 source("text_helpers.R")
 source("plot_helpers.R")
 ```
@@ -409,6 +410,16 @@ if (!snapshot_loaded) {
 
 ```{r, echo=FALSE}
 ###############################################################################
+# Reorder clusters and subclusters by average sentiment
+###############################################################################
+if (!snapshot_loaded) {
+  tweet.vectors.df <- order_clusters_by_avg_sentiment(tweet.vectors.df)
+}
+
+```
+
+```{r, echo=FALSE}
+###############################################################################
 # Compute labels for each cluster and subcluster based on word frequency
 # and identify the nearest neighbors to each cluster and subcluster center
 ###############################################################################
@@ -545,7 +556,10 @@ if (run_tsne) {
   colnames(master.tsne.plot)[1:tsne_dims] <- tsne_coords
   master.tsne.plot$full_text <- sapply(master.tsne.plot$full_text, 
                                        function(t) paste(strwrap(t ,width=60), collapse="<br>"))
-  master.tsne.plot$cluster.label <- sapply(master.tsne.plot$cluster, function(c) clusters[[c]]$label)
+  master.tsne.plot$cluster.label <- factor(
+    sapply(master.tsne.plot$cluster, function(c) format_label(clusters[[c]]$label, c)), 
+    levels=sapply(1:k, function(c) format_label(clusters[[c]]$label, c)))
+  
 }
 taglist <- htmltools::tagList()
 
@@ -567,8 +581,9 @@ for (i in 1:k) {
                           max_iter=tsne_subclusters_max_iter, check_duplicates=FALSE)
     cluster.tsne.plot <- cbind(cluster.tsne$Y, master.tsne.plot[master.tsne.plot$cluster == i,])
     colnames(cluster.tsne.plot)[1:tsne_dims] <- sapply(tsne_coords, function(c) paste("cluster.", c, sep=""))
-    cluster.tsne.plot$subcluster.label <- sapply(cluster.tsne.plot$subcluster, 
-                                                 function(c) clusters[[i]]$subclusters[[c]]$label)
+    cluster.tsne.plot$subcluster.label <- factor(
+      sapply(cluster.tsne.plot$subcluster, function(c) format_label(clusters[[i]]$subclusters[[c]]$label, i, c)),
+      levels=sapply(1:cluster.k, function(c) format_label(clusters[[i]]$subclusters[[c]]$label, i, c)))
     clusters[[i]]$tsne.plot <- cluster.tsne.plot
   }
   
