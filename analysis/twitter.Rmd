@@ -51,16 +51,8 @@ if (!require("kableExtra")) {
 
 knitr::opts_chunk$set(echo = TRUE)
 
-unlockBinding("params", env = .GlobalEnv)
-
-source("Elasticsearch.R")
-source("Summarizer.R")
-source("text_helpers.R")
-source("plot_helpers.R")
-```
-
-```{r, echo=FALSE}
 #Load snapshot if snapshot mode is 'load'
+unlockBinding("params", env = .GlobalEnv)
 snapshot_loaded <- FALSE
 params$snapshot_name <- ifelse(params$snapshot_name == "", 
                                paste("twitter_snapshot_", format(Sys.time(), "%Y%m%d%H%M%S"), sep=""), 
@@ -73,18 +65,24 @@ if (params$snapshot_mode == "load") {
   params$snapshot_mode <- "load"
   snapshot_loaded <- TRUE
 }
+
+source("Elasticsearch.R")
+source("Summarizer.R")
+source("general_helpers.R")
+source("text_helpers.R")
+source("plot_helpers.R")
 ```
 
 ```{r, echo=FALSE}
 if (!snapshot_loaded) {
   # Set server resource locations here:
   elasticsearch_index <- "coronavirus-data-masks"
-  elasticsearch_host <- "lp01.idea.rpi.edu"
+  elasticsearch_host <- ""
   elasticsearch_path <- "elasticsearch"
   elasticsearch_port <- 443
   elasticsearch_schema <- "https"
   
-  summarizer_url <- "http://idea-node-05:8080/batchsummarize"
+  summarizer_url <- ""
 }
 ```
 
@@ -136,7 +134,7 @@ if (!snapshot_loaded) {
   random_sample <- TRUE
   
   # number of results to return (to return all results, set to NA)
-  resultsize <- 10000
+  resultsize <- 100000
   
   # minimum number of results to return. This should be set according to the needs of the analysis (i.e. enough samples for statistical significance)
   min_results <- 500
@@ -169,7 +167,7 @@ if (!snapshot_loaded) {
   k_test_range <- 2:40
   
   # number of random starts
-  kmeans_nstart <- 2
+  kmeans_nstart <- 25
   
   # maximum iterations
   kmeans_max_iter <- 100
@@ -225,7 +223,7 @@ plot_mode <- "2d"
 
 # If TRUE, cluster and subcluster summaries will be generated using nearest neighbors to the center.
 # Note: if loading a snapshot, disabling summarization will do nothing if it was previously enabled.
-summarize_clusters <- FALSE
+summarize_clusters <- TRUE
 
 # If TRUE, run and output k-means elbow plots
 # Note: if loading a snapshot, disabling elbow plots will do nothing if they were previously enabled.
@@ -411,6 +409,16 @@ if (!snapshot_loaded) {
 
 ```{r, echo=FALSE}
 ###############################################################################
+# Reorder clusters and subclusters by average sentiment
+###############################################################################
+if (!snapshot_loaded) {
+  tweet.vectors.df <- order_clusters_by_avg_sentiment(tweet.vectors.df)
+}
+
+```
+
+```{r, echo=FALSE}
+###############################################################################
 # Compute labels for each cluster and subcluster based on word frequency
 # and identify the nearest neighbors to each cluster and subcluster center
 ###############################################################################
@@ -532,7 +540,6 @@ if (isTRUE(show_cluster_sentiment_discrete)) {
 }
 ```
 
-
 ```{r, echo=FALSE}
 ###############################################################################
 # Run T-SNE on all the tweets and then again on each cluster to get
@@ -554,7 +561,10 @@ if (run_tsne) {
   colnames(master.tsne.plot)[1:tsne_dims] <- tsne_coords
   master.tsne.plot$full_text <- sapply(master.tsne.plot$full_text, 
                                        function(t) paste(strwrap(t ,width=60), collapse="<br>"))
-  master.tsne.plot$cluster.label <- sapply(master.tsne.plot$cluster, function(c) clusters[[c]]$label)
+  master.tsne.plot$cluster.label <- factor(
+    sapply(master.tsne.plot$cluster, function(c) format_label(clusters[[c]]$label, c)), 
+    levels=sapply(1:k, function(c) format_label(clusters[[c]]$label, c)))
+  
 }
 taglist <- htmltools::tagList()
 
@@ -576,8 +586,9 @@ for (i in 1:k) {
                           max_iter=tsne_subclusters_max_iter, check_duplicates=FALSE)
     cluster.tsne.plot <- cbind(cluster.tsne$Y, master.tsne.plot[master.tsne.plot$cluster == i,])
     colnames(cluster.tsne.plot)[1:tsne_dims] <- sapply(tsne_coords, function(c) paste("cluster.", c, sep=""))
-    cluster.tsne.plot$subcluster.label <- sapply(cluster.tsne.plot$subcluster, 
-                                                 function(c) clusters[[i]]$subclusters[[c]]$label)
+    cluster.tsne.plot$subcluster.label <- factor(
+      sapply(cluster.tsne.plot$subcluster, function(c) format_label(clusters[[i]]$subclusters[[c]]$label, i, c)),
+      levels=sapply(1:cluster.k, function(c) format_label(clusters[[i]]$subclusters[[c]]$label, i, c)))
     clusters[[i]]$tsne.plot <- cluster.tsne.plot
   }
   
