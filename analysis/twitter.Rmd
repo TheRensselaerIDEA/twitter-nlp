@@ -1,3 +1,25 @@
+---
+title: "Twitter Notebook"
+output: html_document
+params:
+  # snapshot mode can be 'save', 'load', and 'none'.
+  # 'save': the notebook will retrieve data from elasticsearch and run the full processing pipeline,
+  #         saving a snapshot containing the source data, cluster / subcluster assignments, summaries, 
+  #         and t-sne projection coordinates. Snapshots are saved to the location specified in snapshots_path.
+  # 'load': the notebook will load a saved snapshot and only execute the code to render visualizations.
+  # 'none': the notebook will run as in 'save' mode, but will not output a snapshot.
+  snapshot_mode:
+    input: select
+    choices: ["none", "save", "load"]
+    value: "none"
+  # file name (without extension) of the snapshot to save or load. This field must be provided in 'load' mode.
+  # in save mode, this field may be provided or left blank. If provided, the snapshot will be saved
+  # using the given name and overwrite it if it already exists. If blank, the snapshot will be saved
+  # using a timestamp as the name.
+  snapshot_name: ""
+  # name of the directory in which snapshots are located.
+  snapshot_path: "/data/COVID-Twitter/analysis/snapshots"
+---
 
 ```{r setup, include=FALSE}
 # Required R package installation:
@@ -6,11 +28,6 @@
 r = getOption("repos")
 r["CRAN"] = "http://cran.rstudio.com"
 options(repos = r)
-
-if (!require("ggplot2")) {
-  install.packages("ggplot2")
-  library(ggplot2)
-}
 
 if (!require("knitr")) {
   install.packages("knitr")
@@ -22,29 +39,9 @@ if(!require('dplyr')) {
   library(dplyr)
 }
 
-if(!require('stringr')) {
-  install.packages("stringr")
-  library(stringr)
-}
-
 if(!require('Rtsne')) {
   install.packages("Rtsne")
   library(Rtsne)
-}
-
-if(!require('stopwords')) {
-  install.packages("stopwords")
-  library(stopwords)
-}
-
-if(!require('plotly')) {
-  install.packages("plotly")
-  library(plotly)
-}
-
-if(!require('RColorBrewer')) {
-  install.packages("RColorBrewer")
-  library(RColorBrewer)
 }
 
 if (!require("kableExtra")) {
@@ -54,107 +51,243 @@ if (!require("kableExtra")) {
 
 knitr::opts_chunk$set(echo = TRUE)
 
+unlockBinding("params", env = .GlobalEnv)
+
 source("Elasticsearch.R")
 source("Summarizer.R")
+source("text_helpers.R")
+source("plot_helpers.R")
+```
+
+```{r, echo=FALSE}
+#Load snapshot if snapshot mode is 'load'
+snapshot_loaded <- FALSE
+params$snapshot_name <- ifelse(params$snapshot_name == "", 
+                               paste("twitter_snapshot_", format(Sys.time(), "%Y%m%d%H%M%S"), sep=""), 
+                               params$snapshot_name)
+snapshot_filename <- file.path(params$snapshot_path, paste(params$snapshot_name, ".Rdata", sep=""))
+
+if (params$snapshot_mode == "load") {
+  load(snapshot_filename)
+  #reset the snapshot mode to correct value after load
+  params$snapshot_mode <- "load"
+  snapshot_loaded <- TRUE
+}
+```
+
+```{r, echo=FALSE}
+if (!snapshot_loaded) {
+  # Set server resource locations here:
+  elasticsearch_index <- "coronavirus-data-masks"
+  elasticsearch_host <- "lp01.idea.rpi.edu"
+  elasticsearch_path <- "elasticsearch"
+  elasticsearch_port <- 443
+  elasticsearch_schema <- "https"
+  
+  summarizer_url <- "http://idea-node-05:8080/batchsummarize"
+}
 ```
 
 ### Configure the search parameters here:
 
 Note: large date ranges can take some time to process on initial search due to the sheer volume of data we have collected. Subsequent searches using the same date range should run quickly due to Elasticsearch caching.
 
+`r if(snapshot_loaded) paste('<h4 style="color: red">Search parameters loaded from snapshot "', params$snapshot_name, '"</h4>', sep='')`
+
+```{r echo=!snapshot_loaded}
+if (!snapshot_loaded) {
+  # query start date/time (inclusive)
+  rangestart <- "2020-03-01 00:00:00"
+  
+  # query end date/time (exclusive)
+  rangeend <- "2020-08-01 00:00:00"
+  
+  # text filter restricts results to only those containing words, phrases, or meeting a boolean condition. This query syntax is very flexible and supports a wide variety of filter scenarios:
+  # words: text_filter <- "cdc nih who"  ...contains "cdc" or "nih" or "who"
+  # phrase: text_filter <- '"vitamin c"' ...contains exact phrase "vitamin c"
+  # boolean condition: <- '(cdc nih who) +"vitamin c"' ...contains ("cdc" or "nih" or "who") and exact phrase "vitamin c"
+  #full specification here: https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-simple-query-string-query.html
+  text_filter <- ""
+  
+  # location filter acts like text filter except applied to the location of the tweet instead of its text body.
+  location_filter <- ""
+  
+  # if FALSE, location filter considers both user-povided and geotagged locations. If TRUE, only geotagged locations are considered.
+  must_have_geo <- FALSE
+  
+  # query semantic similarity phrase (choose one of these examples or enter your own)
+  #semantic_phrase <- "Elementary school students are not coping well with distance learning."
+  #semantic_phrase <- "I am diabetic and out of work because of coronavirus. I am worried I won't be able to get insulin without insurance."
+  semantic_phrase <- ""
+  
+  # sentiment type (only 'vader' is supported for now)
+  # if the requested sentiment type is not available for the current index or sample, the sentiment
+  # column in the result set will contain NA values.
+  sentiment_type <- "vader"
+  
+  # query lower bound for sentiment (inclusive). Enter a numeric value or for no lower bound set to NA.
+  sentiment_lower <- NA
+  
+  # query upper bound for sentiment (inclusive). Enter a numeric value or for no upper bound set to NA.
+  sentiment_upper <- NA
+  
+  # return results in chronological order or as a random sample within the range
+  # (ignored if semantic_phrase is not blank)
+  random_sample <- TRUE
+  
+  # number of results to return (to return all results, set to NA)
+  resultsize <- 10000
+  
+  # minimum number of results to return. This should be set according to the needs of the analysis (i.e. enough samples for statistical significance)
+  min_results <- 500
+}
+```
+
+### Configure the hyperparameters here:
+
+`r if(snapshot_loaded) paste('<h4 style="color: red">Hyperparameters loaded from snapshot "', params$snapshot_name, '"</h4>', sep='')`
+
+```{r echo=!snapshot_loaded}
+if (!snapshot_loaded) {
+  #--------------------------
+  # PSEUDORANDOM SEEDS
+  #--------------------------
+  # Optionally specify seeds for reproducibility. For no seed, set to NA on any of these settings.
+  # seed for random sampling (if enabled)
+  random_seed <- 100
+  # seed for k-means
+  kmeans_clusters_seed <- 300
+  kmeans_subclusters_seed <- 500
+  # seed for t-sne
+  tsne_clusters_seed <- 700
+  tsne_subclusters_seed <- 900
+  
+  #--------------------------
+  # K-MEANS HYPERPARAMS
+  #--------------------------
+  # range of k choices to test for elbow and silhouette plots
+  k_test_range <- 2:40
+  
+  # number of random starts
+  kmeans_nstart <- 2
+  
+  # maximum iterations
+  kmeans_max_iter <- 100
+  
+  # number of high level clusters (temporary until automatic selection implemented)
+  k <- 15
+  
+  # number of subclusters per high level cluster (temporary until automatic selection implemented)
+  cluster.k <- 15
+  
+  #--------------------------
+  # LABELING HYPERPARAMS
+  #--------------------------
+  # Construct master label using top-k words across the entire sample
+  master_label_top_k <- 8
+  
+  # Construct cluster labels using top-k words across each cluster
+  cluster_label_top_k <- 3
+  
+  # Construct subcluster labels using top-k words across each subcluster
+  subcluster_label_top_k <- 3
+  
+  #--------------------------
+  # SUMMARIZATION HYPERPARAMS
+  #--------------------------
+  # number of nearest neighbors to the center to use for cluster & subcluster summarization
+  summarize_center_nn <- 20
+  
+  # summarization model inference hyperparameters
+  summarize_max_len <- 120
+  summarize_num_beams <- 6
+  summarize_temperature <- 1.0
+  
+  #--------------------------
+  # T-SNE HYPERPARAMS
+  #--------------------------
+  # hyperparams for clusters
+  tsne_clusters_perplexity <- 25
+  tsne_clusters_max_iter <- 750
+  
+  # hyperparams for subclusters
+  tsne_subclusters_perplexity <- 12
+  tsne_subclusters_max_iter <- 500
+}
+```
+
+### Configure the output settings here:
+
 ```{r}
-# query start date/time (inclusive)
-rangestart <- "2020-01-01 00:00:00"
-
-# query end date/time (exclusive)
-rangeend <- "2020-08-01 00:00:00"
-
-# text filter restricts results to only those containing words, phrases, or meeting a boolean condition. This query syntax is very flexible and supports a wide variety of filter scenarios:
-# words: text_filter <- "cdc nih who"  ...contains "cdc" or "nih" or "who"
-# phrase: text_filter <- '"vitamin c"' ...contains exact phrase "vitamin c"
-# boolean condition: <- '(cdc nih who) +"vitamin c"' ...contains ("cdc" or "nih" or "who") and exact phrase "vitamin c"
-#full specification here: https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-simple-query-string-query.html
-text_filter <- ""
-
-# location filter acts like text filter except applied to the location of the tweet instead of its text body.
-location_filter <- ""
-
-# if FALSE, location filter considers both user-povided and geotagged locations. If TRUE, only geotagged locations are considered.
-must_have_geo <- FALSE
-
-# query semantic similarity phrase (choose one of these examples or enter your own)
-#semantic_phrase <- "Elementary school students are not coping well with distance learning."
-#semantic_phrase <- "How do you stay at home when you are homeless?"
-#semantic_phrase <- "My wedding has been postponed due to the coronavirus."
-#semantic_phrase <- "I lost my job because of COVID-19. How am I going to be able to make rent?"
-#semantic_phrase <- "I am diabetic and out of work because of coronavirus. I am worried I won't be able to get insulin without insurance."
-#semantic_phrase <- "There is going to be a COVID-19 baby boom..."
-#semantic_phrase <- "Vitamin"
-semantic_phrase <- ""
-
-# return results in chronological order or as a random sample within the range
-# (ignored if semantic_phrase is not blank)
-random_sample <- TRUE
-# if using random sampling, optionally specify a seed for reproducibility. For no seed, set to NA.
-random_seed <- NA
-# number of results to return (to return all results, set to NA)
-resultsize <- 10000
-# minimum number of results to return. This should be set according to the needs of the analysis (i.e. enough samples for statistical significance)
-min_results <- 500
-
-# plot mode - '2d' or '3d'
+# plot mode - '2d' or '3d'.
+# Note: if loading a snapshot, changing the plot mode will trigger T-SNE to re-run.
 plot_mode <- "2d"
 
 # If TRUE, cluster and subcluster summaries will be generated using nearest neighbors to the center.
+# Note: if loading a snapshot, disabling summarization will do nothing if it was previously enabled.
 summarize_clusters <- FALSE
-# number of nearest neighbors to the center to use for cluster & subcluster summarization
-summarize_center_nn <- 20
-# summarization model inference hyperparameters
-summarize_max_len <- 60
-summarize_num_beams <- 4
-summarize_temperature <- 1.0
 
-####TEMPORARY SETTINGS####
-# number of high level clusters (temporary until automatic selection implemented)
-k <- if (semantic_phrase=="") 15 else 5
-# number of subclusters per high level cluster (temporary until automatic selection implemented)
-cluster.k <- 15
+# If TRUE, run and output k-means elbow plots
+# Note: if loading a snapshot, disabling elbow plots will do nothing if they were previously enabled.
+compute_elbow <- FALSE
+# If TRUE, run and output k-means silhouette plots
+# Note: if loading a snapshot, disabling silhouette plots will do nothing if they were previously enabled.
+compute_silhouette <- FALSE
+
 # show/hide extra info (temporary until tabs are implemented)
 show_original_subcluster_plots <- FALSE
 show_regrouped_subcluster_plots <- TRUE
 show_word_freqs <- FALSE
 show_center_nn <- FALSE
+
+# visualize sentiment and divisiveness
+show_overall_sentiment_discrete <- TRUE
+show_overall_sentiment_continuous <- TRUE
+show_cluster_sentiment_continuous <- TRUE
+show_cluster_sentiment_discrete <- TRUE
+# threshold that represents the cutoff from neutral to positive above zero
+# and neutral to negative below zero. Used to turn sentiment into a variable with discrete values
+sentiment_threshold <- 0.05 # 0.05 recommended for VADER sentiment
+
 ```
 
 ```{r, echo=FALSE}
 ###############################################################################
 # Get the tweets from Elasticsearch using the search parameters defined above
 ###############################################################################
-
-results <- do_search(indexname="coronavirus-data-masks", 
-                     rangestart=rangestart,
-                     rangeend=rangeend,
-                     text_filter=text_filter,
-                     location_filter=location_filter,
-                     semantic_phrase=semantic_phrase,
-                     must_have_embedding=TRUE,
-                     must_have_geo=must_have_geo,
-                     random_sample=random_sample,
-                     random_seed=random_seed,
-                     resultsize=resultsize,
-                     resultfields='"user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary"',
-                     elasticsearch_host="",
-                     elasticsearch_path="elasticsearch",
-                     elasticsearch_port=443,
-                     elasticsearch_schema="https")
-
-# this dataframe contains the tweet text and other metadata
-required_fields <- c("full_text", "user_screen_name", "user_verified", "user_location", "place.country", "place.full_name")
-validate_results(results$df, min_results, required_fields)
-tweet.vectors.df <- results$df[,required_fields]
-
-# this matrix contains the embedding vectors for every tweet in tweet.vectors.df
-tweet.vectors.matrix <- t(simplify2array(results$df[,"embedding.use_large.primary"]))
+if (!snapshot_loaded) {
+  resultfields <- '"created_at", "user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary"'
+  
+  results <- do_search(indexname=elasticsearch_index, 
+                       rangestart=rangestart,
+                       rangeend=rangeend,
+                       text_filter=text_filter,
+                       location_filter=location_filter,
+                       semantic_phrase=semantic_phrase,
+                       must_have_embedding=TRUE,
+                       must_have_geo=must_have_geo,
+                       sentiment_type=sentiment_type,
+                       sentiment_lower=sentiment_lower,
+                       sentiment_upper=sentiment_upper,
+                       random_sample=random_sample,
+                       random_seed=random_seed,
+                       resultsize=resultsize,
+                       resultfields=resultfields,
+                       elasticsearch_host=elasticsearch_host,
+                       elasticsearch_path=elasticsearch_path,
+                       elasticsearch_port=elasticsearch_port,
+                       elasticsearch_schema=elasticsearch_schema)
+  
+  # this dataframe must contains the tweet text and other metadata.
+  # validate that all necessary fields exist in the queried index and were returned:
+  required_fields <- c("full_text", "created_at", "user_screen_name", "user_verified", "user_location", "place.country", "place.full_name", "sentiment")
+  validate_results(results$df, min_results, required_fields)
+  
+  tweet.vectors.df <- results$df[,required_fields]
+  
+  # this matrix contains the embedding vectors for every tweet in tweet.vectors.df
+  tweet.vectors.matrix <- t(simplify2array(results$df[,"embedding.use_large.primary"]))
+}
 ```
 
 ```{r, echo=FALSE}
@@ -163,67 +296,84 @@ tweet.vectors.matrix <- t(simplify2array(results$df[,"embedding.use_large.primar
 # the way we want it by consolidating the location field and computing
 # location type
 ###############################################################################
-
-tweet.vectors.df$user_location <- ifelse(is.na(tweet.vectors.df$place.full_name), tweet.vectors.df$user_location, paste(tweet.vectors.df$place.full_name, tweet.vectors.df$place.country, sep=", "))
-tweet.vectors.df$user_location[is.na(tweet.vectors.df$user_location)] <- ""
-tweet.vectors.df$user_location_type <- ifelse(is.na(tweet.vectors.df$place.full_name), "User", "Place")
-tweet.vectors.df <- tweet.vectors.df[, c("full_text", "user_screen_name", "user_verified", "user_location", "user_location_type")]
-
-clean_text <- function(text, for_freq=FALSE) {
-  text <- str_replace_all(text, "[\\s]+", " ")
-  text <- str_replace_all(text, "http\\S+", "")
-  if (isTRUE(for_freq)) {
-    text <- tolower(text)
-    text <- str_replace_all(text, "’", "'")
-    text <- str_replace_all(text, "_", "-")
-    text <- str_replace_all(text, "[^a-z1-9 ']", "")
-  } else {
-    text <- str_replace_all(text, "[^a-zA-Z1-9 `~!@#$%^&*()-_=+\\[\\];:'\",./?’]", "")
-  }
-  text <- str_replace_all(text, " +", " ")
-  text <- trimws(text)
+if (!snapshot_loaded) {
+  tweet.vectors.df$user_location <- ifelse(is.na(tweet.vectors.df$place.full_name), 
+                                           tweet.vectors.df$user_location, 
+                                           paste(tweet.vectors.df$place.full_name, 
+                                                 tweet.vectors.df$place.country, sep=", "))
+  tweet.vectors.df$user_location[is.na(tweet.vectors.df$user_location)] <- ""
+  tweet.vectors.df$user_location_type <- ifelse(is.na(tweet.vectors.df$place.full_name), "User", "Place")
+  tweet.vectors.df <- tweet.vectors.df[, c("created_at", "full_text", "user_screen_name", "user_verified", "user_location", "user_location_type", "sentiment")]
+  
+  tweet.vectors.df$full_text <- sapply(tweet.vectors.df$full_text, clean_text)
+  tweet.vectors.df$user_location <- sapply(tweet.vectors.df$user_location, clean_text)
 }
-tweet.vectors.df$full_text <- sapply(tweet.vectors.df$full_text, clean_text)
-tweet.vectors.df$user_location <- sapply(tweet.vectors.df$user_location, clean_text)
 ```
 
 ```{r, echo=FALSE}
-##UNCOMMENT TO GENERATE ELBOW PLOT
-
-# wssplot <- function(data, fc=1, nc=40, seed=20){
-#   wss <- data.frame(k=fc:nc, withinss=c(0))
-#   for (i in fc:nc){
-#     set.seed(seed)
-#     wss[i-fc+1,2] <- sum(kmeans(data, centers=i, iter.max=30)$withinss)}
-#   ggplot(data=wss,aes(x=k,y=withinss)) + 
-#     geom_line() + 
-#     ggtitle("Quality (within sums of squares) of k-means by choice of k")
-# }
-# Generate the plot
-#wssplot(tweet.vectors.matrix)
+###############################################################################
+# Compute elbow and/or silhouette plot for K-means 
+# on all the tweet embedding vectors
+###############################################################################
+if (!exists("metrics_plots") || length(metrics_plots) == 0) {
+  # Generate the plot(s) if enabled
+  metrics_plots <- plot_kmeans_metrics(tweet.vectors.matrix, 
+                                        k_test_range=k_test_range, 
+                                        seed=kmeans_clusters_seed, 
+                                        max_iter=kmeans_max_iter, 
+                                        nstart=kmeans_nstart,
+                                        plot_elbow=compute_elbow,
+                                        plot_silhouette=compute_silhouette)
+}
+if (exists("metrics_plots") && length(metrics_plots) > 0) {
+  metrics_plots
+}
 ```
 
 ```{r, echo=FALSE}
 ###############################################################################
 # Run K-means on all the tweet embedding vectors
 ###############################################################################
+if (!snapshot_loaded) {
+  if (!is.na(kmeans_clusters_seed)) {
+    set.seed(kmeans_clusters_seed)
+  }
+  km <- kmeans(tweet.vectors.matrix, centers=k, iter.max=kmeans_max_iter, nstart=kmeans_nstart)
+  
+  tweet.vectors.df$vector_type <- factor("tweet", levels=c("tweet", "cluster_center", "subcluster_center"))
+  tweet.vectors.df$cluster <- km$cluster
+  
+  #append cluster centers to dataset for visualization
+  centers.df <- data.frame(full_text=paste("Cluster (", rownames(km$centers), ") Center", sep=""),
+                           created_at="[N/A]",
+                           user_screen_name="[N/A]",
+                           user_verified="[N/A]",
+                           user_location="[N/A]",
+                           user_location_type = "[N/A]",
+                           sentiment = NA,
+                           vector_type = "cluster_center",
+                           cluster=as.integer(rownames(km$centers)))
+  tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
+  tweet.vectors.matrix <- rbind(tweet.vectors.matrix, km$centers)
+}
+```
 
-set.seed(300)
-km <- kmeans(tweet.vectors.matrix, centers=k, iter.max=30)
-
-tweet.vectors.df$vector_type <- factor("tweet", levels=c("tweet", "cluster_center", "subcluster_center"))
-tweet.vectors.df$cluster <- km$cluster
-
-#append cluster centers to dataset for visualization
-centers.df <- data.frame(full_text=paste("Cluster (", rownames(km$centers), ") Center", sep=""),
-                         user_screen_name="[N/A]",
-                         user_verified="[N/A]",
-                         user_location="[N/A]",
-                         user_location_type = "[N/A]",
-                         vector_type = "cluster_center",
-                         cluster=as.integer(rownames(km$centers)))
-tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
-tweet.vectors.matrix <- rbind(tweet.vectors.matrix, km$centers)
+```{r, echo=FALSE}
+###############################################################################
+# Compute elbow plot for K-means on the tweet embedding vectors in each cluster.
+# Each cluster gets its own axis and all scores are normalized.
+###############################################################################
+if (!exists("metrics_plots2") && isTRUE(compute_elbow)) {
+  # Generate the plot if enabled
+  metrics_plots2 <- wssplot2(cbind(tweet.vectors.df$cluster, tweet.vectors.matrix), 
+                    k_test_range=k_test_range, 
+                    seed=kmeans_subclusters_seed,
+                    max_iter=kmeans_max_iter, 
+                    nstart=kmeans_nstart)
+}
+if (exists("metrics_plots2")) {
+  metrics_plots2
+}
 ```
 
 ```{r, echo=FALSE}
@@ -231,41 +381,32 @@ tweet.vectors.matrix <- rbind(tweet.vectors.matrix, km$centers)
 # Run K-means again on all the tweet embedding vectors in each cluster
 # to create subclusters of tweets
 ###############################################################################
-
-tweet.vectors.df$subcluster <- as.integer(c(0))
-
-for (i in 1:k){
- print(paste("Subclustering cluster", i, "..."))
- cluster.matrix <- tweet.vectors.matrix[tweet.vectors.df$cluster == i,]
- set.seed(500)
- cluster.km <- kmeans(cluster.matrix, centers=cluster.k, iter.max=30)
- tweet.vectors.df[tweet.vectors.df$cluster == i, "subcluster"] <- cluster.km$cluster
- 
- #append subcluster centers to dataset for visualization
- centers.df <- data.frame(full_text=paste("Subcluster (", rownames(cluster.km$centers), ") Center", sep=""),
-                         user_screen_name="[N/A]",
-                         user_verified="[N/A]",
-                         user_location="[N/A]",
-                         user_location_type = "[N/A]",
-                         vector_type = "subcluster_center",
-                         cluster=as.integer(i),
-                         subcluster=as.integer(rownames(cluster.km$centers)))
- tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
- tweet.vectors.matrix <- rbind(tweet.vectors.matrix, cluster.km$centers)
+if (!snapshot_loaded) {
+  tweet.vectors.df$subcluster <- as.integer(c(0))
+  
+  for (i in 1:k){
+   cluster.matrix <- tweet.vectors.matrix[tweet.vectors.df$cluster == i,]
+   if (!is.na(kmeans_subclusters_seed)) {
+     set.seed(kmeans_subclusters_seed)
+   }
+   cluster.km <- kmeans(cluster.matrix, centers=cluster.k, iter.max=kmeans_max_iter, nstart=kmeans_nstart)
+   tweet.vectors.df[tweet.vectors.df$cluster == i, "subcluster"] <- cluster.km$cluster
+   
+   #append subcluster centers to dataset for visualization
+   centers.df <- data.frame(full_text=paste("Subcluster (", rownames(cluster.km$centers), ") Center", sep=""),
+                           created_at="[N/A]",
+                           user_screen_name="[N/A]",
+                           user_verified="[N/A]",
+                           user_location="[N/A]",
+                           user_location_type = "[N/A]",
+                           sentiment = NA,
+                           vector_type = "subcluster_center",
+                           cluster=as.integer(i),
+                           subcluster=as.integer(rownames(cluster.km$centers)))
+   tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
+   tweet.vectors.matrix <- rbind(tweet.vectors.matrix, cluster.km$centers)
+  }
 }
-```
-
-```{r echo=FALSE}
-##UNCOMMENT TO OUTPUT FILES FOR TENSORBOARD
-
-# tweet.vectors.df$cluster_str <- paste("(", tweet.vectors.df$cluster, ")", sep="")
-# tweet.vectors.df$subcluster_str <- paste("(", tweet.vectors.df$subcluster, ")", sep="")
-# 
-# metadata_cols <- setdiff(colnames(tweet.vectors.df), c("cluster", "subcluster"))
-# write.table(tweet.vectors.df[,metadata_cols], "clustered_tweet_labels.tsv", sep='\t', row.names = FALSE)
-# write.table(tweet.vectors.matrix, "clustered_tweet_vectors.tsv", sep='\t', row.names = FALSE, col.names = FALSE)
-# read.table("clustered_tweet_labels.tsv", header=TRUE)
-# read.table("clustered_tweet_vectors.tsv", header=TRUE)
 ```
 
 ```{r, echo=FALSE}
@@ -273,70 +414,47 @@ for (i in 1:k){
 # Compute labels for each cluster and subcluster based on word frequency
 # and identify the nearest neighbors to each cluster and subcluster center
 ###############################################################################
-
-stop_words <- stopwords("en", source="snowball")
-stop_words <- union(stop_words, stopwords("en", source="nltk"))
-stop_words <- union(stop_words, stopwords("en", source="smart"))
-stop_words <- union(stop_words, stopwords("en", source="marimo"))
-stop_words <- union(stop_words, c(",", ".", "!", "-", "?", "&amp;", "amp"))
-
-get_word_freqs <- function(full_text) {
-  word_freqs <- table(unlist(strsplit(clean_text(full_text, TRUE), " ")))
-  word_freqs <- cbind.data.frame(names(word_freqs), as.integer(word_freqs))
-  colnames(word_freqs) <- c("word", "count")
-  word_freqs <- word_freqs[!(word_freqs$word %in% stop_words),]
-  word_freqs <- word_freqs[order(word_freqs$count, decreasing=TRUE),]
-}
-
-get_label <- function(word_freqs, exclude_from_labels=NULL, top_k=3) {
-  words <- as.character(word_freqs$word)
-  exclude_words <- NULL
-  if (!is.null(exclude_from_labels)) {
-    exclude_words <- unique(unlist(lapply(strsplit(exclude_from_labels, "/"), trimws)))
-  }
-  label <- paste(setdiff(words, exclude_words)[1:top_k], collapse=" / ")
-}
-
-get_nearest_center <- function(df, mtx, center) {
-  df$center_cosine_similarity <- apply(mtx, 1, function(v) (v %*% center)/(norm(v, type="2")*norm(center, type="2")))
-  nearest_center <- df[order(df$center_cosine_similarity, decreasing=TRUE),]
-  nearest_center <- nearest_center[nearest_center$vector_type=="tweet", c("center_cosine_similarity", "full_text", "user_location")]
-}
-
-concat_text_for_summary <- function(nearest_center, k_nn) {
-  summary <- paste('"', paste(nearest_center[1:min(k_nn, nrow(nearest_center)), "full_text"], collapse='" "'), '"', sep="")
-}
-
-master.word_freqs <- get_word_freqs(tweet.vectors.df$full_text)
-master.label <- get_label(master.word_freqs, top_k=8)
-
-clusters <- list()
-for (i in 1:k) {
-  cluster.df <- tweet.vectors.df[tweet.vectors.df$cluster == i,]
-  cluster.matrix <- tweet.vectors.matrix[tweet.vectors.df$cluster == i,]
-    
-  cluster.word_freqs <- get_word_freqs(cluster.df$full_text)
-  cluster.label <- get_label(cluster.word_freqs, master.label)
-  cluster.center <- cluster.matrix[cluster.df$vector_type=="cluster_center",]
-  cluster.nearest_center <- get_nearest_center(cluster.df, cluster.matrix, cluster.center)
+if (!snapshot_loaded) {
+  master.word_freqs <- get_word_freqs(tweet.vectors.df$full_text)
+  master.label <- get_label(master.word_freqs, top_k=master_label_top_k)
   
-  cluster.subclusters <- list()
-  for (j in 1:cluster.k) {
-    subcluster.df <- cluster.df[cluster.df$subcluster == j,]
-    subcluster.matrix <- cluster.matrix[cluster.df$subcluster == j,]
+  clusters <- list()
+  for (i in 1:k) {
+    cluster.df <- tweet.vectors.df[tweet.vectors.df$cluster == i,]
+    cluster.matrix <- tweet.vectors.matrix[tweet.vectors.df$cluster == i,]
+      
+    cluster.word_freqs <- get_word_freqs(cluster.df$full_text)
+    cluster.label <- get_label(cluster.word_freqs, master.label, top_k=cluster_label_top_k)
+    cluster.center <- cluster.matrix[cluster.df$vector_type=="cluster_center",]
+    cluster.nearest_center <- get_nearest_center(cluster.df, cluster.matrix, cluster.center)
     
-    subcluster.word_freqs <- get_word_freqs(subcluster.df$full_text)
-    subcluster.label <- get_label(subcluster.word_freqs, c(master.label, cluster.label))
-    subcluster.center <- subcluster.matrix[subcluster.df$vector_type=="subcluster_center",]
-    subcluster.nearest_center <- get_nearest_center(subcluster.df, subcluster.matrix, subcluster.center)
+    cluster.subclusters <- list()
+    for (j in 1:cluster.k) {
+      subcluster.df <- cluster.df[cluster.df$subcluster == j,]
+      subcluster.matrix <- cluster.matrix[cluster.df$subcluster == j,]
+      
+      subcluster.word_freqs <- get_word_freqs(subcluster.df$full_text)
+      subcluster.label <- get_label(subcluster.word_freqs, c(master.label, cluster.label),
+                                    top_k=subcluster_label_top_k)
+      subcluster.center <- subcluster.matrix[subcluster.df$vector_type=="subcluster_center",]
+      subcluster.nearest_center <- get_nearest_center(subcluster.df, subcluster.matrix, subcluster.center)
+      
+      cluster.subclusters[[j]] <- list(word_freqs=subcluster.word_freqs, label=subcluster.label, 
+                                       nearest_center=subcluster.nearest_center)
+    }
     
-    cluster.subclusters[[j]] <- list(word_freqs=subcluster.word_freqs, label=subcluster.label, nearest_center=subcluster.nearest_center)
+    clusters[[i]] <- list(word_freqs=cluster.word_freqs, label=cluster.label, 
+                          nearest_center=cluster.nearest_center, subclusters=cluster.subclusters)
   }
-  
-  clusters[[i]] <- list(word_freqs=cluster.word_freqs, label=cluster.label, nearest_center=cluster.nearest_center, subclusters=cluster.subclusters)
 }
+```
 
-if (isTRUE(summarize_clusters)) {
+```{r, echo=FALSE}
+###############################################################################
+# Compute cluster and subcluster summaries using 
+# an abstractive summarization model (DistilBART)
+###############################################################################
+if (!exists("summaries.df") && isTRUE(summarize_clusters)) {
   #concatenate the nearest neighbor tweet text for each cluster & subcluster
   summaries.df <- tweet.vectors.df[tweet.vectors.df$vector_type != "tweet", 
                                    c("full_text", "vector_type", "cluster", "subcluster")]
@@ -353,7 +471,8 @@ if (isTRUE(summarize_clusters)) {
   summaries.df$summary <- summarize(text=summaries.df$text_for_summary,
                                     max_len=summarize_max_len,
                                     num_beams=summarize_num_beams,
-                                    temperature=summarize_temperature)
+                                    temperature=summarize_temperature,
+                                    summarizer_url=summarizer_url)
   
   #update the cluster & subcluster center vectors' text with summaries
   tweet.vectors.df[rownames(summaries.df), "full_text"] <- 
@@ -369,8 +488,50 @@ if (isTRUE(summarize_clusters)) {
       }
     }, summaries.df$vector_type, summaries.df$cluster, summaries.df$subcluster, summaries.df$summary))
 }
+```
+
+```{r, echo=FALSE, fig.width=10, fig.height=6}
+###############################################################################
+# Run a plot showing discretized sentiment over time, for the entire sample
+###############################################################################
+
+# overall sentiment plot, line plot
+if (isTRUE(show_overall_sentiment_discrete)) {
+  discrete_sentiment_lines(tweet.vectors.df, sentiment_threshold)
+}
 
 ```
+
+```{r, echo=FALSE}
+###############################################################################
+# Run a plot showing sentiment over time, as a continuous variable, for the entire sample
+###############################################################################
+
+# overall sentiment plot, continuous
+if (isTRUE(show_overall_sentiment_continuous)) {
+  continuous_sentiment_barplot(tweet.vectors.df, sentiment_threshold)
+}
+```
+
+
+```{r, echo=FALSE, fig.width=10, fig.height=10}
+###############################################################################
+# Compare sentiment between high-level clusters
+###############################################################################
+
+# high-level cluster sentiment plots, color gradient
+if (isTRUE(show_cluster_sentiment_continuous)) {
+  cluster_sentiments_plots(tweet.vectors.df, k)
+}
+```
+
+```{r, echo=FALSE, fig.width=10, fig.height=10}
+# high-level cluster sentiment, discrete count
+if (isTRUE(show_cluster_sentiment_discrete)) {
+  cluster_discrete_sentiments(tweet.vectors.df, sentiment_threshold, k)
+}
+```
+
 
 ```{r, echo=FALSE}
 ###############################################################################
@@ -378,82 +539,53 @@ if (isTRUE(summarize_clusters)) {
 # plot coordinates for each tweet. We output a master plot with all clusters
 # and a cluster plot with all subclusters for each cluster.
 ###############################################################################
-
-plot_tweets <- function(tsne.plot, title, type, mode, webGL) {
-  fig <- plot_ly(tsne.plot[tsne.plot$vector_type == "tweet",], 
-                 x=~if(type=="subclusters_regrouped") {cluster.X} else {X}, 
-                 y=~if(type=="subclusters_regrouped") {cluster.Y} else {Y}, 
-                 z=~if(type=="subclusters_regrouped") {cluster.Z} else {Z},
-                 hoverinfo = "text",
-                 text=~paste(if(type=="clusters") {"Cluster:"} else {"Subcluster:"}, 
-                             if(type=="clusters") {cluster} else {subcluster}, 
-                             "<br>Text:", full_text), 
-                 color=~if(type=="clusters") {cluster.label} else {subcluster.label}, 
-                 colors=colorRamp(brewer.pal(8, "Set2")), 
-                 type=if(mode=="3d") {"scatter3d"} else {"scatter"}, 
-                 mode="markers",
-                 marker=list(size=if(mode=="3d") {3} else {5}),
-                 legendgroup=~if(type=="clusters") {cluster.label} else {subcluster.label})
+run_tsne <- !snapshot_loaded || (plot_mode=="3d" && tsne_dims==2) || (plot_mode=="2d" && tsne_dims==3)
+if (run_tsne) {
+  tsne_dims <- ifelse(plot_mode=="3d", 3, 2)
+  tsne_coords <- c("X","Y")
+  if (tsne_dims == 3) {tsne_coords <- c(tsne_coords, "Z")}
   
-  centers_trace_vector_type <- if (type == "clusters") {"cluster_center"} else {"subcluster_center"}
-  fig <- fig %>% add_trace(data=tsne.plot[tsne.plot$vector_type == centers_trace_vector_type,],
-                           marker=list(size=if(mode=="3d") {6} else {10}, color='rgb(0, 0, 0)'),
-                           legendgroup=~if(type=="clusters") {cluster.label} else {subcluster.label},
-                           showlegend=FALSE)
-
-  if (mode == "3d") {
-    fig <- fig %>% layout(title=title, scene=list(xaxis=list(zeroline=FALSE, title="X"), 
-                                                  yaxis=list(zeroline=FALSE, title="Y"), 
-                                                  zaxis=list(zeroline=FALSE, title="Z")))
-  } else {
-    fig$x$attrs[[1]]$z <- NULL #remove unused z axis
-    fig$x$attrs[[2]]$z <- NULL
-    fig <- fig %>% layout(title=title, xaxis=list(zeroline=FALSE, title="X"), 
-                          yaxis=list(zeroline=FALSE, title="Y"),
-                          legend=list(traceorder="normal"))
+  if (!is.na(tsne_clusters_seed)) {
+     set.seed(tsne_clusters_seed)
   }
-  
-  if (isTRUE(webGL) && mode=="2d") {
-    fig <- fig %>% toWebGL()
-  }
-  
-  return(fig)
+  master.tsne <- Rtsne(tweet.vectors.matrix, dims=tsne_dims, perplexity=tsne_clusters_perplexity, 
+                       max_iter=tsne_clusters_max_iter, check_duplicates=FALSE)
+  master.tsne.plot <- cbind(master.tsne$Y, tweet.vectors.df)
+  colnames(master.tsne.plot)[1:tsne_dims] <- tsne_coords
+  master.tsne.plot$full_text <- sapply(master.tsne.plot$full_text, 
+                                       function(t) paste(strwrap(t ,width=60), collapse="<br>"))
+  master.tsne.plot$cluster.label <- sapply(master.tsne.plot$cluster, function(c) clusters[[c]]$label)
 }
-
-tsne_dims <- ifelse(plot_mode=="3d", 3, 2)
-tsne_coords <- c("X","Y")
-if (tsne_dims == 3) {tsne_coords <- c(tsne_coords, "Z")}
-
-set.seed(700)
-tsne <- Rtsne(tweet.vectors.matrix, dims=tsne_dims, perplexity=25, max_iter=750, check_duplicates=FALSE)
-tsne.plot <- cbind(tsne$Y, tweet.vectors.df)
-colnames(tsne.plot)[1:tsne_dims] <- tsne_coords
-tsne.plot$full_text <- sapply(tsne.plot$full_text, function(t) paste(strwrap(t ,width=60), collapse="<br>"))
-tsne.plot$cluster.label <- sapply(tsne.plot$cluster, function(c) clusters[[c]]$label)
-
 taglist <- htmltools::tagList()
 
 #Master high level plot
 title <- paste("Master Plot:", master.label, "(high level clusters)")
-taglist[[1]] <- plot_tweets(tsne.plot, title=title,
+taglist[[1]] <- plot_tweets(master.tsne.plot, title=title, sentiment_threshold=sentiment_threshold,
                             type="clusters", mode=plot_mode, webGL=TRUE)
 
 #Cluster plots
 plot_index <- 2
 for (i in 1:k) {
-  print(paste("Plotting cluster", i, "..."))
-  cluster.matrix <- tweet.vectors.matrix[tsne.plot$cluster == i,]
-  
-  set.seed(900)
-  cluster.tsne <- Rtsne(cluster.matrix, dims=tsne_dims, perplexity=12, max_iter=500, check_duplicates=FALSE)
-  cluster.tsne.plot <- cbind(cluster.tsne$Y, tsne.plot[tsne.plot$cluster == i,])
-  colnames(cluster.tsne.plot)[1:tsne_dims] <- sapply(tsne_coords, function(c) paste("cluster.", c, sep=""))
-  cluster.tsne.plot$subcluster.label <- sapply(cluster.tsne.plot$subcluster, function(c) clusters[[i]]$subclusters[[c]]$label)
+  if (run_tsne) {
+    cluster.matrix <- tweet.vectors.matrix[master.tsne.plot$cluster == i,]
+    
+    if (!is.na(tsne_subclusters_seed)) {
+      set.seed(tsne_subclusters_seed)
+    }
+    cluster.tsne <- Rtsne(cluster.matrix, dims=tsne_dims, perplexity=tsne_subclusters_perplexity, 
+                          max_iter=tsne_subclusters_max_iter, check_duplicates=FALSE)
+    cluster.tsne.plot <- cbind(cluster.tsne$Y, master.tsne.plot[master.tsne.plot$cluster == i,])
+    colnames(cluster.tsne.plot)[1:tsne_dims] <- sapply(tsne_coords, function(c) paste("cluster.", c, sep=""))
+    cluster.tsne.plot$subcluster.label <- sapply(cluster.tsne.plot$subcluster, 
+                                                 function(c) clusters[[i]]$subclusters[[c]]$label)
+    clusters[[i]]$tsne.plot <- cluster.tsne.plot
+  }
   
   #Cluster plot with original positions
   if (isTRUE(show_original_subcluster_plots)) {
     title <- paste('Cluster ', i, ": ", clusters[[i]]$label, " (as positioned in master plot)")
-    taglist[[plot_index]] <- plot_tweets(cluster.tsne.plot, title=title, 
+    taglist[[plot_index]] <- plot_tweets(clusters[[i]]$tsne.plot, title=title, 
+                                         sentiment_threshold=sentiment_threshold,
                                          type="subclusters_original", mode=plot_mode, webGL=FALSE)
     plot_index <- plot_index + 1
   }
@@ -461,7 +593,8 @@ for (i in 1:k) {
   #Cluster plot with regrouped positions by subcluster
   if (isTRUE(show_regrouped_subcluster_plots)) {
     title <- paste('Cluster', i, ":", clusters[[i]]$label, "(regrouped by subcluster)")
-    taglist[[plot_index]] <- plot_tweets(cluster.tsne.plot, title=title, 
+    taglist[[plot_index]] <- plot_tweets(clusters[[i]]$tsne.plot, title=title, 
+                                         sentiment_threshold=sentiment_threshold,
                                          type="subclusters_regrouped", mode=plot_mode, webGL=FALSE)
     plot_index <- plot_index + 1
   }
@@ -493,6 +626,13 @@ for (i in 1:k) {
   }
 }
 
+```
+
+```{r, echo=FALSE}
+#save snapshot if snapshot mode is 'save'
+if (params$snapshot_mode == "save") {
+  save.image(snapshot_filename)
+}
 ```
 
 \  

@@ -1,0 +1,598 @@
+---
+title: "State COVID-19 Response Effectiveness and Mask Sentiment on Twitter"
+author: "Haniel Campos Alcântara Paulo"
+date: "08/08/2020"
+output: html_document
+bibliography: blog-bibliography.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+# Required R package installation:
+# These will install packages if they are not already installed
+# Set the correct default repository
+r = getOption("repos")
+r["CRAN"] = "http://cran.rstudio.com"
+options(repos = r)
+
+
+if (!require("knitr")) {
+  install.packages("knitr")
+  library(knitr)
+}
+
+if (!require("kableExtra")) {
+  install.packages("kableExtra")
+  library(kableExtra)
+}
+
+if (!require("stringr")) {
+  install.packages("stringr")
+  library(stringr)
+}
+
+if (!require("dplyr")) {
+  install.packages("dplyr")
+  library(dplyr)
+}
+
+if (!require("tidytext")) {
+  install.packages("tidytext")
+  library(tidytext)
+}
+
+if (!require("Rtnse")) {
+  install.packages("Rtsne")
+  library(Rtsne)
+}
+
+if (!require("plotly")) {
+  install.packages("plotly")
+  library(plotly)
+}
+library(plotly)
+
+knitr::opts_chunk$set(echo = TRUE)
+
+source("Elasticsearch.R")
+source("plot_tweet_timeseries.R")
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# query start date/time (inclusive)
+rangestart <- "2020-01-01 00:00:00"
+
+# query end date/time (exclusive)
+rangeend <- "2020-08-01 00:00:00"
+
+# text filter restricts results to only those containing words, phrases, or meeting a boolean condition. This query syntax is very flexible and supports a wide variety of filter scenarios:
+# words: text_filter <- "cdc nih who"  ...contains "cdc" or "nih" or "who"
+# phrase: text_filter <- '"vitamin c"' ...contains exact phrase "vitamin c"
+# boolean condition: <- '(cdc nih who) +"vitamin c"' ...contains ("cdc" or "nih" or "who") and exact phrase "vitamin c"
+#full specification here: https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-simple-query-string-query.html
+text_filter <- ""
+
+# location filter acts like text filter except applied to the location of the tweet instead of its text body.
+
+# if FALSE, location filter considers both user-povided and geotagged locations. If TRUE, only geotagged locations are considered.
+must_have_geo <- FALSE
+
+# query semantic similarity phrase
+semantic_phrase <- ""
+
+# return results in chronological order or as a random sample within the range
+# (ignored if semantic_phrase is not blank)
+random_sample <- TRUE
+# if using random sampling, optionally specify a seed for reproducibility. For no seed, set to NA.
+random_seed <- 420
+# number of results to return (to return all results, set to NA)
+resultsize <- 20000
+# minimum number of results to return. This should be set according to the needs of the analysis (i.e. enough samples for statistical significance)
+min_results <- 1
+```
+
+```{r, cache=TRUE, echo=FALSE, message=FALSE}
+data(stop_words)
+clean_text <- function(text, for_freq=FALSE) {
+  text <- str_replace_all(text, "[\\s]+", " ")
+  text <- str_replace_all(text, "http\\S+", "")
+  if (isTRUE(for_freq)) {
+    text <- tolower(text)
+    text <- str_replace_all(text, "’", "'")
+    text <- str_replace_all(text, "_", "-")
+    text <- str_replace_all(text, "[^a-z1-9 ']", "")
+  } else {
+    text <- str_replace_all(text, "[^a-zA-Z1-9 `~!@#$%^&*()-_=+\\[\\];:'\",./?’]", "")
+  }
+  text <- gsub("[[:digit:]]+", "", text)
+  text <- str_replace_all(text, " +", " ")
+  text <- trimws(text)
+}
+
+interstate.results <- do_search(indexname="coronavirus-data-masks", 
+                                rangestart=rangestart,
+                                rangeend=rangeend,
+                                text_filter=text_filter,
+                                location_filter="",
+                                semantic_phrase=semantic_phrase,
+                                must_have_geo=must_have_geo,
+                                random_sample=random_sample,
+                                random_seed=random_seed,
+                                resultsize=10*resultsize,
+                                resultfields='"created_at", "user.screen_name", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "sentiment.vader.primary"',
+                                elasticsearch_host="lp01.idea.rpi.edu",
+                                elasticsearch_path="elasticsearch",
+                                elasticsearch_port=443,
+                                elasticsearch_schema="https")
+
+interstate.results.df <- interstate.results$df
+interstate.results.df$full_text <- sapply(interstate.results.df$full_text, clean_text)
+interstate.results.df$vector_type <- "tweet"
+
+intersate.words.df <- tibble(tweets = interstate.results.df$full_text) %>% 
+  unnest_tokens(word, tweets) %>% 
+  anti_join(stop_words) %>%
+  dplyr::count(word, sort = TRUE) %>%
+  mutate(prob = n / sum(n))
+```
+
+As the COVID-19 situation continues to develop in the US, Twitter has been one of the main platforms for the population to voice their thoughts and concearns regarding the pandemic.
+Recently, one of the most topics most present in the public conscience and social media has been the usage of facemasks and issued government mandates for the use of such, which have shown to greatly help curbing the spread of coronavirus [@chu2020physical].
+With a small but extremely vocal proportion of the population vigorously refusing to follow CDC guidelines for mask usage, which significantly aids in the spread of coronavirus, I wondered if tweets by voices against masks were less present in states with a good COVID-19 situation and response, with the opposite also possibly being true.
+To find out if this was truly the case, I utilized the tools developed by the RPI COVID-Twitter team to compare tweet discussions and sentiment between New York and Alabama, two states with vastly different COVID-19 situations and responses.
+
+# Comparing Mask Related Tweets in New York and Alabama
+
+When it comes to handling the coronavirus pandemic, New York and Alabama have been two states with almost polar opposite reactions to the outbreak. 
+After becoming the national COVID-19 hotspot, New York instituted a strict lockdown, mask mandates and followed with a gradual, slow reopening of the state economy  [@francescani_2020].
+On the other hand, Alabama had a much less strict approach to statewide mask usage and lockdowns, with a mask mandate only being issued on June 17th [@fiscus_2020].
+Currently, NY is one of the states with coronavirus the most under control, while Alabama's sitation continues to worsen.
+As such, they are prime examples for testing my hypothesis about the presence of anti-mask tweets. 
+In this case, the hypothesis would be supported if Alabama had a significantly higher presence of anti-mask tweets, as well as reactions to local "anti-maskers", compared to New York.
+
+
+```{r, cache=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+location_filter <- 'NY "New York"'
+
+results <- do_search(indexname="coronavirus-data-masks", 
+                     rangestart=rangestart,
+                     rangeend=rangeend,
+                     text_filter=text_filter,
+                     location_filter=location_filter,
+                     semantic_phrase=semantic_phrase,
+                     must_have_geo=must_have_geo,
+                     random_sample=random_sample,
+                     random_seed=random_seed,
+                     resultsize=resultsize,
+                     resultfields='"created_at", "user.screen_name", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "sentiment.vader.primary", "embedding.use_large.primary"',
+                     elasticsearch_host="lp01.idea.rpi.edu",
+                     elasticsearch_path="elasticsearch",
+                     elasticsearch_port=443,
+                     elasticsearch_schema="https")
+
+required_fields <- c("created_at", "user_screen_name", "user_location", "place.full_name", "place.country", "full_text", "sentiment.vader.primary")
+validate_results(results$df, min_results, required_fields)
+
+results.matrix <- t(simplify2array(results$df[,"embedding.use_large.primary"]))
+n.tweets.NY <- dim(results.matrix)[1]
+
+
+#Transform results for sentiment plot
+results.df <- results$df
+results.df$vector_type <- "tweet"
+
+#Transform results for tweet display
+display.df <- results.df
+display.df$user_location <- ifelse(is.na(display.df$place.full_name), display.df$user_location, paste(display.df$place.full_name, display.df$place.country, sep=", "))
+display.df$user_location[is.na(display.df$user_location)] <- ""
+display.df$user_location_type <- ifelse(is.na(display.df$place.full_name), "User", "Place")
+```
+
+```{r, echo=FALSE, message=FALSE}
+############################
+# Get top k keywords for NY
+############################
+keywords.k <- 10
+max_lookahead <- 100
+
+display.df$full_text <- sapply(display.df$full_text, clean_text)
+display.df$created_at <- as.POSIXct(strptime(display.df$created_at, format="%a %b %d %H:%M:%S +0000 %Y", tz="UTC"))
+tweets.tibble.df <- tibble(week = epiweek(display.df$created_at), tweet = display.df$full_text)
+
+words.df <- tweets.tibble.df %>%
+  unnest_tokens(word, tweet) %>% 
+  anti_join(stop_words) %>%
+  dplyr::count(word, sort = TRUE) %>%
+  mutate(prob_state = n / sum(n)) %>% 
+  dplyr::arrange(desc(n))
+
+words.df <- words.df[1:max_lookahead,] %>%
+  inner_join(intersate.words.df, by = "word") %>%
+  mutate(score = prob_state * log(prob_state / prob)) %>%
+  dplyr::arrange(desc(score))
+
+keywords.df <- words.df[1:keywords.k,]
+
+#kable(keywords.df) %>% kable_styling()
+
+keywords.trend.df <- tweets.tibble.df %>%
+  unnest_tokens(word, tweet) %>%
+  inner_join(keywords.df, by = "word") %>%
+  group_by(week) %>%
+  dplyr::count(word, sort=TRUE)
+
+NY.keywords.plot <- ggplot(keywords.trend.df, aes(x = week, y = n, color = word)) + 
+  geom_smooth(se = FALSE) + 
+  ylab("Word Count / Week") + 
+  ggtitle(paste(substr(location_filter, 1, 2),"Weekly Keyword Count")) + 
+  theme(legend.position = "none")
+
+keywords.trend.df <- keywords.trend.df %>%
+  ungroup() %>%
+  group_by(word) %>%
+  mutate(n = n / max(n))
+
+NY.keywords.trend.plot <- ggplot(keywords.trend.df, aes(x = week, y = n, color = word)) + 
+  geom_smooth(se = FALSE) + 
+  xlab("CDC Epidemiological Week") + 
+  ylab("Normalized Word Count / Week") + 
+  ggtitle(paste("Trends for", substr(location_filter, 1, 2),"Keywords"))
+```
+
+```{r, echo=FALSE}
+k <- 12
+
+set.seed(300)
+km <- kmeans(results.matrix, centers=k)
+
+display.df$vector_type <- factor("tweet", levels=c("tweet", "cluster_center"))
+display.df$cluster <- as.factor(km$cluster)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+get_label <- function(full_text, corpus_text, top_k=3, max_lookahead=100) {
+  words.df <- tibble(tweet = full_text)
+  corpus.df <- tibble(tweets = corpus_text) %>% 
+    unnest_tokens(word, tweets) %>% 
+    anti_join(stop_words) %>%
+    dplyr::count(word, sort = TRUE) %>%
+    mutate(prob = n / sum(n))
+  words.df <- words.df %>%
+    unnest_tokens(word, tweet) %>% 
+    anti_join(stop_words) %>%
+    dplyr::count(word, sort = TRUE) %>%
+    mutate(prob_state = n / sum(n)) 
+  words.df <- words.df[1:max_lookahead,] %>%
+    inner_join(corpus.df, by = "word") %>%
+    mutate(score = prob_state * log(prob_state / prob)) %>%
+    dplyr::arrange(desc(score))
+  label <- paste((words.df[1:top_k,])$word, collapse=" / ")
+}
+
+NY.master.label <- get_label(display.df$full_text, display.df$full_text, top_k=6)
+
+NY.clusters <- list()
+for (i in 1:k) {
+  cluster.df <- display.df[display.df$cluster == i,]
+  cluster.matrix <- results.matrix[display.df$cluster == i,]
+  cluster.label <- get_label(cluster.df$full_text, display.df$full_text)
+  cluster.center <- cluster.matrix[cluster.df$vector_type=="cluster_center",]
+  
+  
+  NY.clusters[[i]] <- list(label=cluster.label)
+}
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, cache=TRUE}
+###############################################################################
+# Run T-SNE on all the tweets and then plot sentiment time series for clusters
+###############################################################################
+
+set.seed(700)
+tsne <- Rtsne(results.matrix, dims=2, perplexity=25, max_iter=750, check_duplicates=FALSE)
+tsne.plot <- cbind(tsne$Y, display.df)
+colnames(tsne.plot)[1:2] <- c("X", "Y")
+tsne.plot$full_text <- sapply(tsne.plot$full_text, function(t) paste(strwrap(t ,width=60), collapse="<br>"))
+tsne.plot$cluster.label <- sapply(tsne.plot$cluster, function(c) NY.clusters[[c]]$label)
+
+NY.cluster.sentiment.plots <- list()
+
+#Master high level plot
+fig.master <- plot_ly(tsne.plot, x=~X, y=~Y,
+                      text=~paste("Cluster:", cluster,"<br>Text:", full_text),
+                      color=~cluster.label, type="scatter", mode="markers")
+fig.master <- fig.master %>% layout(title=paste("New York Tweet Clusters"),
+                                    yaxis=list(zeroline=FALSE),
+                                    xaxis=list(zeroline=FALSE))
+NY.fig.master <- fig.master %>% toWebGL()
+
+NY.results.df <- results.df
+NY.display.df <- display.df 
+
+#Cluster sentiment plots
+for (i in 1:k) {
+  fig <- plot_tweet_timeseries(NY.results.df[NY.display.df$cluster == i,], sentiment.col = "sentiment.vader.primary", title = paste("New York Cluster",i,"Tweets by Week (", NY.clusters[[i]]$label,")"))
+  NY.cluster.sentiment.plots[[i]] <- fig
+}
+```
+
+```{r, echo=FALSE, cache=FALSE, warning=FALSE, message=FALSE}
+location_filter <- 'AL "Alabama"'
+resultsize <- 20000
+
+results <- do_search(indexname="coronavirus-data-masks", 
+                     rangestart=rangestart,
+                     rangeend=rangeend,
+                     text_filter=text_filter,
+                     location_filter=location_filter,
+                     semantic_phrase=semantic_phrase,
+                     must_have_geo=must_have_geo,
+                     random_sample=random_sample,
+                     random_seed=random_seed,
+                     resultsize=resultsize,
+                     resultfields='"created_at", "user.screen_name", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "sentiment.vader.primary", "embedding.use_large.primary"',
+                     elasticsearch_host="lp01.idea.rpi.edu",
+                     elasticsearch_path="elasticsearch",
+                     elasticsearch_port=443,
+                     elasticsearch_schema="https")
+
+required_fields <- c("created_at", "user_screen_name", "user_location", "place.full_name", "place.country", "full_text", "sentiment.vader.primary")
+validate_results(results$df, min_results, required_fields)
+
+results.matrix <- t(simplify2array(results$df[,"embedding.use_large.primary"]))
+n.tweets.AL <- dim(results.matrix)[1]
+
+
+#Transform results for sentiment plot
+results.df <- results$df
+results.df$vector_type <- "tweet"
+
+#Transform results for tweet display
+display.df <- results.df
+display.df$user_location <- ifelse(is.na(display.df$place.full_name), display.df$user_location, paste(display.df$place.full_name, display.df$place.country, sep=", "))
+display.df$user_location[is.na(display.df$user_location)] <- ""
+display.df$user_location_type <- ifelse(is.na(display.df$place.full_name), "User", "Place")
+
+#show sentiment plots
+#plot_tweet_timeseries(results.df, group.by="week", sentiment.col = "sentiment.vader.primary", title = paste(substr(location_filter, 1, 2), "Tweets by Week"))
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+######################
+# Get top k keywords
+######################
+keywords.k <- 10
+max_lookahead <- 100
+
+display.df$full_text <- sapply(display.df$full_text, clean_text)
+display.df$created_at <- as.POSIXct(strptime(display.df$created_at, format="%a %b %d %H:%M:%S +0000 %Y", tz="UTC"))
+tweets.tibble.df <- tibble(week = epiweek(display.df$created_at), tweet = display.df$full_text)
+
+words.df <- tweets.tibble.df %>%
+  unnest_tokens(word, tweet) %>% 
+  anti_join(stop_words) %>%
+  dplyr::count(word, sort = TRUE) %>%
+  mutate(prob_state = n / sum(n)) %>% 
+  dplyr::arrange(desc(n))
+
+words.df <- words.df[1:max_lookahead,] %>%
+  inner_join(intersate.words.df, by = "word") %>%
+  mutate(score = prob_state * log(prob_state / prob)) %>%
+  dplyr::arrange(desc(score))
+
+keywords.df <- words.df[1:keywords.k,]
+
+#kable(keywords.df) %>% kable_styling()
+
+keywords.trend.df <- tweets.tibble.df %>%
+  unnest_tokens(word, tweet) %>%
+  inner_join(keywords.df, by = "word") %>%
+  group_by(week) %>%
+  dplyr::count(word, sort=TRUE)
+
+AL.keywords.plot <- ggplot(keywords.trend.df, aes(x = week, y = n, color = word)) + 
+  geom_smooth(se = FALSE) + 
+  ylab("Word Count / Week") + 
+  ggtitle(paste(substr(location_filter, 1, 2),"Weekly Keyword Count")) + 
+  theme(legend.position = "none")
+
+keywords.trend.df <- keywords.trend.df %>%
+  ungroup() %>%
+  group_by(word) %>%
+  mutate(n = n / max(n))
+
+AL.keywords.trend.plot <- ggplot(keywords.trend.df, aes(x = week, y = n, color = word)) + 
+  geom_smooth(se = FALSE) + xlab("CDC Epidemiological Week") + 
+  ylab("Normalized Word Count / Week") + 
+  ggtitle(paste("Trends for", substr(location_filter, 1, 2),"Keywords"))
+```
+
+```{r, eval=TRUE, cache=TRUE, echo=FALSE}
+# wssplot <- function(data, fc=1, nc=30, seed=20){
+#   wss <- data.frame(k=fc:nc, withinss=c(0))
+#   for (i in fc:nc){
+#     set.seed(seed)
+#     wss[i-fc+1,2] <- sum(kmeans(data, centers=i, iter.max=30)$withinss)}
+#   
+#   ggplot(data=wss,aes(x=k,y=withinss)) +
+#     geom_line() +
+#     ggtitle("Quality (within sums of squares) of k-means by choice of k")
+# }
+# wssplot(results.matrix)
+```
+
+```{r, echo=FALSE, message=FALSE}
+k <- 12
+
+set.seed(300)
+km <- kmeans(results.matrix, centers=k)
+
+display.df$vector_type <- factor("tweet", levels=c("tweet", "cluster_center"))
+display.df$cluster <- as.factor(km$cluster)
+
+#append cluster centers to dataset for visualization
+# centers.df <- data.frame(full_text=paste("Cluster (", rownames(km$centers), ") Center", sep=""),
+#                          user_screen_name="[N/A]",
+#                          user_location="[N/A]",
+#                          user_location_type = "[N/A]",
+#                          created_at = "[N/A]",
+#                          vector_type = "cluster_center",
+#                          cluster=as.factor(rownames(km$centers)),
+#                          sentiment.vader.primary=NA)
+# 
+# display.df <- rbind(display.df, centers.df)
+# results.matrix <- rbind(results.matrix, km$centers)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+AL.master.label <- get_label(display.df$full_text, display.df$full_text, top_k=6)
+
+AL.clusters <- list()
+for (i in 1:k) {
+  cluster.df <- display.df[display.df$cluster == i,]
+  cluster.matrix <- results.matrix[display.df$cluster == i,]
+  cluster.label <- get_label(cluster.df$full_text, display.df$full_text)
+  cluster.center <- cluster.matrix[cluster.df$vector_type=="cluster_center",]
+  
+  
+  AL.clusters[[i]] <- list(label=cluster.label)
+}
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, cache=FALSE}
+###############################################################################
+# Run T-SNE on all the tweets and then plot sentiment time series for clusters
+###############################################################################
+
+set.seed(700)
+tsne <- Rtsne(results.matrix, dims=2, perplexity=25, max_iter=750, check_duplicates=FALSE)
+tsne.plot <- cbind(tsne$Y, display.df)
+colnames(tsne.plot)[1:2] <- c("X", "Y")
+tsne.plot$full_text <- sapply(tsne.plot$full_text, function(t) paste(strwrap(t ,width=60), collapse="<br>"))
+tsne.plot$cluster.label <- sapply(tsne.plot$cluster, function(c) AL.clusters[[c]]$label)
+
+AL.cluster.sentiment.plots <- list()
+
+#Master high level plot
+fig.master <- plot_ly(tsne.plot, x=~X, y=~Y,
+                      text=~paste("Cluster:", cluster,"<br>Text:", full_text),
+                      color=~cluster.label, type="scatter", mode="markers")
+fig.master <- fig.master %>% layout(title=paste("Alabama Tweet Clusters"),
+                                    yaxis=list(zeroline=FALSE),
+                                    xaxis=list(zeroline=FALSE))
+AL.fig.master <- fig.master %>% toWebGL()
+AL.results.df <- results.df
+AL.display.df <- display.df
+
+#Cluster sentiment plots
+for (i in 1:k) {
+  fig <- plot_tweet_timeseries(AL.results.df[AL.display.df$cluster == i,], sentiment.col = "sentiment.vader.primary", title = paste("Alabama Cluster",i,"Tweets by Week (", AL.clusters[[i]]$label,")"))
+  AL.cluster.sentiment.plots[[i]] <- fig
+}
+```
+
+## State Level Keyword Frequencies
+
+In order to identify specific keywords associated with New York and Alabama tweets, I used the tools developed by the COVD-Twitter team to get two samples of `r n.tweets.NY` and `r n.tweets.AL` tweets respectively located in New York and Alabama from a dataset of tweets related to facemasks and coronavirus, along with a larger 200,000 tweet nationwide sample from the same dataset.
+Keywords are words which appear often in a statewide sample but comparatively less so in the nationwide sample, therefore possibly being reflective of some specific local discussion.
+The plots below shows the trends for both NY and AL keywords.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, size="large"}
+ggarrange(NY.keywords.plot, NY.keywords.trend.plot, AL.keywords.plot, AL.keywords.trend.plot, nrow = 2, bottom = "Plots showing keyword frequencies on a weekly basis. Normalized counts are achieved by dividing weekly counts by the maximum count over all weeks.")
+```
+
+The most frequent keyword in New York tweets is "lockdown", which is not surprising, as New York State and New York City had one of the toughest lockdowns in the country that greatly impacted day to day life.
+On the other hand, the most frequent keyword in Alabama is "mask", suggesting the discussion around mask usage takes precedence before most matters and certainly over government lockdown measures.
+
+## Clustering Tweets and Cluster Sentiment Analysis & Topics
+
+The COVID-Twitter team every tweet in the dataset into a real vector using Google's Universal Sentence Encoder algorithm, which allowed for the team to cluster tweets so that tweets about similar topics are clustered together.
+For both states, I grouped the sampleled tweets into 12 clusters and obtained the tweet sentiment scores for each cluster using the COVID-Twitter implementation of the VADER algorithm, which assigns each tweet a sentiment score between -1 and 1, with -1 being very negative, 0 being neutral and 1 being very positive.
+
+The table below shows my manual attempt at summarizing the trends and themes present in each cluster, with the subsequent plots showing a weekly breakdown of tweet counts, sentiment and divisiveness for some clusters I found to be particularly interesting.
+The divisiveness score indicates how sentiment is distributed, with values greater than 0 indicating polarized discussions and values lesser than 0 indicating consensus of sentiment.
+Additionally, the cluster keywords are also shown, this time using the cluster as a whole as reference instead of national level tweets.
+
+```{r, echo=FALSE, warning=FALSE}
+NY.cluster.descriptions = c(
+  "- Discussion around N95 shortage.",
+  "- People calling for others to wear a mask and social distance by citing the worsening situation and how it could help stop the virus. Critical of those who don't wear masks.",
+  "- Questions and advice on how to wear masks. People positively commenting on their experiences getting and wearing custom masks.",
+  "- People urging others to wear masks citing why it's better for them and others.",
+  "- People calling for others to wear masks. Argumentative and humorous.",
+  "- People Commenting about their quarantine routine/activities.",
+  "- People giving advice on wearing masks, washing hands and other ways to avoid COVID.",
+  "- Criticism of nationwide COVID policy. Complaints about public figures being incompetent or not setting a good example.",
+  "- News reports and very negative commentary centered around Trump, Pence and other government figures.",
+  "- People arguing that coronavirus isn't real or that masks don't do anything.\nLots of people arguing in reaction to anti-maskers.",
+  "- People complaining about people refusing to wear masks. Some people complaining about masks.",
+  "- People commenting on the efficacy of masks in curbing the virus in NY. Critical of government officials."
+)
+
+AL.cluster.descriptions = c(
+  "- Doctors commenting on their routine during the pandemic. People complaining about and refusing to wear masks.",
+  "- People calling for others to social distance and wear masks.",
+  "- People positioning themselves against mask usage. People criticizing those who don't weak masks.",
+  "- People denying the existence or severity of the virus. People doubting the effectiveness of masks.",
+  "- People commenting on people purposefully not wearing a mask or social distancing. Urging others to wear a mask.",
+  "- People saying not wearing a mask is fine and that the pandemic numbers are inflated. People complaining about others not wearing masks.",
+  "- People commenting on the growth of cases and deaths in Alabama.",
+  "- People doubting the effectiveness of masks, especially N95s. People commenting on a shortage of N95 masks.",
+  "- Reports and comments on mask mandates and requirements.",
+  "- Political discussion based on coronavirus. Leans on the conservative side and many comments about Trump.",
+  "- People urging others to wear masks and follow CDC guidelines.",
+  "- People complaining about feeling uncomfortable wearing masks. People refusing to wear masks."
+)
+
+ cluster.descriptions.df <- data.frame(NY = NY.cluster.descriptions, AL = AL.cluster.descriptions)
+ colnames(cluster.descriptions.df) <- c("New York", "Alabama")
+ row.names(cluster.descriptions.df) <- paste("Cluster",c(1:k))
+ kable(cluster.descriptions.df) %>% kable_styling()
+ 
+NY.cluster.sentiment.plots[[11]]
+AL.cluster.sentiment.plots[[2]]
+NY.cluster.sentiment.plots[[5]]
+AL.cluster.sentiment.plots[[11]]
+NY.cluster.sentiment.plots[[10]]
+AL.cluster.sentiment.plots[[8]]
+NY.cluster.sentiment.plots[[6]]
+AL.cluster.sentiment.plots[[6]]
+NY.cluster.sentiment.plots[[7]]
+AL.cluster.sentiment.plots[[4]]
+NY.cluster.sentiment.plots[[9]]
+AL.cluster.sentiment.plots[[10]]
+```
+
+As it can be observed, Alabama has a comparatively much higher number of clusters consisting of individuals who refuse to wear or doubt the effectiveness of masks, while New York contains many more clusters where tweets call for the usage of masks.
+The sentiment profile amongst clusters of people urging for others to wear a mask is also noticibly different between the two states, with New York being significantly negative, suggesting a more angry and confrontational approach against those who don't wear masks, and Alabama being largely positive, indicating a more passive approach.
+
+Furthermore, New York also contains positive sentiment clusters consisting of people sharing their quarantine activities and giving advice on masks and social distancing and therefore indicating a more compliant adherence to state mandates, something which is absent in Alabama.
+Politically, New York tweets tend to be negative, have low divisiveness and be extremely critical of government officials for downplaying the virus or not following CDC guidelines, with a special special focus on Donald Trump and Mike Pence.
+Meanwhile, political Alabama tweets show much higher levels of divisiveness and tends to be more conservative, not necessarily being pro Trump but often being against Democratic Party figures.
+
+Lastly, amongst those Alabama tweets refusing to wear masks and who didn't believe coronavirus was a hoax, the most common justifications for their positions were that masks weren't 100% protective, coronavirus particles were too small to be filtered and that infection could happen through the eyes.
+Most of the response tweets in the same topic mentioned how surgical facemasks, although not completely virus proof, greatly lowered the infection rate but seldom addressed the easily rectifiable claim that N95s are ineffective [@balazy2006n95].
+
+# Final Thoughts
+
+From my analysis of New York and Alabama tweets, I found with a good degree of confidence that anti-mask sentiment is present to a greatly larger degree in the latter, which has had a much worse COVID-19 response and is currently struggling to get it under control, therefore supporting my original hypothesis.
+Notable differences in sentiment profiles between tweets calling for mask usage and criticizing government figures also suggest that New Yorkers have taken a more proactive attitude on Twitter, choosing to call out those who go against CDC guidelines, while Alabamians have chosen a more passive approach which in turn leaves room for anti-mask reactionary opinions to proliferate.
+
+To draw a more definite conclusion on Twitter anti-mask sentiment and COVID-19 development, I would to perform a more comprehensive analysis in the future with a more tweets and states.
+However, my results from this analysis support the hypothesis that on one hand, states with a good COVID-19 response have a lower amount of Tweitter anti-mask sentiment and more opposition to such, and possibly on the other, states with a bad COVID-19 response have greater levels of anti-mask sentiment with less opposition.
+
+## Acknowledgements
+
+Making this analysis would be next to impossible without the backend infrastructure built by [Abraham Sanders](https://github.com/AbrahamSanders) and all the work done by my fellow teammembers in COVID-Twitter, to which distinct recognition must be given.
+
+## Appendix
+
+The plots for the New York and Alabama clustered tweets are given below for the sake of transparency, since the cluster interpretations were performed manually.
+
+```{r, echo=FALSE, warning=FALSE}
+NY.fig.master
+
+AL.fig.master
+```
+
+# References
