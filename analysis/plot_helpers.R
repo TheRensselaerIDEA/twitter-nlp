@@ -156,7 +156,7 @@ plot_tweets <- function(tsne.plot, title, sentiment_threshold, type, mode, webGL
 # Generate bar plot showing discrete sentiment over time
 # from a collection of tweets
 ################################################################
-discrete_sentiment_barplot <- function(tweet.vectors.df, graph_shape, sentiment_threshold) {
+discrete_sentiment_lines <- function(tweet.vectors.df, sentiment_threshold) {
   # throw out cluster and subcluster centers
   tweets.df <- tweet.vectors.df[tweet.vectors.df$vector_type == "tweet",]
   # test to see if sentiment is available
@@ -169,16 +169,16 @@ discrete_sentiment_barplot <- function(tweet.vectors.df, graph_shape, sentiment_
   tweets.df$week <- epiweek(tweets.df$created_at)  # CDC epidemiological week
   
   # create the data frame which will be used for the bar plot
-  num_two_weeks <- max(as.integer(tweets.df$week / 2))
+  num_weeks <- max(as.integer(tweets.df$week))
   # num_two_weeks <- tweets.df$created_at %>% week() / 2 %>% max(as.integer())
-  summary.df <- data.frame(two_week = rep(c(1:num_two_weeks), each=3), sentiment = factor(rep(c("positive", "neutral", "negative"), num_two_weeks), levels = c("negative", "neutral", "positive"), ordered=TRUE), count = 0, binned_date = ymd("2019-12-22"))
-  summary.df$binned_date <- summary.df$binned_date + (14 * summary.df$two_week)
+  summary.df <- data.frame(weeks = rep(c(1:num_weeks), each=3), sentiment = factor(rep(c("positive", "neutral", "negative"), num_weeks), levels = c("negative", "neutral", "positive"), ordered=TRUE), count = 0, binned_date = ymd("2019-12-29"))
+  summary.df$binned_date <- summary.df$binned_date + (7 * summary.df$weeks)
   
   # because summarize() brings about mysterious errors
   # take counts and mean of sentiment
   for (i in 1:length(tweets.df$week)) {
     # temporary hack / TODO
-    j <- as.integer(tweets.df[i,]$week / 2)
+    j <- as.integer(tweets.df[i,]$week)
     
     if (tweets.df[i,]$sentiment >= sentiment_threshold) {
       summary.df[3*j-2,]$count = summary.df[3*j-2,]$count + 1
@@ -189,17 +189,22 @@ discrete_sentiment_barplot <- function(tweet.vectors.df, graph_shape, sentiment_
     }
   }
   
+  # remove empty rows
+  summary.df <- summary.df %>% subset(count != 0)
+  
   # colors  source: Color Brewer 2.0
   colors <- c("positive" = "#91BFDB", "neutral" = "#FFFFBF", "negative" = "#FC8D59") # colorblind friendly
   
   # bar plot showing sentiment over time
-  ggplot(summary.df, aes(x = binned_date, y = count, fill=sentiment)) + 
-    geom_bar(stat = "identity", color = "azure3", position = graph_shape, width=11) + 
+  ggplot(summary.df, aes(x = binned_date, y = count, group=sentiment, color=sentiment)) + 
+    #geom_bar(stat = "identity", color = "azure3", position = graph_shape, width=11) +
+    geom_line(width = 3) + geom_point(size=5) +
     scale_color_manual(values = colors, aesthetics = c("colour", "fill")) +
+    #coord_cartesian(xlim = c(ymd(substring(rangestart,1,10)), ymd(substring(rangeend,1,10)))) + #breaks right now
     #coord_cartesian(xlim = c(ymd("2020-03-08"), ymd("2020-08-01"))) +
-    ggtitle("Tweet Counts by Sentiment", subtitle = "Tweets binned into two week periods") + 
+    ggtitle("Tweet Counts by Sentiment", subtitle = "Tweets binned into one week periods") + 
     ylab("Tweet Count") +
-    theme(axis.title.x = element_blank(), panel.background = element_rect(fill = "#33352C", colour = "#EFF0F0"))
+    theme(axis.title.x = element_blank(), panel.background = element_rect(fill = "#CAD0C8", colour = "black"))
 }
 
 ################################################################
@@ -207,7 +212,7 @@ discrete_sentiment_barplot <- function(tweet.vectors.df, graph_shape, sentiment_
 # from a collection of tweets. The continuous sentiment score
 # is converted to discrete sentiment classes using a threshold.
 ################################################################
-continuous_sentiment_barplot <- function(tweet.vectors.df, graph_shape, sentiment_threshold) {
+continuous_sentiment_barplot <- function(tweet.vectors.df, sentiment_threshold) {
   # filter out centers from the dataframe
   tweets.df <- tweet.vectors.df[tweet.vectors.df$vector_type == "tweet",]
   # test to see if sentiment is available
@@ -248,17 +253,21 @@ continuous_sentiment_barplot <- function(tweet.vectors.df, graph_shape, sentimen
     }
   }
   
+  # remove empty rows
+  summary.df <- summary.df %>% subset(count != 0)
+  
   # colors  source: Color Brewer 2.0
   colors <- c("positive" = "#91BFDB", "neutral" = "#FFFFBF", "negative" = "#FC8D59") # colorblind friendly
   
   # bar plot showing sentiment over time
   ggplot(summary.df, aes(x = binned_date, y = sentiment_mean, fill=sentiment)) + 
-    geom_bar(stat = "identity", color = "azure3", position = graph_shape) + 
+    geom_bar(stat = "identity", color = "azure3") +
+    geom_line(y = sentiment_threshold, color="black") + geom_line(y = -sentiment_threshold, color="black") +
     scale_color_manual(values = colors, aesthetics = c("colour", "fill")) +
     #coord_cartesian(xlim = c(ymd("2020-03-08"), ymd("2020-08-01"))) +
     ggtitle("Sentiment over Time", subtitle = "Tweets binned in one week intervals") + 
-    ylab("Tweet Count") +
-    theme(axis.title.x = element_blank(), panel.background = element_rect(fill = "#33352C", colour = "#EFF0F0"))
+    ylab("Mean Sentiment") +
+    theme(axis.title.x = element_blank(), panel.background = element_rect(fill = "#CAD0C8", colour = "#EFF0F0"))
   
 }
 
@@ -315,3 +324,66 @@ cluster_sentiments_plots <- function(tweet.vectors.df, k) {
     theme(axis.title.x = element_blank()) +
     facet_wrap(~ cluster, ncol = 3)
 }
+
+################################################################
+# Generate line graph showing each sentiment class for each
+# cluster, over time
+################################################################
+cluster_discrete_sentiments <- function(tweet.vectors.df, sentiment_threshold, k) {
+  # throw out cluster and subcluster centers
+  tweets.df <- tweet.vectors.df[tweet.vectors.df$vector_type == "tweet",]
+  # test to see if sentiment is available
+  tweets.df <- tweets.df[!is.na(tweets.df$sentiment),]
+  if (nrow(tweets.df) == 0) {
+    return ("Cannot generate discrete sentiment plot - sentiment scores are not available in the sample.")
+  }
+  
+  tweets.df$created_at <- as.POSIXct(strptime(tweets.df$created_at, format="%a %b %d %H:%M:%S +0000 %Y", tz="UTC"))
+  tweets.df$week <- epiweek(tweets.df$created_at)  # CDC epidemiological week
+  
+  # create the data frame which will be used for the bar plot
+  num_weeks <- max(as.integer(tweets.df$week))
+  
+  # define titles of clusters
+  titles <- rep("Cluster", k)
+  titles <- titles %>% paste(c(1:k))
+  titles <- factor(titles, levels = titles, ordered = TRUE)
+  
+  # create the data frame which will be used for the bar plot
+  summary.df <- data.frame(week = rep(c(1:num_weeks), each=3, k), sentiment = factor(rep(c("positive", "neutral", "negative"), num_weeks * k), levels = c("negative", "neutral", "positive"), ordered=TRUE), cluster = rep(titles, each=3 * num_weeks), count = 0, binned_date = ymd("2019-12-29"))
+  summary.df$binned_date <- summary.df$binned_date + (7 * summary.df$week)
+  
+  for (i in 1:length(tweets.df$week)) {
+    wk <- tweets.df[i,]$week
+    cl <- tweets.df[i,]$cluster
+    # temporary hack
+    j <- 3 * (cl - 1) * num_weeks + 3 * wk
+    
+    if (tweets.df[i,]$sentiment >= sentiment_threshold) {
+      summary.df[j-2,]$count = summary.df[j-2,]$count + 1
+    } else if (tweets.df[i,]$sentiment <= - sentiment_threshold) {
+      summary.df[j,]$count = summary.df[j,]$count + 1
+    } else {
+      summary.df[j-1,]$count = summary.df[j-1,]$count + 1
+    }
+  }
+  
+  # remove empty rows
+  summary.df <- summary.df %>% subset(summary.df$count != 0)
+  
+  # colors  source: Color Brewer 2.0
+  colors <- c("positive" = "#91BFDB", "neutral" = "#FFFFBF", "negative" = "#FC8D59") # colorblind friendly
+  
+  # bar plot showing sentiment over time
+  ggplot(summary.df, aes(x = binned_date, y = count, group=sentiment, color=sentiment)) + 
+    #geom_bar(stat = "identity", color = "azure3", position = graph_shape, width=11) +
+    geom_line() + geom_point() +
+    scale_color_manual(values = colors, aesthetics = c("colour", "fill")) +
+    #coord_cartesian(xlim = c(ymd(substring(rangestart,1,10)), ymd(substring(rangeend,1,10)))) + #breaks right now
+    #coord_cartesian(xlim = c(ymd("2020-03-08"), ymd("2020-08-01"))) +
+    ggtitle("Tweet Counts by Sentiment", subtitle = "Tweets binned into one week periods") + 
+    ylab("Tweet Count") +
+    theme(axis.title.x = element_blank(), panel.background = element_rect(fill = "#CAD0C8", colour = "black")) +
+    facet_wrap(~ cluster, ncol = 3)
+}
+
