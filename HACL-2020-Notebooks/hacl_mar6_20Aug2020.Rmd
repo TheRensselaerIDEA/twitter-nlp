@@ -1,0 +1,85 @@
+---
+title: "HACL Project Status Notebook"
+author: "Rufeng Ma"
+date: "20 August 2020"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+subtitle: "COVID Twitter"
+---
+
+## Weekly Work Summary	
+
+**NOTE:** Follow an outline format; use bullets to express individual points. 
+
+* RCS ID: mar6
+* Project Name: COVID-Twitter
+* Summary of work since last week 
+
+  I was working:
+  1. Fix bugs when run selihouette score function on large datasets.
+  2. Tried to show animation on clusters.
+  3. Start working on the paper and cluster interpretation.
+
+    
+* Summary of github commits 
+All unmature codes are here: https://github.com/rufengma/DataAnalyticsResearch
+    
+* List of presentations,  papers, or other outputs
+
+AMIA-2021-Paper :https://www.overleaf.com/project/5f3552f5eb30ee00018ef138
+
+* List of references (if necessary) 
+
+    * Plot_ly: https://plotly.com/ggplot2/animations/
+    
+    * flexdashboard(tabset):https://rmarkdown.rstudio.com/flexdashboard/using.html
+    
+    * grid arrange: https://cran.r-project.org/web/packages/gridExtra/vignettes/arrangeGrob.html
+        
+    * Silhouette Score: https://towardsdatascience.com/silhouette-coefficient-validating-clustering-techniques-e976bb81d10c
+
+
+* Indicate any use of group shared code base
+
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/tree/master/analysis/Elasticsearch.R
+    
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/tree/master/analysis/flexdashboardsearch.R
+    
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/tree/master/analysis/twitter.Rmd
+    
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/tree/master/analysis/covid-twitter-hacl-template.Rmd
+
+* Indicate which parts of your described work were done by you or as part of joint efforts <p>
+     The silhoutte score method to find K. is optional in the twitter.Rmd file<p>
+     They are all listed in my github where I have a directory contains all unmature code for this project. https://github.com/rufengma/DataAnalyticsResearch <p>
+
+## Personal Contribution	
+
+The code I contribute to the project are listed here:
+
+https://github.com/rufengma/DataAnalyticsResearch <p>
+https://github.com/TheRensselaerIDEA/COVID-Twitter/tree/master/analysis/twitter.Rmd
+
+* Automatically finding an optimal K is meaningful because we do not want a human interruption. 
+
+* Understanding the clusters meaning is the first step to settle down where we will go when we are righting the paper.
+
+## Discussion of Primary Findings 	
+
+* Discuss primary findings: <p>
+Trump cluster is confirmed.
+I also found the lockdown/social/distancing, spread/stop/stay clusters are super interesting.
+
+* What did you find?<p>
+We went into each subcluster to see what people are talking about in those specific clusters.
+Then we bring our findings to the group meeting to decide which one is in our papers' main contents, which ones goes to the supplementary materials.
+
+	
+* **Required:** Provide illustrating figures and/or tables
+
+Table include the summary of all the subclusters.
+https://docs.google.com/document/d/1snZOZzUN-6askycFsPAR7LXkAlFyvpaLI1sZ_oJyR0Q/edit#
+It is still going.
