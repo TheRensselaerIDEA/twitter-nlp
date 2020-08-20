@@ -16,7 +16,7 @@ params:
   # in save mode, this field may be provided or left blank. If provided, the snapshot will be saved
   # using the given name and overwrite it if it already exists. If blank, the snapshot will be saved
   # using a timestamp as the name.
-  snapshot_name: ""
+  snapshot_name: "none"
   # name of the directory in which snapshots are located.
   snapshot_path: "/data/COVID-Twitter/analysis/snapshots"
 ---
@@ -79,7 +79,7 @@ if (params$snapshot_mode == "load") {
 if (!snapshot_loaded) {
   # Set server resource locations here:
   elasticsearch_index <- "coronavirus-data-masks"
-  elasticsearch_host <- "lp01.idea.rpi.edu"
+  elasticsearch_host <- ""
   elasticsearch_path <- "elasticsearch"
   elasticsearch_port <- 443
   elasticsearch_schema <- "https"
