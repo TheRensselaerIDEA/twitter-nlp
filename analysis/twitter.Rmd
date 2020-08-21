@@ -241,13 +241,12 @@ show_center_nn <- FALSE
 # visualize sentiment and divisiveness
 show_overall_sentiment_discrete <- TRUE
 show_overall_sentiment_continuous <- TRUE
-show_cluster_sentiment <- TRUE
+show_cluster_sentiment_continuous <- TRUE
+show_cluster_sentiment_discrete <- TRUE
 # threshold that represents the cutoff from neutral to positive above zero
 # and neutral to negative below zero. Used to turn sentiment into a variable with discrete values
 sentiment_threshold <- 0.05 # 0.05 recommended for VADER sentiment
 
-# plot type for sentiment graphs
-sentiment_graph_shape <- "dodge" # "dodge" for grouped, "stack" for stacked
 ```
 
 ```{r, echo=FALSE}
@@ -502,9 +501,9 @@ if (!exists("summaries.df") && isTRUE(summarize_clusters)) {
 # Run a plot showing discretized sentiment over time, for the entire sample
 ###############################################################################
 
-# overall sentiment plot, grouped barplot
+# overall sentiment plot, line plot
 if (isTRUE(show_overall_sentiment_discrete)) {
-  discrete_sentiment_barplot(tweet.vectors.df, sentiment_graph_shape, sentiment_threshold)
+  discrete_sentiment_lines(tweet.vectors.df, sentiment_threshold)
 }
 
 ```
@@ -516,7 +515,7 @@ if (isTRUE(show_overall_sentiment_discrete)) {
 
 # overall sentiment plot, continuous
 if (isTRUE(show_overall_sentiment_continuous)) {
-  continuous_sentiment_barplot(tweet.vectors.df, sentiment_graph_shape, sentiment_threshold)
+  continuous_sentiment_barplot(tweet.vectors.df, sentiment_threshold)
 }
 ```
 
@@ -526,11 +525,17 @@ if (isTRUE(show_overall_sentiment_continuous)) {
 # Compare sentiment between high-level clusters
 ###############################################################################
 
-# high-level cluster sentiment plots
-if (isTRUE(show_cluster_sentiment)) {
+# high-level cluster sentiment plots, color gradient
+if (isTRUE(show_cluster_sentiment_continuous)) {
   cluster_sentiments_plots(tweet.vectors.df, k)
 }
+```
 
+```{r, echo=FALSE, fig.width=10, fig.height=10}
+# high-level cluster sentiment, discrete count
+if (isTRUE(show_cluster_sentiment_discrete)) {
+  cluster_discrete_sentiments(tweet.vectors.df, sentiment_threshold, k)
+}
 ```
 
 ```{r, echo=FALSE}
