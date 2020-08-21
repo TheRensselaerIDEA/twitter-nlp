@@ -73,6 +73,9 @@ divisiveness_score <- function(x) {
   # ---
   ########################################################################################
   n <- length(x)
+  x[x < -0.05] <- -1
+  x[x > 0.05] <- 1
+  x[x > -0.05 & x < 0.05] <- 0
   if (n > 3) {
     skew.mean <- moments::skewness(x) 
     kurt.mean <- moments::kurtosis(x)
@@ -256,7 +259,7 @@ plot_tweet_timeseries <- function(tweet.vectors.df, group.by = "week", sentiment
     data("stop_words")
     summary.tibble <- tweet.tibble %>% 
       group_by(week) %>% 
-      summarize(
+      summarise(
         mean_sentiment = mean(sentiment), 
         sd_sentiment = sd(sentiment), 
         count = length(datetime), 
@@ -320,7 +323,7 @@ plot_tweet_timeseries <- function(tweet.vectors.df, group.by = "week", sentiment
     data("stop_words")
     summary.tibble <- tweet.tibble %>% 
       group_by(date) %>% 
-      summarize(
+      summarise(
         mean_sentiment = mean(sentiment), 
         sd_sentiment = sd(sentiment), 
         count = length(datetime), 
@@ -367,7 +370,7 @@ plot_tweet_timeseries <- function(tweet.vectors.df, group.by = "week", sentiment
                                   "<br>Top Neg. Keywords :", top_neg_keywords))) +
       scale_color_manual(values = setNames(c("#D55E00", "#000000", "#0072B2"), 
                                            c("NEGATIVE", "NEUTRAL", "POSITIVE"))) +
-      geom_violin(data = tweet.tibble, aes(x = date, y = sentiment, group = date), fill = NA) +
+      geom_violin(data = tweet.tibble, aes(x = date, y =helper_VADER_class(sentiment), group = date), fill = NA) +
       ggtitle(paste("Sentiment by", group.by)) + 
       ylab("Avg Tweet Sentiment") +
       xlab("Date") + 
@@ -463,5 +466,42 @@ plot_keyword_timeseries <- function(full_text, corpus_text, dates, title = NA, t
     layout(title = title.str)
   return(fig)
   
+}
+
+plot_divisiveness <- function(tweet.vectors.df, group.by = "week", sentiment.col = NA, title = NA) {
+  tweets.df <- tweet.vectors.df %>% filter(vector_type == "tweet")
+  tweets.df$created_at <- as.POSIXct(strptime(tweets.df$created_at, format="%a %b %d %H:%M:%S +0000 %Y", tz="UTC"))
+  tweets.df$week <- epiweek(tweets.df$created_at)  # find CDC epidemiological week
+  # Compute statistics
+  data("stop_words")
+  summary.tibble <- tweets.df %>% 
+    group_by(week)
+  if (is.na(sentiment.col)) {
+    summary.tibble <- summary.tibble %>% 
+      summarise(
+        divisiveness = divisiveness_score(sentiment),
+        .groups = 'drop'
+      )
+  } else {
+    summary.tibble <- summary.tibble %>% 
+      summarise(
+        divisiveness = divisiveness_score(!!sym(sentiment.col)),
+        .groups = 'drop'
+      )
+  }
+  summary.tibble <- summary.tibble %>% ungroup()
+  if (is.na(title)) {
+    title.name <- paste("Divisiveness by", str_to_title(group.by))
+  } else {
+    title.name <- title
+  }
+  # Plot divisiness
+  fig <- ggplot(summary.tibble, aes(x = week, y = divisiveness)) + 
+    geom_bar(aes(fill = factor(divisiveness < 0)), stat = "identity") + 
+    ylab("Divisiveness") +
+    xlab("CDC Epidemiological Week") +
+    ggtitle(title.name) +
+    theme(legend.position = "none")
+  return(fig)
 }
 
