@@ -1,5 +1,5 @@
 ---
-  title: "Twitter Notebook"
+title: "Twitter Notebook"
 output: html_document
 params:
   # snapshot mode can be 'save', 'load', and 'none'.
@@ -9,18 +9,18 @@ params:
   # 'load': the notebook will load a saved snapshot and only execute the code to render visualizations.
   # 'none': the notebook will run as in 'save' mode, but will not output a snapshot.
   snapshot_mode:
-  input: select
-choices: ["none", "save", "load"]
-value: "none"
-# file name (without extension) of the snapshot to save or load. This field must be provided in 'load' mode.
-# in save mode, this field may be provided or left blank. If provided, the snapshot will be saved
-# using the given name and overwrite it if it already exists. If blank, the snapshot will be saved
-# using a timestamp as the name.
-snapshot_name: "official2"
-# name of the directory in which snapshots are located.
-snapshot_path: "/data/COVID-Twitter/analysis/snapshots"
+    input: select
+    choices: ["none", "save", "load"]
+    value: "none"
+  # file name (without extension) of the snapshot to save or load. This field must be provided in 'load' mode.
+  # in save mode, this field may be provided or left blank. If provided, the snapshot will be saved
+  # using the given name and overwrite it if it already exists. If blank, the snapshot will be saved
+  # using a timestamp as the name.
+  snapshot_name: ""
+  # name of the directory in which snapshots are located.
+  snapshot_path: "/data/COVID-Twitter/analysis/snapshots"
 ---
-  
+
 ```{r setup, include=FALSE}
 # Required R package installation:
 # These will install packages if they are not already installed
@@ -68,21 +68,21 @@ if (params$snapshot_mode == "load") {
 
 source("Elasticsearch.R")
 source("Summarizer.R")
+source("general_helpers.R")
 source("text_helpers.R")
 source("plot_helpers.R")
-source("plot_tweet_timeseries.R")
 ```
 
 ```{r, echo=FALSE}
 if (!snapshot_loaded) {
   # Set server resource locations here:
   elasticsearch_index <- "coronavirus-data-masks"
-  elasticsearch_host <- "lp01.idea.rpi.edu"
+  elasticsearch_host <- ""
   elasticsearch_path <- "elasticsearch"
   elasticsearch_port <- 443
   elasticsearch_schema <- "https"
   
-  summarizer_url <- "http://idea-node-05:8080/batchsummarize"
+  summarizer_url <- ""
 }
 ```
 
@@ -316,12 +316,12 @@ if (!snapshot_loaded) {
 if (!exists("metrics_plots") || length(metrics_plots) == 0) {
   # Generate the plot(s) if enabled
   metrics_plots <- plot_kmeans_metrics(tweet.vectors.matrix, 
-                                       k_test_range=k_test_range, 
-                                       seed=kmeans_clusters_seed, 
-                                       max_iter=kmeans_max_iter, 
-                                       nstart=kmeans_nstart,
-                                       plot_elbow=compute_elbow,
-                                       plot_silhouette=compute_silhouette)
+                                        k_test_range=k_test_range, 
+                                        seed=kmeans_clusters_seed, 
+                                        max_iter=kmeans_max_iter, 
+                                        nstart=kmeans_nstart,
+                                        plot_elbow=compute_elbow,
+                                        plot_silhouette=compute_silhouette)
 }
 if (exists("metrics_plots") && length(metrics_plots) > 0) {
   metrics_plots
@@ -364,10 +364,10 @@ if (!snapshot_loaded) {
 if (!exists("metrics_plots2") && isTRUE(compute_elbow)) {
   # Generate the plot if enabled
   metrics_plots2 <- wssplot2(cbind(tweet.vectors.df$cluster, tweet.vectors.matrix), 
-                             k_test_range=k_test_range, 
-                             seed=kmeans_subclusters_seed,
-                             max_iter=kmeans_max_iter, 
-                             nstart=kmeans_nstart)
+                    k_test_range=k_test_range, 
+                    seed=kmeans_subclusters_seed,
+                    max_iter=kmeans_max_iter, 
+                    nstart=kmeans_nstart)
 }
 if (exists("metrics_plots2")) {
   metrics_plots2
@@ -383,28 +383,38 @@ if (!snapshot_loaded) {
   tweet.vectors.df$subcluster <- as.integer(c(0))
   
   for (i in 1:k){
-    cluster.matrix <- tweet.vectors.matrix[tweet.vectors.df$cluster == i,]
-    if (!is.na(kmeans_subclusters_seed)) {
-      set.seed(kmeans_subclusters_seed)
-    }
-    cluster.km <- kmeans(cluster.matrix, centers=cluster.k, iter.max=kmeans_max_iter, nstart=kmeans_nstart)
-    tweet.vectors.df[tweet.vectors.df$cluster == i, "subcluster"] <- cluster.km$cluster
-    
-    #append subcluster centers to dataset for visualization
-    centers.df <- data.frame(full_text=paste("Subcluster (", rownames(cluster.km$centers), ") Center", sep=""),
-                             created_at="[N/A]",
-                             user_screen_name="[N/A]",
-                             user_verified="[N/A]",
-                             user_location="[N/A]",
-                             user_location_type = "[N/A]",
-                             sentiment = NA,
-                             vector_type = "subcluster_center",
-                             cluster=as.integer(i),
-                             subcluster=as.integer(rownames(cluster.km$centers)))
-    tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
-    tweet.vectors.matrix <- rbind(tweet.vectors.matrix, cluster.km$centers)
+   cluster.matrix <- tweet.vectors.matrix[tweet.vectors.df$cluster == i,]
+   if (!is.na(kmeans_subclusters_seed)) {
+     set.seed(kmeans_subclusters_seed)
+   }
+   cluster.km <- kmeans(cluster.matrix, centers=cluster.k, iter.max=kmeans_max_iter, nstart=kmeans_nstart)
+   tweet.vectors.df[tweet.vectors.df$cluster == i, "subcluster"] <- cluster.km$cluster
+   
+   #append subcluster centers to dataset for visualization
+   centers.df <- data.frame(full_text=paste("Subcluster (", rownames(cluster.km$centers), ") Center", sep=""),
+                           created_at="[N/A]",
+                           user_screen_name="[N/A]",
+                           user_verified="[N/A]",
+                           user_location="[N/A]",
+                           user_location_type = "[N/A]",
+                           sentiment = NA,
+                           vector_type = "subcluster_center",
+                           cluster=as.integer(i),
+                           subcluster=as.integer(rownames(cluster.km$centers)))
+   tweet.vectors.df <- rbind(tweet.vectors.df, centers.df)
+   tweet.vectors.matrix <- rbind(tweet.vectors.matrix, cluster.km$centers)
   }
 }
+```
+
+```{r, echo=FALSE}
+###############################################################################
+# Reorder clusters and subclusters by average sentiment
+###############################################################################
+if (!snapshot_loaded) {
+  tweet.vectors.df <- order_clusters_by_avg_sentiment(tweet.vectors.df)
+}
+
 ```
 
 ```{r, echo=FALSE}
@@ -415,20 +425,14 @@ if (!snapshot_loaded) {
 if (!snapshot_loaded) {
   master.word_freqs <- get_word_freqs(tweet.vectors.df$full_text)
   master.label <- get_label(master.word_freqs, top_k=master_label_top_k)
-  master.word_freqs <- master.word_freqs %>%
-    mutate(count = count / sum(count))
   
   clusters <- list()
   for (i in 1:k) {
     cluster.df <- tweet.vectors.df[tweet.vectors.df$cluster == i,]
     cluster.matrix <- tweet.vectors.matrix[tweet.vectors.df$cluster == i,]
-    
-    cluster.word_freqs <- get_word_freqs(cluster.df$full_text) %>%
-      mutate(count = count / sum(count)) %>%
-      inner_join(master.word_freqs, by = "word") %>%
-      mutate(score = count.x * log(count.x / count.y)) %>%
-      dplyr::arrange(desc(score)) 
-    cluster.label <- get_label(cluster.word_freqs, top_k=cluster_label_top_k)
+      
+    cluster.word_freqs <- get_word_freqs(cluster.df$full_text)
+    cluster.label <- get_label(cluster.word_freqs, master.label, top_k=cluster_label_top_k)
     cluster.center <- cluster.matrix[cluster.df$vector_type=="cluster_center",]
     cluster.nearest_center <- get_nearest_center(cluster.df, cluster.matrix, cluster.center)
     
@@ -437,16 +441,14 @@ if (!snapshot_loaded) {
       subcluster.df <- cluster.df[cluster.df$subcluster == j,]
       subcluster.matrix <- cluster.matrix[cluster.df$subcluster == j,]
       
-      subcluster.word_freqs <- get_word_freqs(subcluster.df$full_text) %>%
-        mutate(count = count / sum(count)) %>%
-        inner_join(cluster.word_freqs, by = "word") %>%
-        mutate(score = count.x * log(count.x / count.y)) %>%
-        dplyr::arrange(desc(score)) 
-      subcluster.label <- get_label(subcluster.word_freqs, top_k=subcluster_label_top_k)
+      subcluster.word_freqs <- get_word_freqs(subcluster.df$full_text)
+      subcluster.label <- get_label(subcluster.word_freqs, c(master.label, cluster.label),
+                                    top_k=subcluster_label_top_k)
       subcluster.center <- subcluster.matrix[subcluster.df$vector_type=="subcluster_center",]
       subcluster.nearest_center <- get_nearest_center(subcluster.df, subcluster.matrix, subcluster.center)
       
-      cluster.subclusters[[j]] <- list(word_freqs=subcluster.word_freqs, label=subcluster.label, nearest_center=subcluster.nearest_center)
+      cluster.subclusters[[j]] <- list(word_freqs=subcluster.word_freqs, label=subcluster.label, 
+                                       nearest_center=subcluster.nearest_center)
     }
     
     clusters[[i]] <- list(word_freqs=cluster.word_freqs, label=cluster.label, 
@@ -482,7 +484,7 @@ if (!exists("summaries.df") && isTRUE(summarize_clusters)) {
   
   #update the cluster & subcluster center vectors' text with summaries
   tweet.vectors.df[rownames(summaries.df), "full_text"] <- 
-    paste(summaries.df$full_text, ": [", summaries.df$summary, "]", sep="")
+                              paste(summaries.df$full_text, ": [", summaries.df$summary, "]", sep="")
   
   #assign the summaries back to the cluster & subcluster lists
   invisible(
@@ -551,7 +553,7 @@ if (run_tsne) {
   if (tsne_dims == 3) {tsne_coords <- c(tsne_coords, "Z")}
   
   if (!is.na(tsne_clusters_seed)) {
-    set.seed(tsne_clusters_seed)
+     set.seed(tsne_clusters_seed)
   }
   master.tsne <- Rtsne(tweet.vectors.matrix, dims=tsne_dims, perplexity=tsne_clusters_perplexity, 
                        max_iter=tsne_clusters_max_iter, check_duplicates=FALSE)
@@ -559,7 +561,10 @@ if (run_tsne) {
   colnames(master.tsne.plot)[1:tsne_dims] <- tsne_coords
   master.tsne.plot$full_text <- sapply(master.tsne.plot$full_text, 
                                        function(t) paste(strwrap(t ,width=60), collapse="<br>"))
-  master.tsne.plot$cluster.label <- sapply(master.tsne.plot$cluster, function(c) clusters[[c]]$label)
+  master.tsne.plot$cluster.label <- factor(
+    sapply(master.tsne.plot$cluster, function(c) format_label(clusters[[c]]$label, c)), 
+    levels=sapply(1:k, function(c) format_label(clusters[[c]]$label, c)))
+  
 }
 taglist <- htmltools::tagList()
 
@@ -581,8 +586,9 @@ for (i in 1:k) {
                           max_iter=tsne_subclusters_max_iter, check_duplicates=FALSE)
     cluster.tsne.plot <- cbind(cluster.tsne$Y, master.tsne.plot[master.tsne.plot$cluster == i,])
     colnames(cluster.tsne.plot)[1:tsne_dims] <- sapply(tsne_coords, function(c) paste("cluster.", c, sep=""))
-    cluster.tsne.plot$subcluster.label <- sapply(cluster.tsne.plot$subcluster, 
-                                                 function(c) clusters[[i]]$subclusters[[c]]$label)
+    cluster.tsne.plot$subcluster.label <- factor(
+      sapply(cluster.tsne.plot$subcluster, function(c) format_label(clusters[[i]]$subclusters[[c]]$label, i, c)),
+      levels=sapply(1:cluster.k, function(c) format_label(clusters[[i]]$subclusters[[c]]$label, i, c)))
     clusters[[i]]$tsne.plot <- cluster.tsne.plot
   }
   
@@ -604,7 +610,7 @@ for (i in 1:k) {
     plot_index <- plot_index + 1
   }
   
-  # Print cluster keywords
+  # Print cluster word frequencies
   if (isTRUE(show_word_freqs)) {
     taglist[[plot_index]] <- htmltools::HTML(kable(clusters[[i]]$word_freqs[1:5,], caption=paste("Cluster", i, "word frequencies")) %>% kable_styling())
     plot_index <- plot_index + 1
@@ -617,7 +623,7 @@ for (i in 1:k) {
   }
   
   for (j in 1:cluster.k) {
-    # Print subcluster keywords
+    # Print subcluster word frequencies
     if (isTRUE(show_word_freqs)) {
       taglist[[plot_index]] <- htmltools::HTML(kable(clusters[[i]]$subclusters[[j]]$word_freqs[1:5,], caption=paste("Subcluster", j, "word frequencies")) %>% kable_styling())
       plot_index <- plot_index + 1
@@ -648,34 +654,4 @@ if (params$snapshot_mode == "save") {
 
 ```{r, echo=FALSE}
 taglist
-```
-
-```{r, echo=FALSE}
-divisiveness.df <- tweet.vectors.df %>% filter(vector_type == "tweet")
-divisiveness.df$created_at <- as.POSIXct(strptime(divisiveness.df$created_at, format="%a %b %d %H:%M:%S +0000 %Y", tz="UTC"))
-divisiveness.df$week <- epiweek(divisiveness.df$created_at)  # find CDC epidemiological week
-divisiveness.df <- divisiveness.df %>%
-  dplyr::group_by(week, cluster) %>%
-  dplyr::summarise(
-    divisiveness = divisiveness_score(sentiment)) %>%
-  ungroup()
-
-fig1 <- ggplot(divisiveness.df, mapping = aes(x = week, y = divisiveness, color = factor(cluster))) + 
-  geom_line() +
-  ylab("Divisiveness") +
-  xlab("CDC Epidemiological Week") +
-  ggtitle("Cluster Divisiveness by Week") +
-  scale_color_discrete(name = "Cluster")
-
-fig2 <- ggplot(divisiveness.df, mapping = aes(x = week, y = divisiveness)) + 
-  geom_bar(aes(fill = divisiveness < 0), stat = "identity") +
-  ylab("Divisiveness") +
-  xlab("CDC Epidemiological Week") +
-  ggtitle("Cluster Divisiveness by Week") +
-  facet_wrap(~cluster) +
-  theme(legend.position = "none")
-
-fig1
-
-fig2
 ```
