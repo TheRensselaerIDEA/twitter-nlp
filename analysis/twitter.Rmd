@@ -425,9 +425,9 @@ if (!snapshot_loaded) {
 ###############################################################################
 if (!snapshot_loaded) {
   master.word_freqs <- get_word_freqs(tweet.vectors.df$full_text)
+  master.label <- get_label(master.word_freqs, top_k=master_label_top_k)
   master.word_freqs <- master.word_freqs %>%
     mutate(count = count / sum(count))
-  master.label <- get_label(master.word_freqs, top_k=master_label_top_k)
   
   clusters <- list()
   for (i in 1:k) {
