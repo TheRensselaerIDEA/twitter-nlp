@@ -12,7 +12,7 @@ class Config(object):
         """Initializes the Config instance.
         """
         #Model settings
-        self.transformers_model = ""
+        self.transformers_models = []
         self.batch_size = 32
 
     @staticmethod
