@@ -171,7 +171,7 @@ if (!snapshot_loaded) {
   kmeans_nstart <- 25
   
   # maximum iterations
-  kmeans_max_iter <- 100
+  kmeans_max_iter <- 200
   
   # number of high level clusters (temporary until automatic selection implemented)
   k <- 15
@@ -206,12 +206,12 @@ if (!snapshot_loaded) {
   # T-SNE HYPERPARAMS
   #--------------------------
   # hyperparams for clusters
-  tsne_clusters_perplexity <- 25
-  tsne_clusters_max_iter <- 750
+  tsne_clusters_perplexity <- 70
+  tsne_clusters_max_iter <- 2000
   
   # hyperparams for subclusters
-  tsne_subclusters_perplexity <- 12
-  tsne_subclusters_max_iter <- 500
+  tsne_subclusters_perplexity <- 25
+  tsne_subclusters_max_iter <- 750
 }
 ```
 
@@ -236,7 +236,7 @@ compute_silhouette <- FALSE
 # show/hide extra info (temporary until tabs are implemented)
 show_original_subcluster_plots <- FALSE
 show_regrouped_subcluster_plots <- TRUE
-show_word_freqs <- FALSE
+show_word_scores <- FALSE
 show_center_nn <- FALSE
 
 # visualize sentiment and divisiveness
@@ -424,10 +424,9 @@ if (!snapshot_loaded) {
 # and identify the nearest neighbors to each cluster and subcluster center
 ###############################################################################
 if (!snapshot_loaded) {
-  master.word_freqs <- get_word_freqs(tweet.vectors.df$full_text)
-  master.label <- get_label(master.word_freqs, top_k=master_label_top_k)
-  master.word_freqs <- master.word_freqs %>%
+  master.word_freqs <- get_word_freqs(tweet.vectors.df$full_text) %>%
     mutate(count = count / sum(count))
+  master.label <- get_label(master.word_freqs, top_k=master_label_top_k)
   
   clusters <- list()
   for (i in 1:k) {
@@ -435,11 +434,12 @@ if (!snapshot_loaded) {
     cluster.matrix <- tweet.vectors.matrix[tweet.vectors.df$cluster == i,]
       
     cluster.word_freqs <- get_word_freqs(cluster.df$full_text) %>%
-      mutate(count = count / sum(count)) %>%
+      mutate(count = count / sum(count))
+    cluster.word_scores <- cluster.word_freqs %>%
       inner_join(master.word_freqs, by = "word") %>%
       mutate(score = count.x * log(count.x / count.y)) %>%
       dplyr::arrange(desc(score)) 
-    cluster.label <- get_label(cluster.word_freqs, top_k=cluster_label_top_k)
+    cluster.label <- get_label(cluster.word_scores, top_k=cluster_label_top_k)
     cluster.center <- cluster.matrix[cluster.df$vector_type=="cluster_center",]
     cluster.nearest_center <- get_nearest_center(cluster.df, cluster.matrix, cluster.center)
     
@@ -449,19 +449,24 @@ if (!snapshot_loaded) {
       subcluster.matrix <- cluster.matrix[cluster.df$subcluster == j,]
       
       subcluster.word_freqs <- get_word_freqs(subcluster.df$full_text) %>%
-        mutate(count = count / sum(count)) %>%
+        mutate(count = count / sum(count))
+      subcluster.word_scores <- subcluster.word_freqs %>%
         inner_join(cluster.word_freqs, by = "word") %>%
         mutate(score = count.x * log(count.x / count.y)) %>%
         dplyr::arrange(desc(score)) 
-      subcluster.label <- get_label(subcluster.word_freqs, top_k=subcluster_label_top_k)
+      subcluster.label <- get_label(subcluster.word_scores, top_k=subcluster_label_top_k)
       subcluster.center <- subcluster.matrix[subcluster.df$vector_type=="subcluster_center",]
       subcluster.nearest_center <- get_nearest_center(subcluster.df, subcluster.matrix, subcluster.center)
       
-      cluster.subclusters[[j]] <- list(word_freqs=subcluster.word_freqs, label=subcluster.label, 
+      cluster.subclusters[[j]] <- list(word_freqs=subcluster.word_freqs,
+                                       word_scores=subcluster.word_scores,
+                                       label=subcluster.label, 
                                        nearest_center=subcluster.nearest_center)
     }
     
-    clusters[[i]] <- list(word_freqs=cluster.word_freqs, label=cluster.label, 
+    clusters[[i]] <- list(word_freqs=cluster.word_freqs, 
+                          word_scores=cluster.word_scores,
+                          label=cluster.label, 
                           nearest_center=cluster.nearest_center, subclusters=cluster.subclusters)
   }
 }
@@ -656,8 +661,8 @@ for (i in 1:k) {
   }
   
   # Print cluster keywords
-  if (isTRUE(show_word_freqs)) {
-    taglist[[plot_index]] <- htmltools::HTML(kable(clusters[[i]]$word_freqs[1:5,], caption=paste("Cluster", i, "word frequencies")) %>% kable_styling())
+  if (isTRUE(show_word_scores)) {
+    taglist[[plot_index]] <- htmltools::HTML(kable(clusters[[i]]$word_scores[1:5,], caption=paste("Cluster", i, "word scores")) %>% kable_styling())
     plot_index <- plot_index + 1
   }
   
@@ -669,8 +674,8 @@ for (i in 1:k) {
   
   for (j in 1:cluster.k) {
     # Print subcluster keywords
-    if (isTRUE(show_word_freqs)) {
-      taglist[[plot_index]] <- htmltools::HTML(kable(clusters[[i]]$subclusters[[j]]$word_freqs[1:5,], caption=paste("Subcluster", j, "word frequencies")) %>% kable_styling())
+    if (isTRUE(show_word_scores)) {
+      taglist[[plot_index]] <- htmltools::HTML(kable(clusters[[i]]$subclusters[[j]]$word_scores[1:5,], caption=paste("Subcluster", j, "word scores")) %>% kable_styling())
       plot_index <- plot_index + 1
     }
     

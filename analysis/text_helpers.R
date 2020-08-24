@@ -45,7 +45,7 @@ clean_text <- function(text, for_freq=FALSE) {
 ################################################################
 get_word_freqs <- function(full_text) {
   word_freqs <- table(unlist(strsplit(clean_text(full_text, TRUE), " ")))
-  word_freqs <- cbind.data.frame(names(word_freqs), as.integer(word_freqs))
+  word_freqs <- cbind.data.frame(names(word_freqs), as.integer(word_freqs), stringsAsFactors=FALSE)
   colnames(word_freqs) <- c("word", "count")
   word_freqs <- word_freqs[!(word_freqs$word %in% stop_words),]
   word_freqs <- word_freqs[order(word_freqs$count, decreasing=TRUE),]
