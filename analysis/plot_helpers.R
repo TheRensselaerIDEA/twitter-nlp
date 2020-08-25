@@ -111,12 +111,13 @@ sentiment_to_html_emoji <- function(sentiment_score, sentiment_threshold) {
 # Cluster / subcluster centers are highlighted in black.
 ################################################################
 plot_tweets <- function(tsne.plot, title, sentiment_threshold, type, mode, webGL) {
+  isWebGL <- isTRUE(webGL) && mode=="2d"
   fig <- plot_ly(tsne.plot[tsne.plot$vector_type == "tweet",], 
                  x=~if(type=="subclusters_regrouped") {cluster.X} else {X}, 
                  y=~if(type=="subclusters_regrouped") {cluster.Y} else {Y}, 
                  z=~if(type=="subclusters_regrouped") {cluster.Z} else {Z},
                  hoverinfo = "text",
-                 text=~paste(if(type=="clusters") {"Cluster:"} else {"Subcluster:"}, 
+                 hovertext=~paste(if(type=="clusters") {"Cluster:"} else {"Subcluster:"}, 
                              if(type=="clusters") {cluster} else {subcluster},
                              "<br>Sentiment:", sentiment, sentiment_to_html_emoji(sentiment, sentiment_threshold),
                              "<br>Text:", full_text), 
@@ -129,7 +130,13 @@ plot_tweets <- function(tsne.plot, title, sentiment_threshold, type, mode, webGL
   
   centers_trace_vector_type <- if (type == "clusters") {"cluster_center"} else {"subcluster_center"}
   fig <- fig %>% add_trace(data=tsne.plot[tsne.plot$vector_type == centers_trace_vector_type,],
-                           marker=list(size=if(mode=="3d") {6} else {10}, color='rgb(0, 0, 0)'),
+                           text=~paste0(ifelse(isWebGL, "", "<b>"), 
+                                        if(type=="clusters") {cluster} else {paste(cluster, subcluster, sep=".")}, 
+                                        ifelse(isWebGL, "", "</b>")),
+                           textposition="top right",
+                           textfont=list(size=11, color="rgb(0, 0, 0)"),
+                           mode="markers+text",
+                           marker=list(size=if(mode=="3d") {6} else {10}, color="rgb(0, 0, 0)"),
                            legendgroup=~if(type=="clusters") {cluster.label} else {subcluster.label},
                            showlegend=FALSE)
   
@@ -145,7 +152,7 @@ plot_tweets <- function(tsne.plot, title, sentiment_threshold, type, mode, webGL
                           legend=list(traceorder="normal"))
   }
   
-  if (isTRUE(webGL) && mode=="2d") {
+  if (isWebGL) {
     fig <- fig %>% toWebGL()
   }
   
