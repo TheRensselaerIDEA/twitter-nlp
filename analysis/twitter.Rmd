@@ -34,19 +34,9 @@ if (!require("knitr")) {
   library(knitr)
 }
 
-if(!require('dplyr')) {
-  install.packages("dplyr")
-  library(dplyr)
-}
-
 if(!require('Rtsne')) {
   install.packages("Rtsne")
   library(Rtsne)
-}
-
-if (!require("kableExtra")) {
-  install.packages("kableExtra")
-  library(kableExtra)
 }
 
 knitr::opts_chunk$set(echo = TRUE)
@@ -173,10 +163,10 @@ if (!snapshot_loaded) {
   # maximum iterations
   kmeans_max_iter <- 200
   
-  # number of high level clusters (temporary until automatic selection implemented)
+  # number of high level clusters
   k <- 15
   
-  # number of subclusters per high level cluster (temporary until automatic selection implemented)
+  # number of subclusters per high level cluster
   cluster.k <- 15
   
   #--------------------------
@@ -194,11 +184,12 @@ if (!snapshot_loaded) {
   #--------------------------
   # SUMMARIZATION HYPERPARAMS
   #--------------------------
-  # number of nearest neighbors to the center to use for cluster & subcluster summarization
+  # number of nearest neighbors to the center to use for subcluster summarization
   summarize_center_nn <- 20
   
   # summarization model inference hyperparameters
-  summarize_max_len <- 120
+  summarize_model <- "sshleifer/distilbart-xsum-12-6"
+  summarize_max_len <- 60
   summarize_num_beams <- 6
   summarize_temperature <- 1.0
   
@@ -225,6 +216,8 @@ plot_mode <- "2d"
 # If TRUE, cluster and subcluster summaries will be generated using nearest neighbors to the center.
 # Note: if loading a snapshot, disabling summarization will do nothing if it was previously enabled.
 summarize_clusters <- TRUE
+# True to show a listing of all cluster & subcluster summaries
+show_summaries_table <- TRUE
 
 # If TRUE, run and output k-means elbow plots
 # Note: if loading a snapshot, disabling elbow plots will do nothing if they were previously enabled.
@@ -248,6 +241,10 @@ show_cluster_sentiment_discrete <- TRUE
 # and neutral to negative below zero. Used to turn sentiment into a variable with discrete values
 sentiment_threshold <- 0.05 # 0.05 recommended for VADER sentiment
 show_cluster_divisiveness <- TRUE
+# sentiment plots start date (set NA to infer from search results)
+plot_range_start <- "2020-03-15"
+# sentiment plots end date (set NA to infer from search results)
+plot_range_end <- "2020-08-25"
 ```
 
 ```{r, echo=FALSE}
@@ -439,7 +436,7 @@ if (!snapshot_loaded) {
       inner_join(master.word_freqs, by = "word") %>%
       mutate(score = count.x * log(count.x / count.y)) %>%
       dplyr::arrange(desc(score)) 
-    cluster.label <- get_label(cluster.word_scores, top_k=cluster_label_top_k)
+    cluster.label <- get_label(cluster.word_scores, master.label, top_k=cluster_label_top_k)
     cluster.center <- cluster.matrix[cluster.df$vector_type=="cluster_center",]
     cluster.nearest_center <- get_nearest_center(cluster.df, cluster.matrix, cluster.center)
     
@@ -454,7 +451,8 @@ if (!snapshot_loaded) {
         inner_join(cluster.word_freqs, by = "word") %>%
         mutate(score = count.x * log(count.x / count.y)) %>%
         dplyr::arrange(desc(score)) 
-      subcluster.label <- get_label(subcluster.word_scores, top_k=subcluster_label_top_k)
+      subcluster.label <- get_label(subcluster.word_scores, c(master.label, cluster.label), 
+                                    top_k=subcluster_label_top_k)
       subcluster.center <- subcluster.matrix[subcluster.df$vector_type=="subcluster_center",]
       subcluster.nearest_center <- get_nearest_center(subcluster.df, subcluster.matrix, subcluster.center)
       
@@ -478,28 +476,19 @@ if (!snapshot_loaded) {
 # an abstractive summarization model (DistilBART)
 ###############################################################################
 if (!exists("summaries.df") && isTRUE(summarize_clusters)) {
-  #concatenate the nearest neighbor tweet text for each cluster & subcluster
-  summaries.df <- tweet.vectors.df[tweet.vectors.df$vector_type != "tweet", 
-                                   c("full_text", "vector_type", "cluster", "subcluster")]
-  summaries.df$text_for_summary <- mapply(function(vector_type, cluster, subcluster) {
-    if (vector_type == "cluster_center") {
-      return(concat_text_for_summary(clusters[[cluster]]$nearest_center, summarize_center_nn))
-    } else {
-      return(concat_text_for_summary(clusters[[cluster]]$subclusters[[subcluster]]$nearest_center,
-                                     summarize_center_nn))
-    }
-  }, summaries.df$vector_type, summaries.df$cluster, summaries.df$subcluster)
-  
-  #do the summarization for all clusters & subclusters in a single batch
-  summaries.df$summary <- summarize(text=summaries.df$text_for_summary,
-                                    max_len=summarize_max_len,
-                                    num_beams=summarize_num_beams,
-                                    temperature=summarize_temperature,
-                                    summarizer_url=summarizer_url)
+
+  summaries.df <- summarize_tweet_clusters(tweet.vectors.df,
+                                           center_nn=summarize_center_nn,
+                                           max_len=summarize_max_len,
+                                           num_beams=summarize_num_beams,
+                                           temperature=summarize_temperature,
+                                           model=summarize_model,
+                                           summarizer_url=summarizer_url)
   
   #update the cluster & subcluster center vectors' text with summaries
+  centers_text <- tweet.vectors.df[tweet.vectors.df$vector_type != "tweet", "full_text"]
   tweet.vectors.df[rownames(summaries.df), "full_text"] <- 
-                              paste(summaries.df$full_text, ": [", summaries.df$summary, "]", sep="")
+                                  paste0(centers_text, ": [", summaries.df$summary, "]")
   
   #assign the summaries back to the cluster & subcluster lists
   invisible(
@@ -520,7 +509,7 @@ if (!exists("summaries.df") && isTRUE(summarize_clusters)) {
 
 # overall sentiment plot, line plot
 if (isTRUE(show_overall_sentiment_discrete)) {
-  discrete_sentiment_lines(tweet.vectors.df, sentiment_threshold)
+  discrete_sentiment_lines(tweet.vectors.df, sentiment_threshold, plot_range_start, plot_range_end)
 }
 
 ```
@@ -532,7 +521,7 @@ if (isTRUE(show_overall_sentiment_discrete)) {
 
 # overall sentiment plot, continuous
 if (isTRUE(show_overall_sentiment_continuous)) {
-  continuous_sentiment_barplot(tweet.vectors.df, sentiment_threshold)
+  continuous_sentiment_barplot(tweet.vectors.df, sentiment_threshold, plot_range_start, plot_range_end)
 }
 ```
 
@@ -544,14 +533,14 @@ if (isTRUE(show_overall_sentiment_continuous)) {
 
 # high-level cluster sentiment plots, color gradient
 if (isTRUE(show_cluster_sentiment_continuous)) {
-  cluster_sentiments_plots(tweet.vectors.df, k)
+  cluster_sentiments_plots(tweet.vectors.df, k, plot_range_start, plot_range_end)
 }
 ```
 
 ```{r, echo=FALSE, fig.width=10, fig.height=10}
 # high-level cluster sentiment, discrete count
 if (isTRUE(show_cluster_sentiment_discrete)) {
-  cluster_discrete_sentiments(tweet.vectors.df, sentiment_threshold, k)
+  cluster_discrete_sentiments(tweet.vectors.df, sentiment_threshold, k, plot_range_start, plot_range_end)
 }
 ```
 
@@ -616,15 +605,18 @@ if (run_tsne) {
     levels=sapply(1:k, function(c) format_label(clusters[[c]]$label, c)))
   
 }
+
+output_summaries_table <- exists("summaries.df") && isTRUE(show_summaries_table)
 taglist <- htmltools::tagList()
 
 #Master high level plot
-title <- paste("Master Plot:", master.label, "(high level clusters)")
-taglist[[1]] <- plot_tweets(master.tsne.plot, title=title, sentiment_threshold=sentiment_threshold,
+taglist[[1]] <- htmltools::a(id="cluster_master")
+title <- paste("Master Plot:", master.label, "(primary clusters)")
+taglist[[2]] <- plot_tweets(master.tsne.plot, title=title, sentiment_threshold=sentiment_threshold,
                             type="clusters", mode=plot_mode, webGL=TRUE)
 
 #Cluster plots
-plot_index <- 2
+plot_index <- 3
 for (i in 1:k) {
   if (run_tsne) {
     cluster.matrix <- tweet.vectors.matrix[master.tsne.plot$cluster == i,]
@@ -641,6 +633,9 @@ for (i in 1:k) {
       levels=sapply(1:cluster.k, function(c) format_label(clusters[[i]]$subclusters[[c]]$label, i, c)))
     clusters[[i]]$tsne.plot <- cluster.tsne.plot
   }
+  
+  taglist[[plot_index]] <- htmltools::a(id=format_anchor(i))
+  plot_index <- plot_index + 1
   
   #Cluster plot with original positions
   if (isTRUE(show_original_subcluster_plots)) {
@@ -685,6 +680,16 @@ for (i in 1:k) {
       plot_index <- plot_index + 1
     }
   }
+  
+  # navigation links
+  taglist[[plot_index]] <- htmltools::a(href="#cluster_master", "Back to master plot...")
+  plot_index <- plot_index + 1
+  if (output_summaries_table) {
+    taglist[[plot_index]] <- htmltools::br()
+    plot_index <- plot_index + 1
+    taglist[[plot_index]] <- htmltools::a(href="#cluster_top", "Back to top...")
+    plot_index <- plot_index + 1
+  }
 }
 
 ```
@@ -696,6 +701,10 @@ if (params$snapshot_mode == "save") {
 }
 ```
 
+```{r, echo=FALSE}
+htmltools::a(id="cluster_top")
+```
+
 \  
 
 ### Displaying `r nrow(results$df)` of `r results$total` results:
@@ -703,5 +712,13 @@ if (params$snapshot_mode == "save") {
 \  
 
 ```{r, echo=FALSE}
+if (output_summaries_table) {
+  summaries_table.df <- format_summaries_table(summaries.df)
+  
+  kable(summaries_table.df, format="html", escape=FALSE, 
+        caption="Cluster & Subcluster Summary Listing", ) %>% 
+    kable_styling(font_size=11)
+}
+
 taglist
 ```

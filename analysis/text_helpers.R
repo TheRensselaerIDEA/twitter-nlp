@@ -13,6 +13,16 @@ if(!require('stopwords')) {
   library(stopwords)
 }
 
+if(!require('dplyr')) {
+  install.packages("dplyr")
+  library(dplyr)
+}
+
+if (!require("kableExtra")) {
+  install.packages("kableExtra")
+  library(kableExtra)
+}
+
 stop_words <- stopwords("en", source="snowball")
 stop_words <- union(stop_words, stopwords("en", source="nltk"))
 stop_words <- union(stop_words, stopwords("en", source="smart"))
@@ -65,13 +75,21 @@ get_label <- function(word_freqs, exclude_from_labels=NULL, top_k=3) {
 }
 
 ################################################################
-# Formats cluster or subcluster labels for display
+# Formats cluster or subcluster labels and anchors for display
 ################################################################
-format_label <- function(label, cluster, subcluster=NULL) {
-  if (is.null(subcluster)) {
-    paste(cluster, ". ", label, sep="")
+format_label <- function(label, cluster, subcluster=NULL, include_prefix=FALSE) {
+  if (is.null(subcluster) || is.na(subcluster)) {
+    paste0(ifelse(isTRUE(include_prefix), "Cluster ", ""), cluster, ". ", label)
   } else {
-    paste(cluster, ".", subcluster, ". ", label, sep="")
+    paste0(ifelse(isTRUE(include_prefix), "Subcluster ", ""), cluster, ".", subcluster, ". ", label)
+  }
+}
+
+format_anchor <- function(cluster, subcluster=NULL, include_pound=FALSE) {
+  if (is.null(subcluster) || is.na(subcluster)) {
+    paste0(ifelse(isTRUE(include_pound), "#", ""), "cluster_", cluster)
+  } else {
+    paste0(ifelse(isTRUE(include_pound), "#", ""), "subcluster_", cluster, "_", subcluster)
   }
 }
 
@@ -91,4 +109,31 @@ get_nearest_center <- function(df, mtx, center) {
 ################################################################
 concat_text_for_summary <- function(nearest_center, k_nn) {
   summary <- paste('"', paste(nearest_center[1:min(k_nn, nrow(nearest_center)), "full_text"], collapse='" "'), '"', sep="")
+}
+
+
+################################################################
+# Formats the cluster & subcluster summaries listing
+################################################################
+format_summaries_table <- function(summaries.df) {
+  summaries_table.df <- summaries.df %>% 
+    arrange(vector_type, cluster, subcluster)
+  
+  summaries_table.df[summaries_table.df$vector_type=="cluster_center", "subcluster"] <- NA
+  
+  summaries_table.df$label <- mapply(function(cluster, subcluster) {
+    label <- if (is.na(subcluster)) {clusters[[cluster]]$label} 
+    else  {clusters[[cluster]]$subclusters[[subcluster]]$label}
+    return (format_label(label, cluster, subcluster, include_prefix=TRUE))
+  }, summaries_table.df$cluster, summaries_table.df$subcluster)
+  
+  summaries_table.df$href <- sapply(summaries_table.df$cluster, function(cluster) {
+    return(format_anchor(cluster, include_pound=TRUE))
+  })
+  
+  summaries_table.df <- summaries_table.df %>%
+    mutate(label = cell_spec(label, "html", link = href))
+  
+  summaries_table.df <- summaries_table.df[, c("label", "summary")]
+  return (summaries_table.df)
 }

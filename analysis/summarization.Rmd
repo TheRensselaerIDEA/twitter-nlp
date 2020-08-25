@@ -2,7 +2,7 @@
 title: "Experimental Summarization Notebook"
 output: html_document
 params:
-  snapshot_name: "official2"
+  snapshot_name: "official3"
   snapshot_path: "/data/COVID-Twitter/analysis/snapshots"
 ---
 
@@ -17,6 +17,11 @@ options(repos = r)
 if (!require("knitr")) {
   install.packages("knitr")
   library(knitr)
+}
+
+if (!require("dplyr")) {
+  install.packages("dplyr")
+  library(dplyr)
 }
 
 if (!require("kableExtra")) {
@@ -34,41 +39,57 @@ source("Summarizer.R")
 source("text_helpers.R")
 ```
 
+## Summarization Strategies:
+Each strategy determines how N tweets are selected from each cluster and subcluster to assemble the "document"
+that is given to the summarization model.
+
+### Centers
+Cluster Summaries:    N nearest neighbors to cluster center are selected.
+Subcluster Summaries: N nearest neighbors to subcluster center are selected.
+
+### Subcenters
+Cluster Summaries:    M nearest neighbors to each subcluster center are selected, where sum(M) <= N.
+                      for example for N=20, a cluster with 15 subclusters would select the single nearest
+                      neighbor to each subcluster center.
+Subcluster Summaries: N nearest neighbors to subcluster center are selected.
+
+### Heirarchy Centers
+Cluster Summaries:    All the subcluster summaries within this cluster are used in lieu of tweets.
+Subcluster Summaries: N nearest neighbors to subcluster center are selected.
+
+
+## Summaries:
+
 ```{r, echo=FALSE}
-experiments <- expand.grid(model=c("sshleifer/distilbart-xsum-12-6", 
-                                   "sshleifer/distilbart-cnn-12-6", 
-                                   "airKlizz/distilbart-multi-combine-wiki-news"),
+summarize_max_len <- 60
+summarize_num_beams <- 6
+summarize_temperature <- 1.0
+
+experiments <- expand.grid(model=c("distilbart-xsum-12-6", 
+                                   "distilbart-cnn-12-6"),
                            strategy=c("centers", 
                                       "subcenters", 
-                                      "random", 
-                                      "heirarchy_centers", 
-                                      "heirarchy_random"),
-                           num_beams=c(2, 4, 6),
+                                      "heirarchy_centers"),
                            stringsAsFactors=FALSE)
 
 results <- list()
 for (i in 1:nrow(experiments)) {
   print(paste0("Runnning experiment ", i, " of ", nrow(experiments), "..."))
-  set.seed(99)
   
   model <- experiments[i, "model"]
+  model_name <- paste0("sshleifer/", model)
   strategy <- experiments[i, "strategy"]
-  num_beams <- experiments[i, "num_beams"]
   
   summaries.df <- tweet.vectors.df[tweet.vectors.df$vector_type != "tweet", 
                                    c("vector_type", "cluster", "subcluster")]
   
   summaries.df$model <- model
   summaries.df$strategy <- strategy
-  summaries.df$num_beams <- num_beams
   
   #compute the subcluster text for summarization
   subcluster_summaries.df <- summaries.df[summaries.df$vector_type == "subcluster_center",]
   subcluster_summaries.df$text_for_summary <- mapply(function(cluster, subcluster) {
     nearest_center <- clusters[[cluster]]$subclusters[[subcluster]]$nearest_center
-    if (strategy %in% c("random", "heirarchy_random")) {
-      nearest_center <- nearest_center[sample(nrow(nearest_center)),]
-    }
     return(concat_text_for_summary(nearest_center, summarize_center_nn))
   }, subcluster_summaries.df$cluster, subcluster_summaries.df$subcluster)
   summaries.df[rownames(subcluster_summaries.df), "text_for_summary"] <- subcluster_summaries.df$text_for_summary
@@ -76,9 +97,9 @@ for (i in 1:nrow(experiments)) {
   #do the summarization for all subclusters in a single batch
   subcluster_summaries.df$summary <- summarize(text=subcluster_summaries.df$text_for_summary,
                                                max_len=summarize_max_len,
-                                               num_beams=num_beams,
+                                               num_beams=summarize_num_beams,
                                                temperature=summarize_temperature,
-                                               model=model,
+                                               model=model_name,
                                                summarizer_url=summarizer_url)
   summaries.df[rownames(subcluster_summaries.df), "summary"] <- subcluster_summaries.df$summary
   
@@ -86,17 +107,16 @@ for (i in 1:nrow(experiments)) {
   #compute the cluster text for summarization
   cluster_summaries.df <- summaries.df[summaries.df$vector_type == "cluster_center",]
   cluster_summaries.df$text_for_summary <- sapply(cluster_summaries.df$cluster, function(cluster) {
-      nearest_center <- clusters[[cluster]]$nearest_center
-      if (strategy == "random") {
-        nearest_center <- nearest_center[sample(nrow(nearest_center)),]
-      } else if (strategy == "subcenters") {
+      if (strategy == "subcenters") {
         subcenter_nn <- max(1, floor(summarize_center_nn/cluster.k))
         nearest_center <- data.frame(full_text=c(sapply(1:cluster.k, function(subcluster) {
           clusters[[cluster]]$subclusters[[subcluster]]$nearest_center[1:subcenter_nn, "full_text"]
         })))
-      } else {
+      } else if (strategy == "heirarchy_centers") {
         nearest_center <- data.frame(
           full_text=subcluster_summaries.df[subcluster_summaries.df$cluster==cluster, "summary"])
+      } else {
+        nearest_center <- clusters[[cluster]]$nearest_center
       }
       return(concat_text_for_summary(nearest_center, summarize_center_nn))
   })
@@ -105,9 +125,9 @@ for (i in 1:nrow(experiments)) {
   #do the summarization for all clusters in a single batch
   cluster_summaries.df$summary <- summarize(text=cluster_summaries.df$text_for_summary,
                                             max_len=summarize_max_len,
-                                            num_beams=num_beams,
+                                            num_beams=summarize_num_beams,
                                             temperature=summarize_temperature,
-                                            model=model,
+                                            model=model_name,
                                             summarizer_url=summarizer_url)
   summaries.df[rownames(cluster_summaries.df), "summary"] <- cluster_summaries.df$summary
 
@@ -117,10 +137,14 @@ for (i in 1:nrow(experiments)) {
 
 summaries.df <- bind_rows(results)
 
-summaries.df <- summaries.df %>% dplyr::arrange(vector_type, cluster, subcluster, model, strategy, num_beams)
+summaries.df <- summaries.df %>% 
+  filter(vector_type == "cluster_center" | strategy == "centers") %>%
+  dplyr::arrange(vector_type, cluster, subcluster, model, strategy)
 summaries.df[summaries.df$vector_type == "cluster_center", "subcluster"] <- NA
+  
+saveRDS(summaries.df, "summaries.df.rds")
+```
 
-saveRDS(summaries.df, "summaries.rds")
-
-kable(summaries.df[,setdiff(colnames(summaries.df), "text_for_summary")]) %>% kable_styling(font_size=8)
+```{r, echo=FALSE}
+kable(summaries.df[,setdiff(colnames(summaries.df), "text_for_summary")]) %>% kable_styling(font_size=11)
 ```
