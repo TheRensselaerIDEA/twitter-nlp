@@ -78,12 +78,12 @@ source("plot_tweet_timeseries.R")
 if (!snapshot_loaded) {
   # Set server resource locations here:
   elasticsearch_index <- "coronavirus-data-masks"
-  elasticsearch_host <- ""
+  elasticsearch_host <- "lp01.idea.rpi.edu"
   elasticsearch_path <- "elasticsearch"
   elasticsearch_port <- 443
   elasticsearch_schema <- "https"
   
-  summarizer_url <- ""
+  summarizer_url <- "http://idea-node-05:8080/batchsummarize"
 }
 ```
 
@@ -248,6 +248,9 @@ show_cluster_sentiment_discrete <- TRUE
 # and neutral to negative below zero. Used to turn sentiment into a variable with discrete values
 sentiment_threshold <- 0.05 # 0.05 recommended for VADER sentiment
 show_cluster_divisiveness <- TRUE
+
+# perform linear regression analysis on weekly divisiveness
+perform_divisiveness_linreg <- TRUE
 ```
 
 ```{r, echo=FALSE}
@@ -552,6 +555,35 @@ if (isTRUE(show_cluster_sentiment_continuous)) {
 # high-level cluster sentiment, discrete count
 if (isTRUE(show_cluster_sentiment_discrete)) {
   cluster_discrete_sentiments(tweet.vectors.df, sentiment_threshold, k)
+}
+```
+
+```{r, echo=FALSE}
+if (isTRUE(perform_divisiveness_linreg)) {
+  divisiveness.df <- tweet.vectors.df %>%
+  group_by(cluster) %>%
+  dplyr::summarise(divisiveness = divisiveness_score(sentiment), .groups = "drop") %>%
+  mutate(divisiveness.z.score = (divisiveness - mean(divisiveness)) / sd(divisiveness))
+
+  tmp.df <- tweet.vectors.df %>%
+    mutate(week = epiweek(as.POSIXct(
+        strptime(created_at, format="%a %b %d %H:%M:%S +0000 %Y", tz="UTC")
+        ))) %>%
+    group_by(cluster, week) %>%
+    dplyr::summarise(divisiveness = divisiveness_score(sentiment), .groups = "drop")
+  
+  divisiveness.df$slope <- c(0)
+  divisiveness.df$slope.CI <- c(0)
+  for (i in 1:k) {
+    lmmodel <- lm(divisiveness ~ week, data = tmp.df %>% dplyr::filter(cluster == i))
+    slope.CI <- confint(lmmodel, "week")
+    ggplot(data = NULL, aes(x = lmmodel$residuals)) + geom_density()
+    divisiveness.df$slope[i] <- lmmodel$coefficients[2]
+    divisiveness.df$slope.CI[i] <- paste("(",slope.CI[1], ",", slope.CI[2], ")")
+  }
+  
+  colnames(divisiveness.df) <- c("Cluster", "Divisiveness Score", "Divisiveness Score z-score", "LR Slope", "LR Slope Confidence Interval")
+  kable(divisiveness.df) %>% kable_styling()
 }
 ```
 
