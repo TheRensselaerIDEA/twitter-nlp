@@ -120,7 +120,7 @@ plot_tweets <- function(tsne.plot, title, sentiment_threshold, type, mode, webGL
                  hovertext=~paste(if(type=="clusters") {"Cluster:"} else {"Subcluster:"}, 
                              if(type=="clusters") {cluster} else {subcluster},
                              "<br>Sentiment:", sentiment, sentiment_to_html_emoji(sentiment, sentiment_threshold),
-                             "<br>Text:", full_text), 
+                             "<br>Tweet ID:", paste0("[[", id_str, "]]")),
                  color=~if(type=="clusters") {cluster.label} else {subcluster.label}, 
                  colors=colorRamp(brewer.pal(8, "Set2")), 
                  type=if(mode=="3d") {"scatter3d"} else {"scatter"}, 
@@ -135,6 +135,10 @@ plot_tweets <- function(tsne.plot, title, sentiment_threshold, type, mode, webGL
                                         ifelse(isWebGL, "", "</b>")),
                            textposition="top right",
                            textfont=list(size=11, color="rgb(0, 0, 0)"),
+                           hovertext=~paste(if(type=="clusters") {"Cluster:"} else {"Subcluster:"}, 
+                                            if(type=="clusters") {cluster} else {subcluster},
+                                            "<br>Sentiment:", sentiment, sentiment_to_html_emoji(sentiment, sentiment_threshold),
+                                            "<br>Summary:", full_text),
                            mode="markers+text",
                            marker=list(size=if(mode=="3d") {6} else {10}, color="rgb(0, 0, 0)"),
                            legendgroup=~if(type=="clusters") {cluster.label} else {subcluster.label},
@@ -180,12 +184,6 @@ discrete_sentiment_lines <- function(tweet.vectors.df, sentiment_threshold, plot
   # num_two_weeks <- tweets.df$created_at %>% week() / 2 %>% max(as.integer())
   summary.df <- data.frame(weeks = rep(c(1:num_weeks), each=3), sentiment = factor(rep(c("positive", "neutral", "negative"), num_weeks), levels = c("negative", "neutral", "positive"), ordered=TRUE), count = 0, binned_date = ymd("2019-12-29"))
   summary.df$binned_date <- summary.df$binned_date + (7 * summary.df$weeks)
-  if (!is.na(plot_range_start)) {
-    summary.df <- summary.df %>% subset(summary.df$binned_date >= ymd(plot_range_start))
-  }
-  if (!is.na(plot_range_end)) {
-    summary.df <- summary.df %>% subset(summary.df$binned_date <= ymd(plot_range_end))
-  }
   
   # because summarize() brings about mysterious errors
   # take counts and mean of sentiment
@@ -205,6 +203,14 @@ discrete_sentiment_lines <- function(tweet.vectors.df, sentiment_threshold, plot
   # remove empty rows
   summary.df <- summary.df %>% subset(count != 0)
   
+  #filter by date
+  if (!is.na(plot_range_start)) {
+    summary.df <- summary.df %>% subset(summary.df$binned_date >= ymd(plot_range_start))
+  }
+  if (!is.na(plot_range_end)) {
+    summary.df <- summary.df %>% subset(summary.df$binned_date <= ymd(plot_range_end))
+  }
+  
   # colors  source: Color Brewer 2.0
   colors <- c("positive" = "#91BFDB", "neutral" = "#FFFFBF", "negative" = "#FC8D59") # colorblind friendly
   
@@ -212,7 +218,7 @@ discrete_sentiment_lines <- function(tweet.vectors.df, sentiment_threshold, plot
   ggplot(summary.df, aes(x = binned_date, y = count, group=sentiment, color=sentiment)) + 
     geom_line(width = 3) + geom_point(size=5) +
     scale_color_manual(values = colors, aesthetics = c("colour", "fill")) +
-    ggtitle("Tweet Counts by Sentiment", subtitle = "Tweets binned into one week periods") + 
+    ggtitle("Tweet Counts by Sentiment (for entire sample)", subtitle = "Tweets binned into one week periods") + 
     ylab("Tweet Count") +
     theme(axis.title.x = element_blank(), panel.background = element_rect(fill = "#CAD0C8", colour = "black"))
 }
@@ -239,12 +245,6 @@ continuous_sentiment_barplot <- function(tweet.vectors.df, sentiment_threshold, 
   # create the data frame which will be used for the bar plot
   summary.df <- data.frame(week = c(1:num_weeks), count = 0, sentiment = "", sentiment_mean = 0, binned_date = ymd("2019-12-22"))
   summary.df$binned_date <- summary.df$binned_date + (7 * summary.df$week)
-  if (!is.na(plot_range_start)) {
-    summary.df <- summary.df %>% subset(summary.df$binned_date >= ymd(plot_range_start))
-  }
-  if (!is.na(plot_range_end)) {
-    summary.df <- summary.df %>% subset(summary.df$binned_date <= ymd(plot_range_end))
-  }
   
   for (i in 1:length(tweets.df$week)) {
     j <- tweets.df[i,]$week
@@ -272,6 +272,14 @@ continuous_sentiment_barplot <- function(tweet.vectors.df, sentiment_threshold, 
   # remove empty rows
   summary.df <- summary.df %>% subset(count != 0)
   
+  #filter by date
+  if (!is.na(plot_range_start)) {
+    summary.df <- summary.df %>% subset(summary.df$binned_date >= ymd(plot_range_start))
+  }
+  if (!is.na(plot_range_end)) {
+    summary.df <- summary.df %>% subset(summary.df$binned_date <= ymd(plot_range_end))
+  }
+  
   # colors  source: Color Brewer 2.0
   colors <- c("positive" = "#91BFDB", "neutral" = "#FFFFBF", "negative" = "#FC8D59") # colorblind friendly
   
@@ -280,7 +288,7 @@ continuous_sentiment_barplot <- function(tweet.vectors.df, sentiment_threshold, 
     geom_bar(stat = "identity", color = "azure3") +
     #geom_line(y = sentiment_threshold, color="black") + geom_line(y = -sentiment_threshold, color="black") +
     scale_color_manual(values = colors, aesthetics = c("colour", "fill")) +
-    ggtitle("Sentiment over Time", subtitle = "Tweets binned in one week intervals") + 
+    ggtitle("Sentiment over Time (for entire sample)", subtitle = "Tweets binned in one week intervals") + 
     ylab("Mean Sentiment") +
     theme(axis.title.x = element_blank(), panel.background = element_rect(fill = "#CAD0C8", colour = "#EFF0F0"))
   
@@ -312,12 +320,6 @@ cluster_sentiments_plots <- function(tweet.vectors.df, k, plot_range_start=NA, p
   # create the data frame which will be used for the bar plot
   summary.df <- data.frame(week = rep(c(1:num_weeks), k), cluster = rep(titles, each=num_weeks), count = 0, sentiment_mean = 0, binned_date = ymd("2019-12-22"))
   summary.df$binned_date <- summary.df$binned_date + (7 * summary.df$week)
-  if (!is.na(plot_range_start)) {
-    summary.df <- summary.df %>% subset(summary.df$binned_date >= ymd(plot_range_start))
-  }
-  if (!is.na(plot_range_end)) {
-    summary.df <- summary.df %>% subset(summary.df$binned_date <= ymd(plot_range_end))
-  }
   
   for (i in 1:length(tweets.df$week)) {
     wk <- tweets.df[i,]$week
@@ -338,11 +340,19 @@ cluster_sentiments_plots <- function(tweet.vectors.df, k, plot_range_start=NA, p
   # remove empty rows
   summary.df <- summary.df %>% subset(summary.df$count != 0)
   
+  #filter by date
+  if (!is.na(plot_range_start)) {
+    summary.df <- summary.df %>% subset(summary.df$binned_date >= ymd(plot_range_start))
+  }
+  if (!is.na(plot_range_end)) {
+    summary.df <- summary.df %>% subset(summary.df$binned_date <= ymd(plot_range_end))
+  }
+  
   # bar plot showing sentiment over time
   ggplot(summary.df, aes(x = binned_date, y = count, fill = sentiment_mean)) + 
     geom_bar(stat = "identity", color = "azure3") + 
     scale_fill_gradient2(name = "Sentiment Average", limits = c(-0.5,0.5), low = "#FC8D59", mid = "white", high = "#91BFDB", midpoint = 0) +
-    ggtitle("Sentiment by Week for each Cluster", subtitle = "Tweets binned in one-week intervals") + 
+    ggtitle("Sentiment by Week (for each cluster)", subtitle = "Tweets binned in one-week intervals") + 
     ylab("Tweet Count") +
     theme(axis.title.x = element_blank()) +
     facet_wrap(~ cluster, ncol = 3)
@@ -375,12 +385,6 @@ cluster_discrete_sentiments <- function(tweet.vectors.df, sentiment_threshold, k
   # create the data frame which will be used for the bar plot
   summary.df <- data.frame(week = rep(c(1:num_weeks), each=3, k), sentiment = factor(rep(c("positive", "neutral", "negative"), num_weeks * k), levels = c("negative", "neutral", "positive"), ordered=TRUE), cluster = rep(titles, each=3 * num_weeks), count = 0, binned_date = ymd("2019-12-29"))
   summary.df$binned_date <- summary.df$binned_date + (7 * summary.df$week)
-  if (!is.na(plot_range_start)) {
-    summary.df <- summary.df %>% subset(summary.df$binned_date >= ymd(plot_range_start))
-  }
-  if (!is.na(plot_range_end)) {
-    summary.df <- summary.df %>% subset(summary.df$binned_date <= ymd(plot_range_end))
-  }
   
   for (i in 1:length(tweets.df$week)) {
     wk <- tweets.df[i,]$week
@@ -400,6 +404,14 @@ cluster_discrete_sentiments <- function(tweet.vectors.df, sentiment_threshold, k
   # remove empty rows
   summary.df <- summary.df %>% subset(summary.df$count != 0)
   
+  #filter by date
+  if (!is.na(plot_range_start)) {
+    summary.df <- summary.df %>% subset(summary.df$binned_date >= ymd(plot_range_start))
+  }
+  if (!is.na(plot_range_end)) {
+    summary.df <- summary.df %>% subset(summary.df$binned_date <= ymd(plot_range_end))
+  }
+  
   # colors  source: Color Brewer 2.0
   colors <- c("positive" = "#91BFDB", "neutral" = "#FFFFBF", "negative" = "#FC8D59") # colorblind friendly
   
@@ -407,9 +419,82 @@ cluster_discrete_sentiments <- function(tweet.vectors.df, sentiment_threshold, k
   ggplot(summary.df, aes(x = binned_date, y = count, group=sentiment, color=sentiment)) + 
     geom_line() + geom_point() +
     scale_color_manual(values = colors, aesthetics = c("colour", "fill")) +
-    ggtitle("Tweet Counts by Sentiment", subtitle = "Tweets binned into one week periods") + 
+    ggtitle("Tweet Counts by Sentiment (for each cluster)", subtitle = "Tweets binned into one week periods") + 
     ylab("Tweet Count") +
     theme(axis.title.x = element_blank(), panel.background = element_rect(fill = "#CAD0C8", colour = "black")) +
     facet_wrap(~ cluster, ncol = 3)
 }
 
+load_tweet_viewer <- function() {
+  viewer_html <- '
+    <script type="text/javascript">
+      var oEmbed_xhr = null;
+      var oEmbed_timer = null;
+      $(window).load(function() {
+        var plots = $(".js-plotly-plot");
+        for (var i = 0; i < plots.length; i++){
+          $(".js-plotly-plot")[i].on("plotly_hover", function(data) {
+            oEmbed_timer = setTimeout(function() {
+              oEmbed_timer = null;
+              var point = data.points[0];
+              var hovertext = point.hovertext ? point.hovertext : point.data.hovertext;
+              tweet_id_parts = hovertext.split("[[");
+              if (tweet_id_parts.length < 2) {
+                return;
+              }
+              tweet_id_parts = tweet_id_parts[1].split("]]");
+              if (tweet_id_parts.length < 1) {
+                return;
+              }
+              tweet_id = tweet_id_parts[0];
+              embed_url = "https://publish.twitter.com/oembed?url=https://twitter.com/user/status/" + tweet_id;
+              oEmbed_xhr = $.ajax({
+                type: "GET",
+                url: embed_url,
+                dataType: "jsonp",
+                success: function(result) {
+                  $("#tweetEmbed").html(result.html);
+                  $("#tweetEmbed").show();
+                },
+                error: function(xhr, status, msg) {
+                  errorhtml = "Could not load tweet:<br />" + status + "<br />" + msg;
+                  $("#tweetEmbed").html(errorhtml);
+                  $("#tweetEmbed").show();
+                },
+                complete: function() {
+                  oEmbed_xhr = null;
+                }
+              });
+            }, 500);
+          });
+          $(".js-plotly-plot")[i].on("plotly_unhover", function(data) {
+            if (oEmbed_timer) {
+              clearTimeout(oEmbed_timer);
+              oEmbed_timer = null;
+            }
+            if (oEmbed_xhr && oEmbed_xhr.readyState != 4) {
+              oEmbed_xhr.abort();
+              oEmbed_xhr = null;
+            }
+            var tweetEmbed = $("#tweetEmbed");
+            if(tweetEmbed.is(":visible")) {
+              tweetEmbed.html("");
+              tweetEmbed.hide();
+            }
+          });
+        }
+      });
+   </script>
+   <div id="tweetEmbed"></div>
+  <style type="text/css">
+    #tweetEmbed {
+      position: fixed;
+      top: 0px;
+      left: 0px;
+      width: 15%;
+      display: none;
+    }
+  </style>'
+  
+  return(viewer_html)
+}

@@ -81,7 +81,7 @@ format_label <- function(label, cluster, subcluster=NULL, include_prefix=FALSE) 
   if (is.null(subcluster) || is.na(subcluster)) {
     paste0(ifelse(isTRUE(include_prefix), "Cluster ", ""), cluster, ". ", label)
   } else {
-    paste0(ifelse(isTRUE(include_prefix), "Subcluster ", ""), cluster, ".", subcluster, ". ", label)
+    paste0(ifelse(isTRUE(include_prefix), ".........", ""), cluster, ".", subcluster, ". ", label)
   }
 }
 
@@ -117,7 +117,7 @@ concat_text_for_summary <- function(nearest_center, k_nn) {
 ################################################################
 format_summaries_table <- function(summaries.df) {
   summaries_table.df <- summaries.df %>% 
-    arrange(vector_type, cluster, subcluster)
+    arrange(cluster, vector_type, subcluster)
   
   summaries_table.df[summaries_table.df$vector_type=="cluster_center", "subcluster"] <- NA
   

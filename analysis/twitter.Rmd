@@ -244,7 +244,7 @@ show_cluster_divisiveness <- TRUE
 # sentiment plots start date (set NA to infer from search results)
 plot_range_start <- "2020-03-15"
 # sentiment plots end date (set NA to infer from search results)
-plot_range_end <- "2020-08-25"
+plot_range_end <- "2020-07-25"
 ```
 
 ```{r, echo=FALSE}
@@ -252,7 +252,7 @@ plot_range_end <- "2020-08-25"
 # Get the tweets from Elasticsearch using the search parameters defined above
 ###############################################################################
 if (!snapshot_loaded) {
-  resultfields <- '"created_at", "user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary"'
+  resultfields <- '"id_str", "created_at", "user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary"'
   
   results <- do_search(indexname=elasticsearch_index, 
                        rangestart=rangestart,
@@ -276,7 +276,7 @@ if (!snapshot_loaded) {
   
   # this dataframe must contains the tweet text and other metadata.
   # validate that all necessary fields exist in the queried index and were returned:
-  required_fields <- c("full_text", "created_at", "user_screen_name", "user_verified", "user_location", "place.country", "place.full_name", "sentiment")
+  required_fields <- c("full_text", "id_str", "created_at", "user_screen_name", "user_verified", "user_location", "place.country", "place.full_name", "sentiment")
   validate_results(results$df, min_results, required_fields)
   
   tweet.vectors.df <- results$df[,required_fields]
@@ -299,7 +299,7 @@ if (!snapshot_loaded) {
                                                  tweet.vectors.df$place.country, sep=", "))
   tweet.vectors.df$user_location[is.na(tweet.vectors.df$user_location)] <- ""
   tweet.vectors.df$user_location_type <- ifelse(is.na(tweet.vectors.df$place.full_name), "User", "Place")
-  tweet.vectors.df <- tweet.vectors.df[, c("created_at", "full_text", "user_screen_name", "user_verified", "user_location", "user_location_type", "sentiment")]
+  tweet.vectors.df <- tweet.vectors.df[, c("id_str", "created_at", "full_text", "user_screen_name", "user_verified", "user_location", "user_location_type", "sentiment")]
   
   tweet.vectors.df$full_text <- sapply(tweet.vectors.df$full_text, clean_text)
   tweet.vectors.df$user_location <- sapply(tweet.vectors.df$user_location, clean_text)
@@ -341,6 +341,7 @@ if (!snapshot_loaded) {
   
   #append cluster centers to dataset for visualization
   centers.df <- data.frame(full_text=paste("Cluster (", rownames(km$centers), ") Center", sep=""),
+                           id_str="[N/A]",
                            created_at="[N/A]",
                            user_screen_name="[N/A]",
                            user_verified="[N/A]",
@@ -390,6 +391,7 @@ if (!snapshot_loaded) {
    
    #append subcluster centers to dataset for visualization
    centers.df <- data.frame(full_text=paste("Subcluster (", rownames(cluster.km$centers), ") Center", sep=""),
+                           id_str="[N/A]",
                            created_at="[N/A]",
                            user_screen_name="[N/A]",
                            user_verified="[N/A]",
@@ -715,10 +717,13 @@ htmltools::a(id="cluster_top")
 if (output_summaries_table) {
   summaries_table.df <- format_summaries_table(summaries.df)
   
-  kable(summaries_table.df, format="html", escape=FALSE, 
-        caption="Cluster & Subcluster Summary Listing", ) %>% 
-    kable_styling(font_size=11)
+  kable(summaries_table.df, format="html", escape=FALSE, caption="Cluster & Subcluster Summary Listing",
+        col.names=c("Cluster Label", "Generated Summary")) %>% 
+    kable_styling(font_size=11) %>%
+    column_spec(1, width="300px")
 }
 
 taglist
+
+htmltools::HTML(load_tweet_viewer())
 ```
