@@ -1,5 +1,5 @@
 ---
-title: "Twitter Notebook"
+title: "Twitter Analysis Pipeline"
 output: html_document
 params:
   # snapshot mode can be 'save', 'load', and 'none'.
@@ -78,8 +78,6 @@ if (!snapshot_loaded) {
 ```
 
 ### Configure the search parameters here:
-
-Note: large date ranges can take some time to process on initial search due to the sheer volume of data we have collected. Subsequent searches using the same date range should run quickly due to Elasticsearch caching.
 
 `r if(snapshot_loaded) paste('<h4 style="color: red">Search parameters loaded from snapshot "', params$snapshot_name, '"</h4>', sep='')`
 

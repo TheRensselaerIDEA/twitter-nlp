@@ -465,7 +465,7 @@ load_tweet_viewer <- function() {
                   oEmbed_xhr = null;
                 }
               });
-            }, 500);
+            }, 300);
           });
           $(".js-plotly-plot")[i].on("plotly_unhover", function(data) {
             if (oEmbed_timer) {
@@ -491,7 +491,7 @@ load_tweet_viewer <- function() {
       position: fixed;
       top: 0px;
       left: 0px;
-      width: 15%;
+      width: 20%;
       display: none;
     }
   </style>'
