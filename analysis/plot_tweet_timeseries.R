@@ -83,7 +83,7 @@ divisiveness_score <- function(x) {
     skew.squared.var <- skew.var^2 + 2 * skew.var * skew.mean^2
     kurt.var <- 4 * skew.var * (n^2 - 1) / ((n - 3) * (n + 5))
     BC.mean <- (skew.mean^2 + 1) / kurt.mean # compute Sarle's BC
-    BC.var <- skew.squared.var / kurt.mean^2 + kurt.var * skew.mean^4 / kurt.mean^4
+    BC.var <- skew.squared.var / kurt.mean^2 + kurt.var * (skew.mean^2 + 1)^2 / kurt.mean^4
     phi <- 5/9
     Z <- abs(BC.mean - phi) / sqrt(BC.var)
     w <- pracma::erf(Z / sqrt(2))
