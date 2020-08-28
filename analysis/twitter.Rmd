@@ -232,17 +232,20 @@ show_center_nn <- FALSE
 
 # visualize sentiment and divisiveness
 show_overall_sentiment_discrete <- TRUE
-show_overall_sentiment_continuous <- TRUE
-show_cluster_sentiment_continuous <- TRUE
+show_overall_sentiment_continuous <- FALSE
+show_cluster_sentiment_continuous <- FALSE
 show_cluster_sentiment_discrete <- TRUE
+show_cluster_divisiveness <- FALSE
 # threshold that represents the cutoff from neutral to positive above zero
 # and neutral to negative below zero. Used to turn sentiment into a variable with discrete values
 sentiment_threshold <- 0.05 # 0.05 recommended for VADER sentiment
-show_cluster_divisiveness <- TRUE
 # sentiment plots start date (set NA to infer from search results)
 plot_range_start <- "2020-03-15"
 # sentiment plots end date (set NA to infer from search results)
 plot_range_end <- "2020-07-25"
+# perform linear regression analysis on weekly divisiveness
+perform_divisiveness_linreg <- FALSE
+
 ```
 
 ```{r, echo=FALSE}
@@ -541,6 +544,36 @@ if (isTRUE(show_cluster_sentiment_continuous)) {
 # high-level cluster sentiment, discrete count
 if (isTRUE(show_cluster_sentiment_discrete)) {
   cluster_discrete_sentiments(tweet.vectors.df, sentiment_threshold, k, plot_range_start, plot_range_end)
+}
+```
+
+```{r, echo=FALSE}
+if (!exists("divisiveness.df") && isTRUE(perform_divisiveness_linreg)) {
+  divisiveness.df <- tweet.vectors.df %>%
+  group_by(cluster) %>%
+  dplyr::summarise(divisiveness = divisiveness_score(sentiment), .groups = "drop") %>%
+  mutate(divisiveness.z.score = (divisiveness - mean(divisiveness)) / sd(divisiveness))
+
+  tmp.df <- tweet.vectors.df %>%
+    mutate(week = epiweek(as.POSIXct(
+        strptime(created_at, format="%a %b %d %H:%M:%S +0000 %Y", tz="UTC")
+        ))) %>%
+    group_by(cluster, week) %>%
+    dplyr::summarise(divisiveness = divisiveness_score(sentiment), .groups = "drop")
+  
+  divisiveness.df$slope <- c(0)
+  divisiveness.df$slope.CI <- c(0)
+  for (i in 1:k) {
+    lmmodel <- lm(divisiveness ~ week, data = tmp.df %>% dplyr::filter(cluster == i))
+    slope.CI <- confint(lmmodel, "week")
+    ggplot(data = NULL, aes(x = lmmodel$residuals)) + geom_density()
+    divisiveness.df$slope[i] <- lmmodel$coefficients[2]
+    divisiveness.df$slope.CI[i] <- paste("(",slope.CI[1], ",", slope.CI[2], ")")
+  }
+  colnames(divisiveness.df) <- c("Cluster", "Divisiveness Score", "Divisiveness Score z-score", "LR Slope", "LR Slope Confidence Interval")
+}
+if (exists("divisiveness.df") && isTRUE(perform_divisiveness_linreg)) {
+  kable(divisiveness.df) %>% kable_styling(font_size=11)
 }
 ```
 
