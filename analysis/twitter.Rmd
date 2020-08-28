@@ -489,9 +489,7 @@ if (!exists("summaries.df") && isTRUE(summarize_clusters)) {
                                            summarizer_url=summarizer_url)
   
   #update the cluster & subcluster center vectors' text with summaries
-  centers_text <- tweet.vectors.df[tweet.vectors.df$vector_type != "tweet", "full_text"]
-  tweet.vectors.df[rownames(summaries.df), "full_text"] <- 
-                                  paste0(centers_text, ": [", summaries.df$summary, "]")
+  tweet.vectors.df[rownames(summaries.df), "full_text"] <- summaries.df$summary
   
   #assign the summaries back to the cluster & subcluster lists
   invisible(

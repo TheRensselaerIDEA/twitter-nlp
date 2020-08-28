@@ -112,15 +112,20 @@ sentiment_to_html_emoji <- function(sentiment_score, sentiment_threshold) {
 ################################################################
 plot_tweets <- function(tsne.plot, title, sentiment_threshold, type, mode, webGL) {
   isWebGL <- isTRUE(webGL) && mode=="2d"
+  
+  plot_type <- if(type=="clusters") {"Cluster"} else {"Subcluster"}
+  centers_trace_vector_type <- if (type == "clusters") {"cluster_center"} else {"subcluster_center"}
+  
   fig <- plot_ly(tsne.plot[tsne.plot$vector_type == "tweet",], 
                  x=~if(type=="subclusters_regrouped") {cluster.X} else {X}, 
                  y=~if(type=="subclusters_regrouped") {cluster.Y} else {Y}, 
                  z=~if(type=="subclusters_regrouped") {cluster.Z} else {Z},
                  hoverinfo = "text",
-                 hovertext=~paste(if(type=="clusters") {"Cluster:"} else {"Subcluster:"}, 
+                 hovertext=~paste(paste0(plot_type, ":"), 
                              if(type=="clusters") {cluster} else {subcluster},
-                             "<br>Sentiment:", sentiment, sentiment_to_html_emoji(sentiment, sentiment_threshold),
-                             "<br>Tweet ID:", paste0("[[", id_str, "]]")),
+                             "<br>Sentiment:", round(sentiment, 4), 
+                              sentiment_to_html_emoji(sentiment, sentiment_threshold),
+                             "<br>Tweet ID:", paste0("[", id_str, "]")),
                  color=~if(type=="clusters") {cluster.label} else {subcluster.label}, 
                  colors=colorRamp(brewer.pal(8, "Set2")), 
                  type=if(mode=="3d") {"scatter3d"} else {"scatter"}, 
@@ -128,17 +133,17 @@ plot_tweets <- function(tsne.plot, title, sentiment_threshold, type, mode, webGL
                  marker=list(size=if(mode=="3d") {3} else {5}),
                  legendgroup=~if(type=="clusters") {cluster.label} else {subcluster.label})
   
-  centers_trace_vector_type <- if (type == "clusters") {"cluster_center"} else {"subcluster_center"}
   fig <- fig %>% add_trace(data=tsne.plot[tsne.plot$vector_type == centers_trace_vector_type,],
                            text=~paste0(ifelse(isWebGL, "", "<b>"), 
                                         if(type=="clusters") {cluster} else {paste(cluster, subcluster, sep=".")}, 
                                         ifelse(isWebGL, "", "</b>")),
                            textposition="top right",
                            textfont=list(size=11, color="rgb(0, 0, 0)"),
-                           hovertext=~paste(if(type=="clusters") {"Cluster:"} else {"Subcluster:"}, 
-                                            if(type=="clusters") {cluster} else {subcluster},
-                                            "<br>Sentiment:", sentiment, sentiment_to_html_emoji(sentiment, sentiment_threshold),
-                                            "<br>Summary:", full_text),
+                           hovertext=~paste(paste0(plot_type, ":"),
+                                            if(type=="clusters") {cluster} else {subcluster}, "(Center)",
+                                            paste("<br>Avg.", plot_type ,"Sentiment:"), round(sentiment, 4), 
+                                            sentiment_to_html_emoji(sentiment, sentiment_threshold),
+                                            "<br>Generated Summary:", full_text),
                            mode="markers+text",
                            marker=list(size=if(mode=="3d") {6} else {10}, color="rgb(0, 0, 0)"),
                            legendgroup=~if(type=="clusters") {cluster.label} else {subcluster.label},
@@ -438,11 +443,11 @@ load_tweet_viewer <- function() {
               oEmbed_timer = null;
               var point = data.points[0];
               var hovertext = point.hovertext ? point.hovertext : point.data.hovertext;
-              tweet_id_parts = hovertext.split("[[");
+              tweet_id_parts = hovertext.split("[");
               if (tweet_id_parts.length < 2) {
                 return;
               }
-              tweet_id_parts = tweet_id_parts[1].split("]]");
+              tweet_id_parts = tweet_id_parts[1].split("]");
               if (tweet_id_parts.length < 1) {
                 return;
               }
