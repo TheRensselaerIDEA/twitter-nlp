@@ -68,12 +68,13 @@ source("plot_tweet_timeseries.R")
 if (!snapshot_loaded) {
   # Set server resource locations here:
   elasticsearch_index <- "coronavirus-data-masks"
-  elasticsearch_host <- ""
-  elasticsearch_path <- "elasticsearch"
-  elasticsearch_port <- 443
-  elasticsearch_schema <- "https"
+  elasticsearch_host <- "localhost"
+  elasticsearch_path <- ""
+  elasticsearch_port <- 9200
+  elasticsearch_schema <- "http"
   
-  summarizer_url <- ""
+  embedder_url <- "http://localhost:8008/embed/use_large/"
+  summarizer_url <- "http://localhost:8080/batchsummarize"
 }
 ```
 
@@ -273,7 +274,8 @@ if (!snapshot_loaded) {
                        elasticsearch_host=elasticsearch_host,
                        elasticsearch_path=elasticsearch_path,
                        elasticsearch_port=elasticsearch_port,
-                       elasticsearch_schema=elasticsearch_schema)
+                       elasticsearch_schema=elasticsearch_schema,
+                       embed_use_large_url=embedder_url)
   
   # this dataframe must contains the tweet text and other metadata.
   # validate that all necessary fields exist in the queried index and were returned:
