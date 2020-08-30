@@ -63,8 +63,11 @@ for filename in filenames:
             num_lines = sum(1 for line in f)
             f.seek(0)
             for i, line in enumerate(f):
+                line = line.strip()
                 #read the line and queue the tweet for lookup from twitter
-                if (line.strip() != ""):
+                if line != "":
+                    if ":" not in line:
+                        line = '{{ "{0}": "{1}" }}'.format(args.tweetidfieldname, line)
                     line_obj = json.loads(line)
                     tw_batch[line_obj[args.tweetidfieldname]] = line_obj
                 
