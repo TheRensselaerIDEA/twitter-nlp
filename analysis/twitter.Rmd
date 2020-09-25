@@ -68,13 +68,13 @@ source("plot_tweet_timeseries.R")
 if (!snapshot_loaded) {
   # Set server resource locations here:
   elasticsearch_index <- "coronavirus-data-masks"
-  elasticsearch_host <- "localhost"
-  elasticsearch_path <- ""
+  elasticsearch_host <-  "lp01.idea.rpi.edu"
+  elasticsearch_path <- "elasticsearch"
   elasticsearch_port <- 9200
   elasticsearch_schema <- "http"
   
   embedder_url <- "http://localhost:8008/embed/use_large/"
-  summarizer_url <- "http://localhost:8080/batchsummarize"
+  summarizer_url <- "http://idea-node-05:8080/batchsummarize"
 }
 ```
 
