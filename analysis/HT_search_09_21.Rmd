@@ -1,7 +1,7 @@
 ---
 output:
-  html_document: default
   pdf_document: default
+  html_document: default
 ---
 ```{r setup, include=FALSE}
 # Required R package installation:
@@ -48,7 +48,7 @@ text_filter <- ""
 location_filter <- ""
 
 # if FALSE, location filter considers both user-povided and geotagged locations. If TRUE, only geotagged locations are considered.
-must_have_geo <- FALSE
+must_have_geo <- TRUE 
 
 # query semantic similarity phrase
 semantic_phrase <- ""
@@ -115,10 +115,14 @@ params.df <- data.frame(from=results$params$rangestart,
                         geo_only=results$params$must_have_geo,
                         results.count=paste(nrow(results$df), "/", results$total))
 kable(params.df) %>% kable_styling()
-
+```
+### Final:
+```{r, echo=FALSE}
 #show sentiment plots
+#print(colnames(results.df))
+#source("Elasticsearch.R")
 plot_tweet_sentiment_timeseries(results.df, group.by="week")
 
 #print up to 100 tweets
-kable(display.df[1:min(100, nrow(display.df)),]) %>% kable_styling()
+#kable(display.df[1:min(100, nrow(display.df)),]) %>% kable_styling()
 ```

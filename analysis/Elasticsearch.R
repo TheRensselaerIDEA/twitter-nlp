@@ -210,7 +210,6 @@ do_search <- function(indexname,
       results.df$`_score` <- results.df$`_score` - 1.0
       colnames(results.df) <- sub("_score", "cosine_similarity", colnames(results.df))
     }
-    
     #fix column names
     colnames(results.df) <- sub("_source.", "", colnames(results.df))
     colnames(results.df) <- sub("extended_tweet.entities.", "extended_tweet.entities.full_", colnames(results.df))
