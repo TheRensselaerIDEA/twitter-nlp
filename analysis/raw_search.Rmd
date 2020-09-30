@@ -70,7 +70,7 @@ query <- '{
     },
     "by_state": {
       "terms": {
-        "field": "place.normalized_state.keyword", 
+        "field": "normalized_state.keyword", 
         "order": {
           "_key": "asc"
         },
@@ -93,7 +93,7 @@ query <- '{
       "aggs": {
         "by_state": {
           "terms": {
-            "field": "place.normalized_state.keyword",
+            "field": "normalized_state.keyword",
             "order": {
               "_key": "asc"
             },
