@@ -1,0 +1,71 @@
+---
+title: "DARL Project Status Notebook Template"
+author: "Brandyn Sigouin"
+date: "09 October 2020"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+subtitle: "Covid Twitter"
+---
+
+## Weekly Work Summary	
+
+**NOTE:** Follow an outline format; use bullets to express individual points. 
+
+* RCS ID: sigoub
+* Project Name: COVID-Twitter
+* Summary of work since last week 
+
+    * Describe the important aspects of what you worked on and accomplished
+    
+* Summary of github commits 
+
+    * branch name: sigoub/twitter-api
+    
+    * link to PR: https://github.com/TheRensselaerIDEA/COVID-Twitter/pull/36
+    
+    * I currently have an outstanding PR of 1 commit that includes a file called get-tweets.py and another file called        creds.json. 
+    
+    * get-tweets.py is used for getting tweets from elasticsearch that have the field "in_response_to_id", and then           searching twitter for those tweet ids and pulling them down. This allows us to create (tweet, response) pairs.          Thomas Shweh developed the elasticsearch logic while I developed the Twitter API logic. 
+    
+    * The twitter api logic uses a library called Tweepy for facilitating REST API calls to Twitter.
+    
+    * Links:
+    
+      * get-tweets.py : https://raw.githubusercontent.com/TheRensselaerIDEA/COVID-Twitter/sigoub/twitter-api/tools/twitter-api/get-tweets.py
+      
+      * creds.json : https://raw.githubusercontent.com/TheRensselaerIDEA/COVID-Twitter/sigoub/twitter-api/tools/twitter-api/creds.json
+    
+
+## Personal Contribution	
+
+* Clearly defined, unique contribution(s) done by you: code, ideas, writing...
+
+* My contribution this week is that I was able to get access to the Twitter Dev API and wrote some python code to retrieve tweets by ID from Twitter's database. Now, we are able to get the "in_response_to_id" from the tweets in elasticsearch and then retrieve the original tweet that it was in response to from twitter. The code also creates (tweet, response) pairs from this data, which will be written to the elasticsearch db after we decide on the schema for storing the new data.
+
+* Gaining access to the Twitter dev account was difficult as I had to send multiple emails to get approved, but it eventually worked
+
+
+## NEW: Drafting your DAR/HACL Blog Post
+
+*Use this space to begin drafting your by-the-end-of-term Data INCITE blog post. As discussed in class, the "specs" for this post are...*
+
+* 400-600 words in length
+* Clear statement of your **lede** --- the first paragraph of any news story, containing the "Five W’s and H:" who, what, where, when, why, and how.
+
+    * Who: Who is the post about?
+    * What: What happened in the post?
+    * Where: Where did the work you’re writing about occur?
+    * When: When did it occur?
+    * Why: Why did this happen?
+    * How: How did this happen?
+
+* A screen shot or image that best illustrates your post
+* Answer Mary's "three questions":
+
+    * What did you want to know?
+    * How did you go about finding it?
+    * What did you find?
+    
