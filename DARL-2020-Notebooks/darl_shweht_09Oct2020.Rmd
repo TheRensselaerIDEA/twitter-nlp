@@ -31,54 +31,65 @@ subtitle: "Covid Twitter"
     
 * Summary of github commits 
 
-    * No commits were made this week. The work that I have done was mainly trying to get notebooks to knit and shiny apps to run. 
-      The modifications that I have made to these files should not be exposed on the internet since they expose the elasticsearch cluster.
-    * Don't havet access push branches in the public github repo. But I will release a PR detailing how to use Python on the IDEA cluster
-    * You can view my python instructions on my forked repo
-    * https://github.com/shwehtom89/COVID-Twitter/blob/master/PYTHON.md
+    * For some reason I still cannot push branches to the public github
+    * You can see my commit here in my forked repo: https://github.com/shwehtom89/COVID-Twitter/commit/5f9f5a17a7575cbfbd8419c3e69f0849d4a33037
+    * This commit focuses on retrieving results from elasticsearch given a certain filter. Right now it is configured to filter for tweets that are replies to other tweets but can be configured to just filter on quote tweets
+    * This commit also includes modifying a parameter in our analysis pipeline to retrieve the quoted status of a tweet. More details about this below.
 
 * List of references (if necessary)
 
-    * "Unmasking the conversation on masks: Natural language processing fortopical sentiment analysis of COVID-19 Twitter discourse"
-      https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/publications/COVID_Twitter_AMIA_2021_Paper.pdf
+    * https://kb.objectrocket.com/elasticsearch/elasticsearch-and-scroll-in-python-953 This is the reasource I used to work with elasticsearch in python
+    
       
 * Indicate any use of group shared code base
 
-    * Modified copies of notebook twitter.Rmd for personal inquiry
-    * Created snapshot of analysis pipeline to feed into R shiny app
-    * Did not modify but ran app.R and twitter_app.R to analyze progress
+    * I modified twitter.Rmd, our twitter analysis pipeline to experiment with retrieving a tweet's quoted status
+    * I worked on https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/sigoub/twitter-api/tools/twitter-api/get-tweets.py
     
 * Indicate which parts of your described work were done by you or as part of joint efforts
 
-    * Abraham modified twitter_app.R and pushed it to github
-    * The other files were already existing on github and I modified them to get them to run (twitter.Rmd, app.R)
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/pull/36. 
+    * I worked in conjunction with Brandon on his PR on retriving reply response pairs. Brandon was responsible for working and interfacing with the twitter API. He worked on extracting the text from a tweet
+    * I worked on interfacing with elasticsearch, finding the index and being able to make a filterd search
 
 ## Personal Contribution	
 
-* Outlined the steps to get `twitter.Rmd` to knit for this semester's cohort working on Covid Twitter on Slack
-  Specifically, I suggested the elasticsearch parameters and on github do not work for the IDEA cluster. I have sent a message of correct parameters for use on the slack channel.
-* Found and ran Luaren's shiny app built over the summer. Had a discussion between Dr. Bennett and Abraham on where to take the shiny app in. From the meeting we found that giving external users the ability to perform their own queries will be too slow and costly on our given hardware. Instead the direction that we think we are heading is providing certain snapshots available for external users to explore. If users want to make their own queries we will provide a instructions and data in a github repo. Potentional for creating a setup script for this
-* Discussed with Brandon and Abraham about future direction to take this project. We discussed predicting the future responses to tweets and also the future snetiment of those responses to the tweets. Suggestion of going with training the model in python and using pytorch for this problem.
+* This week I investigated using quotetweets with our analysis pipeline and adding this dimension of data into the pipeline. I stopped this processes because I found some issues discussed in Primary Findings
+* I investigated our elasticsearch indecies and found out how to search both quote tweets and tweets that are in reply to another tweet
+* I applied for a Twitter Developer account as well. Brandon found out that he is limited 500,000 API invocations of getting tweets. We will use my account if we run out.
+* I updated the script to scroll through the results of an elasticsearch query so we can paginate through all data
 
 ## Discussion of Primary Findings 	
 
-* Discuss primary findings: 
+* Discuss primary findings:
 
-    * This week I wanted to find out what was accomplished over last summer for the R shiny apps that Lauren built. Below you can find screenshots of the different apps available. 
-    ** app.R **
-    This shiny app provides a way for users to perform an elastic search query. However from the code, it appears that the parameters are hard coded it at build time. I have attempted to use the search bar but I cannot see any changes. What does work however is that it shows a kmeans cluster along with a word map and specific tweet information.
-    ![app.R Shiny app](./shweht_images/assign3/img3.png)
-	
-	** twitter_app.R**
-	This app provides a way for users to view a clustering based off of an elastic search snapshot. It is a visualization that you lets you move through each one of the subclusters and view them individually. This is easier than scrolling through the knitted pdf. 
-	![twitter_app.R subclusters](./shweht_images/assign3/img1.png)
-Another visualization that this app gives is the sentiment level over time for tweets in a particular cluster. It can either be positive, negative or neutral. This is graphed over the time intervals of and the sentiment level is graphed on the y-axis
-![twitter_app.R sentiment](./shweht_images/assign3/img2.png)
+1. When I attempted to use the existing pipeline to find quote tweets, I was sucessful in getting the quoted status field retrieved from the pipeline. However there were several issues that I saw from this conclusion. For one out of all tweets that we ran the sampling on, only a few of the tweets actually were quote tweets. We could alter the code in Elasticsearch.R to handle filtering for specific fields to circumvent this issue, but that involves restructuring a bit of the existing code support this feature. Another issue that I had with this approach is that the pipeline should be run against a dataset of both quote and reply tweets. This is a better representation of our problem since our data set will not only involved quote tweets but also tweets that are in reply to another. The original plan was to export quote tweets along with the cluster that they belonged to. But this clustering only makes sense in context of the data set that we are using. The current clustering is in relation to all tweets while we want to cluster a data set of reply and response. Another issue with this approach is modifying the pipeline to support an additional data column to represent which tweet the current tweet is responding to. I believe that this is an issue that needed further discussion before going ahead and implementing so that is why I held off of exporting quote tweets from our pipeline. Instead, I chose to gather tweets directly into elasticsearch
 
-While these visualizations are useful they perform an elastic search query in the background. This may not scale up given the number of users that we have. As such I think we may want to just search snapshots as shown in the other shiny app that just loads a snapshot. I think that hosting snapshots for users to choose from might be a better alternative for our situation. I plan to include different visualizations and have a search functionality to find what cluster the search is most relavent to. If the user wants to perform their own queries we will need to provide a repo and instructions to self host.
+2. Filtering tweets by quote and reply. This week I directed my focus to supporting Brandon and writing a script to interface with elasticsearch to gather certain types of tweets. Quoted tweets are denoted by a certain parameter called **quoted_status**. This is an object that will contain tweet data for the parent tweet that the current one is retweeting and responding to. While tweets that are in direct response to another tweet will have the field **in_reply_to_status_id_str** be non null. As a result I was able to make queries against our elasticsearch cluster using the following filter
+```
+search_param = {
+    "_source": True,
+    "query": {
+      "constant_score" : {
+           "filter" : {
+              "exists" : {
+                 "field" : "in_reply_to_status_id_str"
+              }
+           }
+      }
+    }
+  }
+```
+This allows us to search by fields that are non null which allows to located tweets that we are interested in. 
 
+3. Elasticsearch functions closely to a database for retrieving large amounts of data. Currently with the way my query is being configured, I am only getting 10 results from our elasticsearch cluster. On one hand we can change this number to be arbitrarily large, but I am interested in processes all the data. Now I am using what is called elasticsearch's scroll feature to paginate over all the data. This functions much like a database's cursor tools in order to fetch large amounts of data. The part of my code that handles this can be found https://github.com/shwehtom89/COVID-Twitter/blob/quotetweets/tools/gather_tweets.py#L47-L52.
+
+4. Now that we can gather tweets from elasticsearch and from the twitter API there is a need to discuss the schema for how we are going format our data in our new index. This is necessary for us differentiate quote tweets and reply tweets. Since reply tweets are not something that the twitter api returns and somethinge we processes ourselves we need to define this format. We also need to consider fields we are feeding into our data model.
+
+    
 ## Next Steps
 
 * For the next week I will research how to build R shiny applications and how they work. This will help me build off of the previous work done over the summer and provide useful visualtions
 * I will also reasearch language models in order to tackle perdicting response sentiment to a tweet
 * Lastly I will familiarize myself with elastic search and be able request tweets and their corresponding replies to gather data for this model
+* Configure the script to be searchable, so we can focus on WHO quotetweets and responses
