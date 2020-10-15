@@ -27,7 +27,8 @@ subtitle: "DARL Twitter"
 ## Personal Contribution	
 
   https://lp01.idea.rpi.edu/shiny/zhangh20/HTapp/
-
+  ![Caption for the picture.](./zhangh20Folder/Assignment04.jpg)
+  ![Caption for the picture.](./zhangh20Folder/Assignment0401.jpg)
   What I have done is using the Shiny to visualize the map with the mean sentiment  in different colors. Meanwhile since I am new to R and shiny, I have learned and try to used and understand the codes to implement the codes . 
 
 ## Discussion of Primary Findings 	
