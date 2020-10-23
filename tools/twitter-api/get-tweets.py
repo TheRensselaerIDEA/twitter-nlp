@@ -6,6 +6,9 @@ import tweepy
 creds = json.load(open("creds.json"))
 creds = creds["twitter-creds"]
 
+config = json.load(open("config.json"))
+config = config["config"]
+
 consumer_key        = creds["consumer_key"]
 consumer_key_secret = creds["consumer_key_secret"]
 access_token        = creds["access_token"]
@@ -17,7 +20,7 @@ api = tweepy.API(auth)
 
 def GetElasticSearchHits(): 
   es = Elasticsearch(
-    ['lp01.idea.rpi.edu:443/elasticsearch'],
+    [config["server"]],
     # turn on SSL
     use_ssl=True,
     # no verify SSL certificates
@@ -94,5 +97,6 @@ def GetTweetsFromAPI(hits):
     
 if __name__ == "__main__":
   hits = GetElasticSearchHits()
-  pairs = GetTweetsFromAPI(hits)
-  print(pairs)
+  print(hits[0]['_source']['in_reply_to_status_id'])
+  #pairs = GetTweetsFromAPI(hits)
+  #print(pairs)
