@@ -190,6 +190,22 @@ fig3<- ggplot(summary.tibble, aes(x = location, y =  mean_sentiment, fill = mean
        theme(axis.title.x = element_blank() ,axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)   )
 ggarrange(fig1, fig2,fig3, nrow = 3, heights = c(1, 0.25,1))
 ```
+```{r,echo=False}
+summary.tibble <- tweet.tibble[tweet.tibble$location == "CA",] %>% group_by(week) %>% summarize(mean_sentiment = mean(sentiment), sd_sentiment = sd(sentiment), count = length(datetime), divisiveness = divisiveness_score(sentiment))
+summary.tibble$divisiveness[is.na(summary.tibble$divisiveness)] <- 0
+
+summary.tibble %>% ungroup()
+
+fig1 <- ggplot(summary.tibble, aes(x = week, y = mean_sentiment, fill = mean_sentiment)) + 
+      #geom_bar(stat = "identity", color = "azure3") + 
+      geom_line(color = "azure3",aes(y=mean_sentiment))+
+      geom_point(stat = "identity",color = "azure3",aes(y=mean_sentiment))+
+      scale_fill_gradient2(name = "Sentiment Average", limits = c(-1,1), low = "red", mid = "white", high = "green", midpoint = 0) +
+      ggtitle("Tweets by Location") + 
+      ylab("Tweet Count") +
+      theme(axis.title.x = element_blank() ,axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)   )
+ggarrange(fig1, nrow = 1, heights = c(1.25))
+```
 
 ### DataStracture_Checking:
 ```{r,echo=FALSE}
