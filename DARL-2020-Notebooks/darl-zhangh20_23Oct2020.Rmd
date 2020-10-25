@@ -1,0 +1,49 @@
+---
+title: "DARL Project Status Notebook"
+author: "Haotian Zhang"
+date: "23 October 2020"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+subtitle: "DARL Twitter"
+---
+
+
+
+## REQUIRED: Weekly Work Summary	
+
+**NOTE:** Follow an outline format; use bullets to express individual points. 
+
+* RCS ID: zhangh20
+* Project Name: Tweet Analysis
+* Summary of work since last week 
+
+* Summary of github commits 
+   https://github.com/TheRensselaerIDEA/COVID-Twitter/tree/darl-zhangh20
+
+For this week, I am still trying to figure out what I will like to do in the next week, and makes what I have done more efficint make up the mistakes what I have done (mainly is about to make leaflet reactive). 
+
+## Personal Contribution	
+
+  https://lp01.idea.rpi.edu/shiny/zhangh20/HTapp/
+  ### Sorry the link can not work as I tested, I have working on it for several days. However it can work on my Machine/on my console. However it will have something like (An error has occurred. Check your logs or contact the app author for clarification.) I will continue to use the snapshoot to explain what I have done. Sorry for the inconveninet. I will continue to work one that. 
+  First of all, Since the last time, Professor Erickson has explained for me the importance of using Leaflet is its interactive attribute, hence Now I am working making the map be more active and become more useful. (Meanwhile you  can see as the mouse move and the state, you can see the state is highlighed)
+  
+  ![Caption for the picture.](./zhangh20Folder/1023-p1.jpg)
+  As we can seen, at first you can only see the map with the map. With the different color you can see the different sentiment of each state and you can see the more "redder" it is more negative and more "bluer" it is more positive.
+  
+  Later if you click on the state (such as California) It would show the tweet account for this state. You can see it can upload the counts for each week and also you can see the mean sentiment for each wekk. Also for the second graph, you can see the change of the sentiment during the week. 
+  ![Caption for the picture.](./zhangh20Folder/1023-p2.jpg)
+=======
+
+
+## Discussion of Primary Findings 	
+
+
+  ![Caption for the picture.](./zhangh20Folder/1023-p3.jpg)
+  ![Caption for the picture.](./zhangh20Folder/1023-p4.jpg)
+  In the map, we can see people during 2020 feel really differnt (with big variance) due to COVID 19 and there are many differnt attitude with different attidue in the state. Meanwhile, each state in different time will have differnt sentiment. 
+  
+  Meanwhile, during the test. I find out the Mean/average sentimet will be not clear to show the real sentiment for the stat. As we can seen, the random pick up states will also change the variance or change the dataset. Which would change significantly (with some try, I forget to record some extrem case, but from the two figures, you can see there has some difference)
