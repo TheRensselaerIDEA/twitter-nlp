@@ -1,6 +1,18 @@
 {
   "config": {
-    "server": "XX"
+    "elasticsearch": {
+      "es_host" : "XXX",
+      "es_path" : "elasticsearch",
+      "es_port" : "443"
+    },
+    "client" : {
+      "use_ssl": true,
+      "verify_certs": false,
+      "ssl_show_warn": false,
+      "timeout": 30,
+      "max_retries": 10,
+      "retry_on_timeout": true
+    },
+    "es_index": "coronavirus-data-all"
   }
-  
 }
