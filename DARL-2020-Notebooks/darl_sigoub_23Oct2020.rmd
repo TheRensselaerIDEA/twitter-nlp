@@ -1,0 +1,34 @@
+---
+title: "DARL Project Status Notebook"
+author: "Brandyn Sigouin"
+date: "23 October 2020"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    toc: yes
+subtitle: "Covid Twitter"
+---
+
+## REQUIRED: Weekly Work Summary	
+
+* Repo and branch: https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/sigoub/get-data-script/
+* Directory: tools/twitter-api/
+* Files: config.json, creds.json, get-tweets.py, scrolling.py, twitter_api_handler.py
+
+* The file titled scrolling.py was mainly written by Thomas Shweh
+* The files called twitter_api_handler.py, config.json, creds.json, and get-tweets.py were written by me
+
+The contributed work will allow us to get all tweets under a given index in elasticsearch that are a response to another tweet, and then find the tweet in which they are a response to in the twitter api. These tweets pulled from the Twitter API are written to a new field called 'in_reply_to_status'. twitter_api_handler also includes the logic for writing the updated data back to the elasticsearch index.
+
+
+
+## Personal Contribution	
+
+* I have contributed the files called twitter_api_handler.py, get-tweets.py, config.json, and creds.json. 
+* The logic/ functionality provided is as described above under my Weekly Work Summary
+
+## Discussion of Primary Findings 	
+
+* As I pull Tweets, my Twitter API quota has not changed from 0 out of 500,000. This tells me that I may be able to pull as many tweets as I want.
+
