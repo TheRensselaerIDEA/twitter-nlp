@@ -62,6 +62,7 @@ source("general_helpers.R")
 source("text_helpers.R")
 source("plot_helpers.R")
 source("plot_tweet_timeseries.R")
+library(dplyr)
 ```
 
 ```{r, echo=FALSE}
@@ -88,7 +89,7 @@ if (!snapshot_loaded) {
   rangestart <- "2020-03-01 00:00:00"
   
   # query end date/time (exclusive)
-  rangeend <- "2020-04-01 00:00:00"
+  rangeend <- "2020-05-01 00:00:00"
   
   # text filter restricts results to only those containing words, phrases, or meeting a boolean condition. This query syntax is very flexible and supports a wide variety of filter scenarios:
   # words: text_filter <- "cdc nih who"  ...contains "cdc" or "nih" or "who"
@@ -101,7 +102,7 @@ if (!snapshot_loaded) {
   location_filter <- ""
   
   # if FALSE, location filter considers both user-povided and geotagged locations. If TRUE, only geotagged locations are considered.
-  must_have_geo <- FALSE
+  must_have_geo <- TRUE
   
   # query semantic similarity phrase (choose one of these examples or enter your own)
   #semantic_phrase <- "Elementary school students are not coping well with distance learning."
@@ -233,6 +234,7 @@ show_center_nn <- FALSE
 
 # visualize sentiment and divisiveness
 show_overall_sentiment_discrete <- TRUE
+show_overall_sentiment_map <- TRUE
 show_overall_sentiment_continuous <- FALSE
 show_cluster_sentiment_continuous <- FALSE
 show_cluster_sentiment_discrete <- TRUE
@@ -254,7 +256,7 @@ perform_divisiveness_linreg <- FALSE
 # Get the tweets from Elasticsearch using the search parameters defined above
 ###############################################################################
 if (!snapshot_loaded) {
-  resultfields <- '"id_str", "created_at", "user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary"'
+  resultfields <- '"id_str", "created_at", "user.screen_name", "user.verified", "user.location","normalized_state", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary"'
   
   results <- do_search(indexname=elasticsearch_index, 
                        rangestart=rangestart,
@@ -280,10 +282,11 @@ if (!snapshot_loaded) {
   # this dataframe must contains the tweet text and other metadata.
   # validate that all necessary fields exist in the queried index and were returned:
   required_fields <- c("full_text", "id_str", "created_at", "user_screen_name", "user_verified", "user_location", "place.country", "place.full_name", "sentiment")
+  required_fields.HT <- c("full_text", "id_str", "created_at", "user_screen_name", "user_verified", "user_location","normalized_state", "place.country", "place.full_name", "sentiment")
   validate_results(results$df, min_results, required_fields)
   
   tweet.vectors.df <- results$df[,required_fields]
-  
+  tweet.HT.df <- results$df[,required_fields.HT]
   # this matrix contains the embedding vectors for every tweet in tweet.vectors.df
   tweet.vectors.matrix <- t(simplify2array(results$df[,"embedding.use_large.primary"]))
 }
@@ -308,6 +311,41 @@ if (!snapshot_loaded) {
   tweet.vectors.df$user_location <- sapply(tweet.vectors.df$user_location, clean_text)
 }
 ```
+
+```{r, echo=FALSE}
+###############################################################################
+# Cleaning for HT data 
+# Clean the tweet and user location text, and set up tweet.vectors.df 
+# the way we want it by consolidating the location field and computing
+# location type
+###############################################################################
+if (!snapshot_loaded) {
+  tweet.HT.df$user_location <- ifelse(is.na(tweet.HT.df$place.full_name), 
+                                           tweet.HT.df$user_location, 
+                                           paste(tweet.HT.df$place.full_name, 
+                                                 tweet.HT.df$place.country, sep=", "))
+  tweet.HT.df$user_location[is.na(tweet.HT.df$user_location)] <- ""
+  tweet.HT.df$user_location_type <- ifelse(is.na(tweet.HT.df$place.full_name), "User", "Place")
+  tweet.HT.df <- tweet.HT.df[, c("id_str", "created_at", "full_text", "user_screen_name", "user_verified", "user_location","normalized_state", "user_location_type", "sentiment")]
+  
+  tweet.HT.df$full_text <- sapply(tweet.HT.df$full_text, clean_text)
+  tweet.HT.df$user_location <- sapply(tweet.HT.df$user_location, clean_text)
+}
+```
+
+```{r,echo=FALSE, results='hide'}
+tweets.df <- tweet.HT.df[!is.na(tweet.HT.df$sentiment),]
+  # test to see if Normalized State is avaible 
+  tweets.df <- tweets.df[!is.na(tweets.df$normalized_state),]
+  tweets.df$created_at <- as.POSIXct(strptime(tweets.df$created_at, format="%a %b %d %H:%M:%S +0000 %Y", tz="UTC"))
+  tweets.df$week <- epiweek(tweets.df$created_at)  # CDC epidemiological week
+  tweets.df$date <- date(tweets.df$created_at)
+  tweet.tibble <- tibble(sentiment = tweets.df$sentiment, week = tweets.df$week, date = tweets.df$date, datetime = tweets.df$created_at, location = tweets.df$normalized_state  )
+  summary.tibble <- tweet.tibble %>% group_by(location) %>% summarise(count = length(datetime),mean_sentiment = mean(sentiment))
+  summary.tibble <- summary.tibble %>% ungroup()
+  states <- states(cb=T)
+```
+
 
 ```{r, echo=FALSE}
 ###############################################################################
@@ -517,7 +555,21 @@ if (isTRUE(show_overall_sentiment_discrete)) {
 
 ```
 
-```{r, echo=FALSE}
+
+
+```{r,echo=FALSE}
+###############################################################################
+# Run a Map showing sentiment over map
+###############################################################################
+
+if( isTRUE(show_overall_sentiment_map)) {
+  geographical_sentiment_maps(summary.tibble,states)
+}
+```
+
+
+
+```{r, echo=FALSE, fig.width=10, fig.height=10}
 ###############################################################################
 # Run a plot showing sentiment over time, as a continuous variable, for the entire sample
 ###############################################################################
