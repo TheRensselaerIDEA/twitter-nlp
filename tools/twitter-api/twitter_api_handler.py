@@ -60,7 +60,7 @@ class TwitterAPIHandler:
     return output, numUnavailable
       
   
-  def WriteDataToElasticSearch(self, hits):
+  def WriteDataToElasticSearch(self, hits, es_index):
     """
     Write the modified data back to the elasticsearch index
     """
@@ -81,7 +81,7 @@ class TwitterAPIHandler:
     """
     hits = self.GetElasticSearchHitsWithScrolling(es_index, max_hits=num_tweets)
     tweets = self.GetTweetsFromAPI(hits)
-    self.WriteDataToElasticSearch(tweets)
+    self.WriteDataToElasticSearch(tweets, es_index)
     
     
 if __name__ == "__main__":
@@ -89,5 +89,5 @@ if __name__ == "__main__":
   retriever.GetOriginalTweetsAndWriteToElasticSearch('coronavirus-data-all', 1000)
   """
   To run full functionality of the script, call:
-  retriever.GetOriginalTweetsAndWriteToElasticSearch(self, num_tweets)
+  retriever.GetOriginalTweetsAndWriteToElasticSearch(self,es_index, num_tweets)
   """
