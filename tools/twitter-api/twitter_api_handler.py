@@ -1,4 +1,4 @@
-from scrolling import es, es_index, search
+from scrolling import es, search
 from elasticsearch import Elasticsearch
 from error_handling import *
 from elasticsearch.helpers import bulk
@@ -35,7 +35,6 @@ class TwitterAPIHandler:
     except:
       return -1
     
-
   def GetTweetsFromAPI(self, hits):
     """
     Gets the original tweet for each response-type hit from Twitter 
@@ -46,16 +45,20 @@ class TwitterAPIHandler:
     numUnavailable = 0
     for i in range(0, len(responseTweetIds), 100):
       apiResponse = self.api.statuses_lookup(responseTweetIds[i:i+100], tweet_mode="extended", map=True)
-      responseIndex = 0
+      
+      numUnavailable += (100 - len(apiResponse))
       for j in range(i, i+100):
         currHit = hits[j]
-        currHit['_source']['in_reply_to_status'] = apiResponse[responseIndex]
-          
-        responseIndex += 1
+        inReplyToId = currHit['_source']['in_reply_to_status_id']
+        for tweet in apiResponse:
+          if tweet._json['id'] == inReplyToId:
+            currHit['_source']['in_reply_to_status'] = tweet._json
+            output.append(currHit)
+            break
         
-        output.append(currHit)
         
     return output, numUnavailable
+      
   
   def WriteDataToElasticSearch(self, hits):
     """
@@ -78,11 +81,12 @@ class TwitterAPIHandler:
     """
     hits = self.GetElasticSearchHitsWithScrolling(es_index, max_hits=num_tweets)
     tweets = self.GetTweetsFromAPI(hits)
-    self.WriteDataToElasticSearch(hits)
+    self.WriteDataToElasticSearch(tweets)
     
     
 if __name__ == "__main__":
   retriever = TwitterAPIHandler()
+  retriever.GetOriginalTweetsAndWriteToElasticSearch('coronavirus-data-all', 1000)
   """
   To run full functionality of the script, call:
   retriever.GetOriginalTweetsAndWriteToElasticSearch(self, num_tweets)
