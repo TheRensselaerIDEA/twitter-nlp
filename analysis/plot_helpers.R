@@ -27,6 +27,22 @@ if (!require('lubridate')) {
   library(lubridate)
 }
 
+
+if (!require('leaflet')) {
+  install.packages("leaflet")
+  library(leaflet)
+}
+
+if (!require('dplyr')) {
+  install.packages("dplyr")
+  library(dplyr)
+}
+
+if (!require('tigris')) {
+  install.packages("tigris")
+  library(tigris)
+}
+
 ################################################################
 # Computes and returns elbow and/or silhouette plots 
 # for master kmeans clusters
@@ -227,6 +243,37 @@ discrete_sentiment_lines <- function(tweet.vectors.df, sentiment_threshold, plot
     ylab("Tweet Count") +
     theme(axis.title.x = element_blank(), panel.background = element_rect(fill = "#CAD0C8", colour = "black"))
 }
+
+
+################################################################
+# Generate map showing different sentiment over time
+# from a collection of tweets. 
+################################################################
+geographical_sentiment_maps <- function(summary.tibble,states) {
+  colors <- c("#253494","#4575B4", "#74ADD1","#ABD9E9","#f7f7f7","#FDAE61","#F46D43", "#D73027", "#BD0026")
+  
+  states_merged_sb <- geo_join(states, summary.tibble, "STUSPS", "location")
+  pal <- colorNumeric(rev(colors), domain=states_merged_sb$mean_sentiment)
+  states_merged_sb <- subset(states_merged_sb, !is.na(mean_sentiment))
+  popup_sb <- paste0("Mean Sentiment: ", as.character(states_merged_sb$mean_sentiment))
+  
+  leaflet() %>%
+    setView(-98.483330, 38.712046, zoom = 4) %>% 
+    addPolygons(data = states_merged_sb , 
+                fillColor = ~pal(states_merged_sb$mean_sentiment), 
+                fillOpacity = 0.7, 
+                weight = 0.2, 
+                smoothFactor = 0.2, 
+                popup = ~popup_sb,
+                dashArray = "3",
+                layerId = states_merged_sb$STUSPS,
+                highlight = highlightOptions(weight=5,color="#666",dashArray="",fillOpacity = 0.7, bringToFront = TRUE)) %>%
+    addLegend(pal = pal, 
+              values = states_merged_sb$mean_sentiment, 
+              position = "bottomright", 
+              title = "Mean_sentiment")
+}
+
 
 ################################################################
 # Generate bar plot showing continuous sentiment over time
