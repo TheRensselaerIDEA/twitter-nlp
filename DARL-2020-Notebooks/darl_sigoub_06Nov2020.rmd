@@ -1,0 +1,44 @@
+---
+title: "DARL Project Status Notebook Template"
+author: "Brandyn Sigouin"
+date: "06 November 2020"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+subtitle: "Covid Twitter"
+---
+
+
+## REQUIRED: Weekly Work Summary	
+
+* RCS ID: sigoub
+* Project Name: Covid Twitter
+
+    
+* Summary of github commits 
+
+    * branch: sigoub/twitter-test
+    * link to file: https://raw.githubusercontent.com/TheRensselaerIDEA/COVID-Twitter/95490e0b35c0bf440bc59d89752c66c357162e70/tools/twitter-api/twitter_api_handler.py
+    
+    * Commit Name: fixed data retrieval bug by directly matching ids
+      This commit implements the code to fix the issue as described under Personal Contribution
+      
+    * Commit Name: fixed index issue in GetOriginalTweetsAndWriteToElasticSearch()
+      This commit fixed an error where the name of the elasticsearch index to write to was not being
+      properly passed into the function GetOriginalTweetsAndWriteToElasticSearch()
+    
+    
+
+## Personal Contribution	
+
+This week I mainly focussed on debugging and getting my data retrieval code up to production quality. The primary task that I accomplished was debugging a very challenging issue caused by inconsistent responses from the Tweepy API. Essentially, in order for calls to the Twitter API to be of reasonable speed, we must request batches of tweets of size 100. In other words, we are able to grab 100 tweets at a time, ideally this would be 100 original tweets pulled from Twitter per 100 response tweets pulled from elasticsearch. However, there are times when Tweepy returns some number of tweets less than 100, such as 99 or 98. This introduces a significant issue as the goal of these API calls is to pair each tweet from elasticsearch with a tweet from Twitter. So if we ask for 100 tweets but only get 98, there is no longer a 1:1 relationship to pair tweets. Additionally, the structure of the data is such that we cannot match tweets by ID as one would if Tweets were json objects indexed with an ID key. The solution that I came up with is: iterate over the the batch of 100 elasticsearch tweets, and for each elasticsearch tweet, look at the responses pulled from Tweepy and only pair tweets if and only if the id of the Tweepy Tweet matches the id specified by the field "in_reply_to_id" in the elasticsearch tweet. After some testing I have found this to produce much cleaner, and realiable data. 
+
+* Tweet -> Response pairs are now guranteed to be correct, thus ensuring that our models will be able to process the data as well as possible. This will also save us time in the future when we debug our models as we will not have to worry about data corruption caused by the retrieval process.
+
+## Discussion of Primary Findings 	
+
+* I discovered that getting a batch of 100 Tweets from Twitter and then pairing tweets by iterating over them in O(n*m) time is faster than getting one tweet at a time and pairing in constant time. Thus, the bottleneck in data retrieval is our API calls and can be minimized by requesting the maximum number of Tweets and then processing each one after we have them in local memory.
+
+* There is no way to illustrate this as the bad code that I tested for pulling tweets one at a time was deleted last week
