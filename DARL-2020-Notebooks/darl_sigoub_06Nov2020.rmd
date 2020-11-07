@@ -1,5 +1,5 @@
 ---
-title: "DARL Project Status Notebook Template"
+title: "DARL Project Status Notebook"
 author: "Brandyn Sigouin"
 date: "06 November 2020"
 output:
