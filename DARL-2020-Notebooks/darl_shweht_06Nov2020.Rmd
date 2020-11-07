@@ -11,13 +11,6 @@ output:
 subtitle: "Covid Twitter"
 ---
 
-```{r}
-if (!require("reticulate")) {
-  install.packages("reticulate")
-  library(reticulate)
-}
-use_python("/usr/local/bin/python")
-```
 ## Weekly Work Summary	
 
 * RCS ID: shweht
@@ -38,28 +31,44 @@ use_python("/usr/local/bin/python")
     * Present progress on current sentiment classification pipeline
     * Look into articles and direction provided by Abraham on how to finetune a BERT model
     
-* Summary of github commits 
+* Summary of github commits
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/pull/42/commits/cc767d27bdce842f7ab3f0d7577fd6ec43eccc8f
+      This commit moves all the configurable parameters such as elasticsearch host, index, port into a configuration file.
+      All data relative to the elasticsearch client is ofloaded to a seperate config file
+    
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/pull/42/commits/a519ba844a76287805216fd91a0e7d884992e631
+      This commit clears the scrolling index after the script is run to save memory
+      It also fixes uses of the elasticsearch bulk api
 
-    * For some reason I still cannot push branches to the public github
-    * You can see part of the code that I worked on here
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/commit/a6613ca51d2af53f774283f87a3ec385ef8c1052
+      You may have trouble viewing a raw jupyter notebook. A direct view can found here
+      https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/bert_sentiment/sentiment/BERT_sentiment.ipynb
+      This commit starts the sentiment classification pipeline using BERT. This commit includes the following
+      1. Downloads SemEval dataset from dropbox
+      2. Reads all datafiles and parses tweets into a pandas dataframe
+      3. Amalgamates all data and splits data into training, testing and validation sets
+      4. Tokenizes tweet text using BERT Tokenizer
+      
 
 * List of references (if necessary)
 
     * https://arxiv.org/pdf/2005.07503.pdf Paper on a BERT model trained on tweets during the start of the coronavirus pandemic
     * https://arxiv.org/pdf/1704.06125v1.pdf Paper on evaluating sentiment of tweets using CNNs on SemEval dataset
-    * https://curiousily.com/posts/sentiment-analysis-with-bert-and-hugging-face-using-pytorch-and-python/ Blogpost on how to fine tune BERT to predict for a specific language problem
-    
+    * https://huggingface.co/transformers/custom_datasets.html How to finetune BERT models in PyTorch
+    * https://medium.com/@aniruddha.choudhury94/part-2-bert-fine-tuning-tutorial-with-pytorch-for-text-classification-on-the-corpus-of-linguistic-18057ce330e1
+      Example of training BERT for a classification problem
+    * https://www.dropbox.com/s/byzr8yoda6bua1b/2017_English_final.zip SemEval dataset
       
 * Indicate any use of group shared code base
 
-    * I created https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/sigoub/twitter-api/tools/twitter-api/tools/twitter-api/scrolling.py
-    * I worked on part of https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/sigoub/twitter-api/tools/twitter-api/get-tweets.py
+    * I created https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/bert_sentiment/sentiment/BERT_sentiment.ipynb
+    * I modified all files in https://github.com/TheRensselaerIDEA/COVID-Twitter/twitter-api/tools/twitter-api/
     
 * Indicate which parts of your described work were done by you or as part of joint efforts
 
-    * https://github.com/TheRensselaerIDEA/COVID-Twitter/pull/40. 
-    * I worked in conjunction with Brandon on his PR on retriving reply response pairs in interfacing with his tweet api code. Brandon was responsible for working with getting tweets from the twitter API. He worked on extracting, extracting the data, creating a new document and uploading the data into an elasticsearch index. I helped him with bulk uploading documents to elasticsearch and bulk downloading a list of tweets by id
-    * I helped him with bulk uploading documents to elasticsearch and bulk downloading a list of tweets by id as well as integrating my script into his. 
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/pull/42 
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/pull/44
+    These two pull requests are worked on by my own. I have had advice from Abraham but the code is all my effort.
 
 ## Personal Contribution	
 
@@ -73,28 +82,40 @@ use_python("/usr/local/bin/python")
 
 * Discuss primary findings:
 
-1. During the creation of this script, there was a need to send and receive json documents by bulk. In order to do this, we made use of the elasticsearch bulk api in order to perform multiple insertions at once. https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html. This allowed us to make more efficient insertions into our index. This is part of some elasticsearch helper functions and is already used elsewhere in the codebase by the twitter monitor.
-
-2. For the twitter api we were rate limited in how often we can hit the API to get a tweet by an id. In order to get around this, we would get an aggregate list of tweet id's from our elastic search scrolling script and perform a bulk get of tweets by id. This allows us to make more efficient uses of our rate limit and number of available API calls to twitter
-```{python, eval=FALSE}
-for i in range(0, len(responseTweetIds), 100):
-      apiResponse = self.api.statuses_lookup(responseTweetIds[i:i+100], tweet_mode="extended", map=True)
+1. The following has to do with exploring the SemEval twitter dataset and evaluating it's usefulness for training a BERT model for sentiment classification. The original SemEval competition was meant for teams to compete in most accurately classifify tweets in 5 distinct subtasks.
+  1. General classification of positive, negative neutral for tweets
+  2. Classification of tweets as positive or negative based on a topic
+  3. Classification of tweets on a scale from -2 (most negative) to 2 (most positive) based on topic
+  4. Prediction on a distribution of positive or negative tweets
+  5. Prediction on a distribution of tweets on a scale from -2 to 2.
+These subtasks each come with their own individual training, dev, and testing sets for each class. However, for what we want to build, which is a general purpose tweet sentiment classification, I am choosing to forgo the labels on the data files. That means I will choose to view all tweets and their classfications holistcally and I will aggregate all the tweets ad their classification. While these labels may help us in the future if we to predict specific types of tweets based on topic, I think getting a wide corpus of tweets to train on is our first priority. In order to so I will need to read all the data and import it in a common data format. Some issues that arose where the different scales that the sentiments were measured on. To remedy this, I normalized the data for files that classified tweets on a 5 point scale from -2 to 2. Hence in our final dataset we have tweets that are either -1 (negative), 0 (neutral), 1 (positive).
+A final sampling of data shows this summary
+```{r}
+table <- data.frame(
+  sentiment = c("neutral", "negative", "positive"),
+  count = c(15550, 37128, 48796)
+)
+table
 ```
-This allows us to hit the maximum amount of tweets per api call which is 100. http://docs.tweepy.org/en/v3.5.0/api.html#API.statuses_lookup
+Here is a distribution of the word lengths of the tweets in this dataset.
 
-3. This part will discuss my findings into finding an alternative to VADER. Special thanks to Abraham for his guidance.
+![tweet length distribution](./shweht_images/dist.png)
 
-Currently for judging sentiment and polarity for a tweet, we use VADER sentiment analysis to score each tweet on sentiment. This is stored in our elastic search indecies and what we use in our analysis pipeline. However, VADER does have it's limitation when it comes to tweet context and verbal idosyncracies like sarcasm. This is because under the hood, VADER has a lexicon table of that maps groups of text to predefined static polatiry scores. It then takes an aggregate of these scores for every token it can find within a tweet and computes a final polarity score. As a result, the sentiment score is context unaware and sometimes the result can be a bit off from a human interpretation of an actual tweet.
-![twitter_app.R sentiment](./shweht_images/sentiment.png)
+We can see that the tweets average between 20 to 25 words in length and follow a normal distribution.
 
-You can see in this example that even thought a human would interpret this statement as positive, VADER produces a neutral result. The motivation to improving sentiment classification would be to get more accurate clustering and improving our existing pipeline. Additionally, it will be a good stepping stone for the tweet generation goal. Instead of predicting a full distribution of a persona for a response to a tweet. A first prelinary goal would be to predict sentiment first. Better perforance on sentiment in this case would aid in the creation of our model. https://github.com/cjhutto/vaderSentiment
+Another potential issue with this type of data is that the data is categorial while VADER sentiment is numerical. VADER sentiment computes a sweep through a string and computes and aggregate score of all the words used in the sentence. Meanwhile BERT will be giving us a response that is in one of 3 categories. That is our BERT classifier will only be able to give one of three responses of how to classify a tweet without knowing its "score". The best we can do in this case is to provide the classfication and the confidence level for each of the categories that BERT has classified a tweet for. In order to compare the two models, I will need to create bounds for a VADER score to adjust that nunmerical data into categorical based on a range. Then I will be able to more accurately compare the models.
 
-Shifting away from VADER, we decided to use BERT as our language model for classifying sentiment. BERT has advantages in being bidirectional meaning that it takes in input the entire tweet as opposed to individual words that exist in the space. This allows us to get performance that is contextually aware and can understand the nuances in language. In particular, I plan to build off of CT-BERT which is a BERT language model trained on an additional 160 Million tweets during the start of the global pandemic. This model has better performance on the masking problem for tweets as opposed to a generic BERT model. More can be found here. https://github.com/digitalepidemiologylab/covid-twitter-bert#start-finetuning.
+The last step in my tweet data processing pipeline is the tokenizing of each tweet using an existing BERT model. This is done to get the intermediate representation that BERT understands language. Instead of taking in a list of words or lexicons, BERT takes in the whole sentence at once as it's input. In order to fine tune BERT with our SemEval dataset, we will need to transform the tweets in our dataset in to a form that BERT can understand. Note this preprossing step uses an existing BERT model to transform the sentences into it's representation of words. This tokenization step was done on a model CT-BERT which is pretrained on a corpus of tweets so the tokenized version of our tweets will be tokenized in the context of a tweet.
 
-One challenge that we have to tackle is finetuning a BERT model to be trained on the problem of predicting sentiment. BERT is trained on the problem to guess words from a masked sentence and to also predict the next sentence in a sequence of sentence inputs. We will need to need to change the problem BERT is trying to classify for by  The advantage of tuning a BERT model is that most of the training for the masking problem has already been done and that the tuning step is significantly less computationally intensive. This technique is called Transfer Learning and is what we will be using to train BERT to classify sentiment. BERT creates a output vector representation of a tweet and as this special CLS field where we can target and alter to reflect sentiment. When we finetune, we attach a softmax layer to the CLS output position, which is then trained to predict the sentiment class for the entire tweet. Source https://curiousily.com/posts/sentiment-analysis-with-bert-and-hugging-face-using-pytorch-and-python .
+Below is a visualization of what a tokenized tweet looks like
+```
+Base:
+dear @Microsoft the newOoffice for Mac is great and all, but no Lync update? C'mon.
+Tokenized:
+{'input_ids': [[101, 1040, 102], [101, 1041, 102], [101, 1037, 102], [101, 1054, 102], [101, 102, 0], [101, 1030, 102] ... }
+```
 
-In order to train BERT on the sentiment problem, we will have to feed the model data that is already labeled in terms of sentiment. Forunately, we can use the SemEval tweet dataset that is prelabeled and has tweet sentiment available in the data. This will be what we will train CT-BERT on.
-http://alt.qcri.org/semeval2017/task4/?id=download-the-full-training-data-for-semeval-2017-task-4
+Citation: https://alt.qcri.org/semeval2017/task4/
 
 ## Next Steps
 
