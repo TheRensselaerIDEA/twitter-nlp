@@ -1,0 +1,47 @@
+---
+title: "DARL Tweet Status Notebook"
+author: "Haotian Zhang"
+date: "06 November 2020"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+subtitle: "COVID-Twitter"
+---
+
+## Weekly Work Summary	
+
+* RCS ID: zhangh20
+* Project Name: COVID-Twitter
+* Summary of work since last week 
+
+    * For these weeks, I have going to talk with professor with my next step. Meanwhile, I am doing something about debugging small bugs and also communicate and merge my work to the main notebook of twitter.md
+    
+* Summary of github commits 
+
+    * branch name: darl-zhangh20 
+    * notebook links: https://htmlpreview.github.io/?https://raw.githubusercontent.com/TheRensselaerIDEA/COVID-Twitter/darl-zhangh20/analysis/10-28-twitter-HT.html
+    * I have create my own notebook to do the merging stuff. Later I work with Abrahm to make it easy and clear into the main (twitter.md)
+    
+* Indicate any use of group shared code base\
+    * the main code derive from the twitter.md (from Abraham) and I add the codes on this part and add the geographic map and also load the data
+* Indicate which parts of your described work were done by you or as part of joint efforts
+    * First read the notebook and understand the logic and later add the codes and function as the logic of the notebook. 
+
+## Personal Contribution	
+
+* First, I write the geographic map with sentiment. And also I make the change to merge into the main notebook. Also I have debug some little problem to load state map.
+* Later, I communicate with Abraham to make the notebook united and organized. 
+* Write the outlet codes to output the map with data in plot_helper.Rmd 
+## Discussion of Primary Findings 	
+
+* Discuss primary findings: 
+
+    * What did you want to know? 
+    ** I am curious about how the elasticsearch work and the backend loading data 
+    * How did you go about finding it? 
+    ** Later, I will comunicate with Professor and Abraham with that. Since it maybe another goal for our project. 
+    * What did you find?
+    ** I find it is so slow to process the data and do the search. I wonder is that possible for us to load the data and upload the data. 
+	  ** the other thing I find is that, I can do more things about geographic like to get each state tweet amount. 
