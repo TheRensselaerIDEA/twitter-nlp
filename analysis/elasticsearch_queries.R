@@ -4,10 +4,10 @@ fix_text_filter <- function(text_filter) {
 
 get_query_filter <- function(gte_str, lt_str, text_filter, location_filter, must_have_embedding, 
                              must_have_geo, sentiment_field, sentiment_lower, sentiment_upper) {
-  if (isTRUE(must_have_embedding)) {
-    embedding_clause <- '{
-      "exists": { "field": "embedding.use_large.primary" }
-    },'
+  if (!is.null(must_have_embedding)) {
+    embedding_clause <- sprintf('{
+      "exists": { "field": "%s" }
+    },', must_have_embedding)
   } else {
     embedding_clause <- ''
   }
@@ -119,11 +119,11 @@ base_query <- function(resultfields, gte_str, lt_str, text_filter, location_filt
   return(query)
 }
 
-semantic_query <- function(resultfields, gte_str, lt_str, text_filter, location_filter, must_have_geo, 
-                           sentiment_field, sentiment_lower, sentiment_upper, text_embedding) {
+semantic_query <- function(resultfields, gte_str, lt_str, text_filter, location_filter, must_have_embedding, 
+                           must_have_geo, sentiment_field, sentiment_lower, sentiment_upper, text_embedding) {
   
-  filter_clause <- get_query_filter(gte_str, lt_str, text_filter, location_filter, TRUE, must_have_geo,
-                                    sentiment_field, sentiment_lower, sentiment_upper)
+  filter_clause <- get_query_filter(gte_str, lt_str, text_filter, location_filter, must_have_embedding, 
+                                    must_have_geo, sentiment_field, sentiment_lower, sentiment_upper)
   
   query <- sprintf('{
     "_source": [%s],
@@ -131,12 +131,12 @@ semantic_query <- function(resultfields, gte_str, lt_str, text_filter, location_
       "script_score": {
         "query": %s,
         "script": {
-          "source": "cosineSimilarity(params.query_vector, \'embedding.use_large.primary\') + 1.0",
+          "source": "cosineSimilarity(params.query_vector, \'%s\') + 1.0",
           "params": {"query_vector": %s}
         }
       }
     }
-  }', resultfields, filter_clause, text_embedding)
+  }', resultfields, filter_clause, must_have_embedding, text_embedding)
   
   return(query)
 }

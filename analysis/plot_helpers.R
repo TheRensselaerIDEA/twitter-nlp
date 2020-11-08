@@ -126,7 +126,7 @@ sentiment_to_html_emoji <- function(sentiment_score, sentiment_threshold) {
 # colored by their cluster or subcluster membership.
 # Cluster / subcluster centers are highlighted in black.
 ################################################################
-plot_tweets <- function(tsne.plot, title, sentiment_threshold, type, mode, webGL) {
+plot_tweets <- function(tsne.plot, title, sentiment_threshold, type, mode, webGL, xlabel="X", ylabel="Y", zlabel="Z") {
   isWebGL <- isTRUE(webGL) && mode=="2d"
   
   plot_type <- if(type=="clusters") {"Cluster"} else {"Subcluster"}
@@ -166,14 +166,14 @@ plot_tweets <- function(tsne.plot, title, sentiment_threshold, type, mode, webGL
                            showlegend=FALSE)
   
   if (mode == "3d") {
-    fig <- fig %>% layout(title=title, scene=list(xaxis=list(zeroline=FALSE, title="X"), 
-                                                  yaxis=list(zeroline=FALSE, title="Y"), 
-                                                  zaxis=list(zeroline=FALSE, title="Z")))
+    fig <- fig %>% layout(title=title, scene=list(xaxis=list(zeroline=FALSE, title=xlabel), 
+                                                  yaxis=list(zeroline=FALSE, title=ylabel), 
+                                                  zaxis=list(zeroline=FALSE, title=zlabel)))
   } else {
     fig$x$attrs[[1]]$z <- NULL #remove unused z axis
     fig$x$attrs[[2]]$z <- NULL
-    fig <- fig %>% layout(title=title, xaxis=list(zeroline=FALSE, title="X"), 
-                          yaxis=list(zeroline=FALSE, title="Y"),
+    fig <- fig %>% layout(title=title, xaxis=list(zeroline=FALSE, title=xlabel), 
+                          yaxis=list(zeroline=FALSE, title=ylabel),
                           legend=list(traceorder="normal"))
   }
   
