@@ -1,6 +1,5 @@
 from scrolling import es, search
 from elasticsearch import Elasticsearch
-from error_handling import *
 from elasticsearch.helpers import bulk
 from random import randint
 import json
