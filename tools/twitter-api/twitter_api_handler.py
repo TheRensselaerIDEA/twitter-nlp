@@ -80,12 +80,12 @@ class TwitterAPIHandler:
     """
     hits = self.GetElasticSearchHitsWithScrolling(es_index, max_hits=num_tweets)
     tweets = self.GetTweetsFromAPI(hits)
-    self.WriteDataToElasticSearch(tweets, es_index)
+    self.WriteDataToElasticSearch(tweets[0], es_index)
     
     
 if __name__ == "__main__":
   retriever = TwitterAPIHandler()
-  retriever.GetOriginalTweetsAndWriteToElasticSearch('coronavirus-data-all', 1000)
+  # retriever.GetOriginalTweetsAndWriteToElasticSearch('coronavirus-data-all', 1000)
   """
   To run full functionality of the script, call:
   retriever.GetOriginalTweetsAndWriteToElasticSearch(self,es_index, num_tweets)
