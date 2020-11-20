@@ -24,12 +24,17 @@ es = Elasticsearch(
 search_param = {
   "_source": True,
   "query": {
-    "constant_score" : {
-      "filter" : {
-        "exists" : {
-          "field" : "in_reply_to_status_id_str"
+    "bool": {
+      "filter": [
+        {
+          "simple_query_string": {
+            "fields": [
+              "in_reply_to_screen_name"
+            ],
+            "query": "ESCAIDE ECDCPHT ecdc_tb ECDC_VPD ECDC_HIVAIDS ecdc_flu ECDC_Outbreaks ecdc_eu WHO cdcgov cdcdirector CDC_eHealth CDCespanol BRFSS CDCasthma CDC_DASH CDCDiabetes cdc_drh CDCEnvironment CDC_Cancer CDC_EIDjournal CDC_EPHTracking CDC_Genomics CDC_HIVAIDS CDCMicrobeNet CDC_NCBDDD CDC_NCEZID CDC_TB CDC_AMD CDCChronic CDCEmergency CDCFlu CDCGlobal CDCGreenHealthy CDCHaiti CDCHeart_Stroke US_CDCIndia CDChep CDCInjury CDCKenya CDCMakeHealthEZ CDCMMWR CDCNPIN CDCObesity cdcpcd CDCRwanda CDCsouthafrica CDCSTD CDCTobaccofree CDCTravel CPSTF DrDeanCDC DrKhabbazCDC DrMartinCDC DrMerminCDC DrNancyM_CDC DrReddCDC InjectionSafety MillionHeartsUS NCHStats niosh NIOSHMining NIOSH_MVSafety NIOSH_NPPTL NIOSH_TWH nioshbreathe NIOSHConstruct NIOSHespanol NIOSHFACE nioshfishing nioshnoise NIOSHoilandgas WTCHealthPrgm"
+          }
         }
-      }
+      ]
     }
   }
 }

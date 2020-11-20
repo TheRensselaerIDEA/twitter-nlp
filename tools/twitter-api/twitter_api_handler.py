@@ -100,7 +100,9 @@ class TwitterAPIHandler:
     """
     hits = self.GetElasticSearchHitsWithScrolling(es_index, max_hits=num_tweets)
     tweets = self.GetTweetsFromAPI(hits)
-    self.WriteDataToElasticSearch(tweets[0], es_index)
+    for i in range(0, len(tweets), 1000):
+      self.WriteDataToElasticSearch(tweets[0][i:i+1000], es_index)
+      del tweets[i:i+1000]
     
     
 if __name__ == "__main__":
