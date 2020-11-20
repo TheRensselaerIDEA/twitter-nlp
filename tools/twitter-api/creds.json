@@ -1,0 +1,9 @@
+{
+"twitter-creds":
+  {
+    "consumer_key" : "XX",
+    "consumer_key_secret" : "XX",
+    "access_token" : "XX",
+    "access_token_secret" : "XX" 
+  }
+}

@@ -1,0 +1,43 @@
+---
+title: "DARL Project Status Notebook"
+author: "Haotian Zhang"
+date: "09 October 2020"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+subtitle: "DARL Twitter"
+---
+
+
+
+## REQUIRED: Weekly Work Summary	
+
+**NOTE:** Follow an outline format; use bullets to express individual points. 
+
+* RCS ID: zhangh20
+* Project Name: Tweet Analysis
+* Summary of work since last week 
+
+* Summary of github commits 
+   https://github.com/TheRensselaerIDEA/COVID-Twitter/tree/darl-zhangh20
+    
+
+## Personal Contribution	
+
+  https://lp01.idea.rpi.edu/shiny/zhangh20/HTapp/
+<<<<<<< HEAD
+  ![Caption for the picture.](./zhangh20Folder/Assignment04.jpg)
+  ![Caption for the picture.](./zhangh20Folder/Assignment0401.jpg)
+=======
+
+>>>>>>> e322eff2b23f58629dfe535e1bfb2393f911ff21
+  What I have done is using the Shiny to visualize the map with the mean sentiment  in different colors. Meanwhile since I am new to R and shiny, I have learned and try to used and understand the codes to implement the codes . 
+
+## Discussion of Primary Findings 	
+
+
+* **Required:** Provide illustrating figures and/or tables
+
+  In the map, we can see people during 2020 feel more positive to COVID/mask. Meanwhile, poeple in different states are very different attitudes to COVID. Some states are more positive (It is possible due to less population affected by the COVID)

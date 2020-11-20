@@ -36,7 +36,8 @@ summarize_tweet_clusters <- function(tweet.vectors.df,
                                     num_beams=4,
                                     temperature=1.0,
                                     model=NULL,
-                                    summarizer_url="http://localhost:8080/batchsummarize") {
+                                    summarizer_url="http://localhost:8080/batchsummarize",
+                                    use_quoted_centers=FALSE) {
   
   summaries.df <- tweet.vectors.df[tweet.vectors.df$vector_type != "tweet", 
                                    c("vector_type", "cluster", "subcluster")]
@@ -44,7 +45,11 @@ summarize_tweet_clusters <- function(tweet.vectors.df,
   #compute the subcluster text for summarization
   subcluster_summaries.df <- summaries.df[summaries.df$vector_type == "subcluster_center",]
   subcluster_summaries.df$text_for_summary <- mapply(function(cluster, subcluster) {
-    nearest_center <- clusters[[cluster]]$subclusters[[subcluster]]$nearest_center
+    if (use_quoted_centers) {
+      nearest_center <- clusters[[cluster]]$subclusters[[subcluster]]$quoted_nearest_center
+    } else {
+      nearest_center <- clusters[[cluster]]$subclusters[[subcluster]]$nearest_center
+    }
     return(concat_text_for_summary(nearest_center, center_nn))
   }, subcluster_summaries.df$cluster, subcluster_summaries.df$subcluster)
   
