@@ -126,7 +126,7 @@ sentiment_to_html_emoji <- function(sentiment_score, sentiment_threshold) {
 # colored by their cluster or subcluster membership.
 # Cluster / subcluster centers are highlighted in black.
 ################################################################
-plot_tweets <- function(tsne.plot, title, sentiment_threshold, type, mode, webGL) {
+plot_tweets <- function(tsne.plot, title, sentiment_threshold, type, mode, webGL, xlabel="X", ylabel="Y", zlabel="Z") {
   isWebGL <- isTRUE(webGL) && mode=="2d"
   
   plot_type <- if(type=="clusters") {"Cluster"} else {"Subcluster"}
@@ -166,14 +166,14 @@ plot_tweets <- function(tsne.plot, title, sentiment_threshold, type, mode, webGL
                            showlegend=FALSE)
   
   if (mode == "3d") {
-    fig <- fig %>% layout(title=title, scene=list(xaxis=list(zeroline=FALSE, title="X"), 
-                                                  yaxis=list(zeroline=FALSE, title="Y"), 
-                                                  zaxis=list(zeroline=FALSE, title="Z")))
+    fig <- fig %>% layout(title=title, scene=list(xaxis=list(zeroline=FALSE, title=xlabel), 
+                                                  yaxis=list(zeroline=FALSE, title=ylabel), 
+                                                  zaxis=list(zeroline=FALSE, title=zlabel)))
   } else {
     fig$x$attrs[[1]]$z <- NULL #remove unused z axis
     fig$x$attrs[[2]]$z <- NULL
-    fig <- fig %>% layout(title=title, xaxis=list(zeroline=FALSE, title="X"), 
-                          yaxis=list(zeroline=FALSE, title="Y"),
+    fig <- fig %>% layout(title=title, xaxis=list(zeroline=FALSE, title=xlabel), 
+                          yaxis=list(zeroline=FALSE, title=ylabel),
                           legend=list(traceorder="normal"))
   }
   
@@ -249,14 +249,15 @@ discrete_sentiment_lines <- function(tweet.vectors.df, sentiment_threshold, plot
 # Generate map showing different sentiment over time
 # from a collection of tweets. 
 ################################################################
-geographical_sentiment_maps <- function(summary.tibble,states) {
+geographical_sentiment_maps <- function(summary.tibble,states, Map.numPercent) {
   colors <- c("#253494","#4575B4", "#74ADD1","#ABD9E9","#f7f7f7","#FDAE61","#F46D43", "#D73027", "#BD0026")
-  
+  title.value = sprintf("mean sentiment (%d %% of sample", Map.numPercent  )
   states_merged_sb <- geo_join(states, summary.tibble, "STUSPS", "location")
   pal <- colorNumeric(rev(colors), domain=states_merged_sb$mean_sentiment)
   states_merged_sb <- subset(states_merged_sb, !is.na(mean_sentiment))
-  popup_sb <- paste0("Mean Sentiment: ", as.character(states_merged_sb$mean_sentiment))
+  popup_sb <- paste0("Mean Sentiment: ", as.character(states_merged_sb$mean_sentiment),"<br />Count: ",as.character(states_merged_sb$count))
   
+  cat(title.value)
   leaflet() %>%
     setView(-98.483330, 38.712046, zoom = 4) %>% 
     addPolygons(data = states_merged_sb , 
@@ -271,7 +272,7 @@ geographical_sentiment_maps <- function(summary.tibble,states) {
     addLegend(pal = pal, 
               values = states_merged_sb$mean_sentiment, 
               position = "bottomright", 
-              title = "Mean_sentiment")
+              title = title.value)
 }
 
 

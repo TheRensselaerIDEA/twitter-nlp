@@ -151,9 +151,19 @@ do_search <- function(indexname,
   }
   
   sentiment_field <- NULL
+  quoted_sentiment_field <- NULL
   if (!is.null(sentiment_type) && sentiment_type != "") {
     sentiment_field <- paste("sentiment.", sentiment_type, ".primary", sep="")
-    resultfields <- paste(resultfields, ', "', sentiment_field, '"', sep="")
+    quoted_sentiment_field <- paste("sentiment.", sentiment_type, ".quoted", sep="")
+    resultfields <- paste(resultfields, ', "', sentiment_field, '", "', quoted_sentiment_field, '"', sep="")
+  }
+  
+  if (is.logical(must_have_embedding)) {
+    if (must_have_embedding) {
+      must_have_embedding <- "embedding.use_large.primary"
+    } else {
+      must_have_embedding <- NULL
+    }
   }
   
   #Do the search
@@ -165,7 +175,7 @@ do_search <- function(indexname,
                         gte_str, 
                         lt_str, 
                         text_filter, 
-                        location_filter, 
+                        location_filter,
                         must_have_embedding, 
                         must_have_geo,
                         sentiment_field,
@@ -174,12 +184,17 @@ do_search <- function(indexname,
                         random_sample,
                         random_seed)
   } else {
+    if (is.null(must_have_embedding)) {
+      stop("can't do a semantic search without embeddings. set must_have_embedding to TRUE or to the name of the 
+           desired embedding field.")
+    }
     text_embedding <- embed_use_large(semantic_phrase, embed_use_large_url)
     query <- semantic_query(resultfields,
                             gte_str,
                             lt_str,
                             text_filter,
                             location_filter,
+                            must_have_embedding,
                             must_have_geo,
                             sentiment_field,
                             sentiment_lower,
@@ -210,6 +225,7 @@ do_search <- function(indexname,
       results.df$`_score` <- results.df$`_score` - 1.0
       colnames(results.df) <- sub("_score", "cosine_similarity", colnames(results.df))
     }
+    
     #fix column names
     colnames(results.df) <- sub("_source.", "", colnames(results.df))
     colnames(results.df) <- sub("extended_tweet.entities.", "extended_tweet.entities.full_", colnames(results.df))
@@ -223,6 +239,13 @@ do_search <- function(indexname,
         results.df$sentiment <- NA
       }
     }
+    if (!is.null(quoted_sentiment_field)) {
+     if (quoted_sentiment_field %in% colnames(results.df)) {
+       colnames(results.df)[colnames(results.df) == quoted_sentiment_field] <- "quoted_status.sentiment"
+     } else {
+       results.df$quoted_status.sentiment <- NA
+     }
+    }
     
     #merge 'text' and 'full_text'
     if ("text" %in% colnames(results.df)) {
@@ -231,6 +254,13 @@ do_search <- function(indexname,
       } else {
         results.df$full_text <- results.df$text
       }
+    }
+    if ("quoted_status.text" %in% colnames(results.df)) {
+      if ("quoted_status.full_text" %in% colnames(results.df)) {
+        results.df$quoted_status.full_text <- ifelse(is.na(results.df$quoted_status.full_text), results.df$quoted_status.text, results.df$quoted_status.full_text)
+      } else {
+        results.df$quoted_status.full_text <- results.df$quoted_status.text
+     }
     }
     
     #TODO: drop original 'text' column
@@ -250,7 +280,7 @@ do_search <- function(indexname,
               )))
 }
 
-validate_results <- function(df, min_results, required_fields=character(0)) {
+validate_results <- function(results, min_results, required_fields=character(0)) {
   # check for minimum results
   if (results$total < min_results) {
     stop(paste("Insufficient results found for the provided search parameters - ", 
@@ -258,6 +288,7 @@ validate_results <- function(df, min_results, required_fields=character(0)) {
   }
   
   # check for required fields
+  df <- results$df
   missing_fields <- setdiff(required_fields, colnames(df))
   if (length(missing_fields) > 0) {
     stop(paste("The results found for the provided search parameters are missing the following required field(s): ", 

@@ -1,0 +1,50 @@
+---
+title: "COVID-TWITTER"
+author: "haotian zhang"
+date: "16 September 2020"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+subtitle: "IDEA-COVID-TWITTER"
+---
+
+## Weekly Work Summary	
+
+* RCS ID: zhangh20
+* Project Name: idea-covid-twitter
+* Summary of work since last week 
+
+    * These week, I have continued to set up the GUI (Shiny App) for our project (covid-twitter) using the elasticsearch. Since we have already have the codes. However, it still have little problem (small bugs) I am continuing debuging and settign the UI and the server codes. 
+    
+* Summary of github commits 
+
+    * branch name: https://github.com/TheRensselaerIDEA/COVID-Twitter/tree/darl-zhangh20
+    * Shiny app: https://lp01.idea.rpi.edu/shiny/zhangh20/TweetShiny/
+
+* List of references (if necessary)
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/analysis/paper_app.R
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/analysis/twitter.Rmd
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/analysis/twitter_quotes.Rmd
+    
+* Indicate any use of group shared code base
+  * https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/analysis/text_helpers.R
+  * https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/master/analysis/plot_helpers.R
+  i use codes from Abraham about the helpers function and the structure to deal with the dataframe 
+  
+* Indicate which parts of your described work were done by you or as part of joint efforts
+  * The UI implementation and the server function is worked by me. 
+## Personal Contribution	
+
+* In this week, I have learned codes from Abraham and Lauren's codes to set up the active Shiny app for our project. I am setting up a shiny app which can show the graph and have an ability to set up different variable. From different variables, it can be done and show the different outputs. I am searching / designing the logic of the shiny app and also set up and implement the UI and also organize the coeds for the backend. 
+
+## Discussion of Primary Findings 	
+
+* Discuss primary findings: 
+
+    * More UI setting knowledge. 
+    * Seeing codes from the other project of IDEA and go through the Shiny gallery.  
+    * For the major finding as you can seen that the dividness is super huge. The change of the sentiment is different during the time. I think it is related to news and the death (the other social variables during the time) It maybe interesting to relate this kind of data with our project. It may be a future goal of my next step. 
+![Caption for the picture.](./zhangh20Folder/1120-01.jpg)
+![Caption for the picture.](./zhangh20Folder/1120-02.jpg)

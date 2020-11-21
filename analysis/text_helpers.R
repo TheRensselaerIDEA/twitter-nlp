@@ -50,6 +50,54 @@ clean_text <- function(text, for_freq=FALSE) {
 }
 
 ################################################################
+# Clean the tweet and user location text, and set up tweet.vectors.df 
+# the way we want it by consolidating the location field and computing
+# location type
+################################################################
+
+prepare_location_and_text <- function(tweet.vectors.df){
+  tweet.vectors.df$user_location <- ifelse(is.na(tweet.vectors.df$place.full_name), 
+                                           tweet.vectors.df$user_location, 
+                                           paste(tweet.vectors.df$place.full_name, 
+                                                 tweet.vectors.df$place.country, sep=", "))
+  tweet.vectors.df$user_location[is.na(tweet.vectors.df$user_location)] <- ""
+  tweet.vectors.df$user_location_type <- ifelse(is.na(tweet.vectors.df$place.full_name), "User", "Place")
+  tweet.vectors.df <- tweet.vectors.df[, c("id_str", "created_at", "full_text", "user_screen_name", "user_verified", "user_location", "normalized_state", "user_location_type", "sentiment")]
+  
+  tweet.vectors.df$full_text <- sapply(tweet.vectors.df$full_text, clean_text)
+  tweet.vectors.df$user_location <- sapply(tweet.vectors.df$user_location, clean_text)
+  return (tweet.vectors.df)
+}
+
+################################################################
+# Set up the tsne plot dataframe by appending the coordinates,
+# wrapping the text, and getting the cluster label
+################################################################
+
+prepare_tsne_plot_df <- function(tsne_dims, Y, tweet.vectors.df, for_subclusters,clusters,i) {
+  tsne_coords <- c("X","Y")
+  if (tsne_dims == 3) {tsne_coords <- c(tsne_coords, "Z")}
+  tsne.plot <- cbind(Y, tweet.vectors.df)
+  colnames(tsne.plot)[1:tsne_dims] <- if(for_subclusters) { sapply(tsne_coords, function(c) paste("cluster.", c, sep="")) } 
+                                      else { tsne_coords }
+  
+  tsne.plot$full_text <- sapply(tsne.plot$full_text, 
+                                function(t) paste(strwrap(t ,width=60), collapse="<br>"))
+ 
+  if (for_subclusters) {
+    tsne.plot$subcluster.label <- factor(
+      sapply(tsne.plot$subcluster, function(c) format_label(clusters[[i]]$subclusters[[c]]$label, i, c)),
+      levels=sapply(1:length(clusters[[i]]$subclusters), function(c) format_label(clusters[[i]]$subclusters[[c]]$label, i, c)))
+  } else {
+    tsne.plot$cluster.label <- factor(
+      sapply(tsne.plot$cluster, function(c) format_label(clusters[[c]]$quoted_label, c)), 
+      levels=sapply(1:length(clusters), function(c) format_label(clusters[[c]]$quoted_label, c)))
+  }
+  
+  return (tsne.plot)
+}
+
+################################################################
 # Returns a table of non-stopword word frequencies 
 # in descending order (most frequent word first).
 ################################################################
@@ -97,10 +145,11 @@ format_anchor <- function(cluster, subcluster=NULL, include_pound=FALSE) {
 # Orders a list of tweet metadata by cosine similarity to a 
 # cluster or subcluster center in descending order (closest first).
 ################################################################
-get_nearest_center <- function(df, mtx, center) {
+get_nearest_center <- function(df, mtx, center, return_all_columns=FALSE) {
   df$center_cosine_similarity <- apply(mtx, 1, function(v) (v %*% center)/(norm(v, type="2")*norm(center, type="2")))
   nearest_center <- df[order(df$center_cosine_similarity, decreasing=TRUE),]
-  nearest_center <- nearest_center[nearest_center$vector_type=="tweet", c("center_cosine_similarity", "full_text", "user_location")]
+  return_columns <- if (return_all_columns) {colnames(df)} else { c("center_cosine_similarity", "full_text", "user_location") }
+  nearest_center <- nearest_center[nearest_center$vector_type=="tweet", return_columns]
 }
 
 ################################################################
@@ -115,15 +164,21 @@ concat_text_for_summary <- function(nearest_center, k_nn) {
 ################################################################
 # Formats the cluster & subcluster summaries listing
 ################################################################
-format_summaries_table <- function(summaries.df) {
+format_summaries_table <- function(summaries.df, quoted_summaries.df=NULL) {
+  if (!is.null(quoted_summaries.df)){
+    summaries.df[summaries.df$vector_type=="cluster_center", "summary"] <- 
+      quoted_summaries.df[quoted_summaries.df$vector_type=="cluster_center", "summary"]
+  }
+  
   summaries_table.df <- summaries.df %>% 
     arrange(cluster, vector_type, subcluster)
   
   summaries_table.df[summaries_table.df$vector_type=="cluster_center", "subcluster"] <- NA
   
   summaries_table.df$label <- mapply(function(cluster, subcluster) {
-    label <- if (is.na(subcluster)) {clusters[[cluster]]$label} 
-    else  {clusters[[cluster]]$subclusters[[subcluster]]$label}
+    label <- if (is.na(subcluster) && !is.null(quoted_summaries.df)) {clusters[[cluster]]$quoted_label} 
+             else if (is.na(subcluster) && is.null(quoted_summaries.df)) {clusters[[cluster]]$label} 
+             else  {clusters[[cluster]]$subclusters[[subcluster]]$label}
     return (format_label(label, cluster, subcluster, include_prefix=TRUE))
   }, summaries_table.df$cluster, summaries_table.df$subcluster)
   
