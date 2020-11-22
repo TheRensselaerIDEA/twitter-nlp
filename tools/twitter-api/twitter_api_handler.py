@@ -17,13 +17,16 @@ class TwitterAPIHandler:
     self.auth = tweepy.OAuthHandler(self.consumer_key, self.consumer_key_secret)
     self.auth.set_access_token(self.access_token, self.access_token_secret)
     self.api = tweepy.API(self.auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True)
+    self.es = es
 
   def GetElasticSearchHitsWithScrolling(self, es_index, max_hits):
     """
     Uses Thomas Shweh's ElasticSearch scrolling algorithm to get max_hits number of Tweets from
     ElasticSearch
     """
-    return search(es_index=es_index, max_hits=max_hits-1000)
+    if max_hits != None:
+      max_hits = max_hits - 1000
+    return search(es_index=es_index, max_hits=max_hits)
       
   def GetFullText(self, apiResponse, index):
     """
@@ -63,13 +66,30 @@ class TwitterAPIHandler:
     """
     Write the modified data back to the elasticsearch index
     """
-    for i in range(0, len(hits), 100):
-      process_batch = list(map(
-        lambda x: {"_op_type": "update", "_id": x["id_str"], "_source": x}, 
-        hits[i:i+100]
-      ))
-      del hits[i:i+100]
-      bulk(self.es, process_batch, index=es_index, chunk_size=len(process_batch))
+    updates = list()
+    for hit in hits:
+      irs = hit["_source"]["in_reply_to_status"]
+      keys = irs.keys()
+      if not (("id_str"not in keys) or ("created_at" not in keys) or ("user" not in keys) or ("full_text" not in keys)):
+        action = {
+            "_op_type": "update",
+            "_id": hit["_id"],
+            "doc": {
+                "in_reply_to_status": {
+                "id_str": irs["id_str"], 
+                "created_at": irs["created_at"], 
+                "screen_name": irs["user"]["screen_name"], 
+                "full_text": irs["full_text"]
+                }
+            }
+        }
+    
+        updates.append(action)
+      else:
+        print("bad data point")
+
+    #Issue the bulk update request
+    bulk(self.es, updates, index=es_index, chunk_size=len(updates))
       
   
   def GetOriginalTweetsAndWriteToElasticSearch(self, es_index, num_tweets):
@@ -85,7 +105,7 @@ class TwitterAPIHandler:
     
 if __name__ == "__main__":
   retriever = TwitterAPIHandler()
-  # retriever.GetOriginalTweetsAndWriteToElasticSearch('coronavirus-data-all', 1000)
+  retriever.GetOriginalTweetsAndWriteToElasticSearch('coronavirus-data-all', None)
   """
   To run full functionality of the script, call:
   retriever.GetOriginalTweetsAndWriteToElasticSearch(self,es_index, num_tweets)
