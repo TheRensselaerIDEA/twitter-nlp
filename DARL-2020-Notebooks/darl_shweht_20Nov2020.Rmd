@@ -1,0 +1,156 @@
+
+---
+title: "DARL Project Status Notebook Template"
+author: "Thomas Shweh"
+date: "06 November 2020"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+subtitle: "Covid Twitter"
+---
+
+## Weekly Work Summary	
+
+* RCS ID: shweht
+* Project Name: Covid Twitter
+  * Weekend (11/07-11/08)
+    * Construct initial training loop for the model, define initial parameters of the model
+    * Train the model for 3 epochs, this ran for around 3 hours
+  * Tuesday (11/10)
+    * Attempt to test the model on the testing set, create a batch testing loop to feed the model the testing data
+    * Measure the accuracy of the model's classification performance on the testing set
+  * Wednesday (11/11)
+    * Make tweeks on sentiment model based off of feedback received during the deep dive
+    * Create a script to save the model and download/upload it to cloud storage
+  * Friday (11/13)
+    * Have a meeting with Abraham and Brandon to discuss/debug the BERT Model
+  * Weekend (10/31 - 11/1)
+    * Make changes based off feedback from the meeting on Wednesday, this included reading up on HuggingFace Transformers API
+    * Change the encoding method of the model, investigate loss at each batch training step to make sure it is properly running 
+  * Monday-Tuesday (11/02 - 11/03)
+    * Add validation step on training each epoch
+    * Log and save, loss at each step of training and generate a summary of training loss, validation accuracy and validation loss
+    * Test the model on the testing set and generate a confusion matrix on the performance of the model
+  * Wednesday (11/04)
+    * Present progress on current sentiment classification pipeline
+    * Train the model overnight for 5 epochs to look at performance on each of the epochs
+    
+* Summary of github commits
+
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/commit/a6613ca51d2af53f774283f87a3ec385ef8c1052
+      You may have trouble viewing a raw jupyter notebook. A direct view can found here
+      https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/bert_sentiment/sentiment/BERT_sentiment.ipynb
+      This commit starts the sentiment classification pipeline using BERT. This commit includes the following
+      1. Downloads SemEval dataset from dropbox
+      2. Reads all datafiles and parses tweets into a pandas dataframe
+      3. Amalgamates all data and splits data into training, testing and validation sets
+      4. Tokenizes tweet text using BERT Tokenizer
+      This commit was reviewed and approved by abraham
+    
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/pull/49/commits/042f44f9e67b953828599f64ffe77046fa924245
+      You may have trouble viewing a raw jupyter notebook. A direct view can found here
+      https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/bert_sentiment_improvements/sentiment/BERT_sentiment.ipynb
+      This commit completes the initial iteration of the senetiment classification pipeline using Bert. This commint includes the following
+      1. Update tokenization to use latest HuggingFace APIs
+      2. Create main training loop for the model
+      3. Monitor the average loss and logits of the model
+      4. Adds a validation step for each epoch of training
+      5. Upload the pytorch model to Dropbox in case the runtime disconnects
+      6. Evaluate model on the testing set at the end of training
+
+* List of references (if necessary)
+
+    * https://arxiv.org/pdf/2005.07503.pdf Paper on a BERT model trained on tweets during the start of the coronavirus pandemic
+    * https://arxiv.org/pdf/1704.06125v1.pdf Paper on evaluating sentiment of tweets using CNNs on SemEval dataset
+    * https://huggingface.co/transformers/custom_datasets.html How to finetune BERT models in PyTorch
+    * https://mccormickml.com/2019/07/22/BERT-fine-tuning/ Example of how to construct a training loop for Bert
+    * https://www.dropbox.com/s/byzr8yoda6bua1b/2017_English_final.zip SemEval dataset
+      
+* Indicate any use of group shared code base
+
+    * I created https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/bert_sentiment/sentiment/BERT_sentiment.ipynb
+    * I also uploaded https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/bert_sentiment/sentiment/sentiment.pt
+    
+* Indicate which parts of your described work were done by you or as part of joint efforts
+
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/pull/44
+    * https://github.com/TheRensselaerIDEA/COVID-Twitter/pull/49
+    These two pull requests are worked on by my own. I have had advice from Abraham but the code is all my effort.
+
+## Personal Contribution	
+
+* I made the revisions to the sentiment analysis model based on Abraham's feedback
+* I created a main training loop for the model to finetune the model to classify sentiment
+* I performed a validation step after each epoch of training to evaluate the model's performance per iteration of the loop
+* I evaluated the model's performance on data it has not seen before in the testing set to observe performance
+* I added small scripts within the pipeline to periodically save the model and save it to cloud storage for later use
+
+## Discussion of Primary Findings 	
+
+1. Constructing the model had lot of difficulties to overcome in the past few weeks. As presented in the deep dive on 11/11, the model was failing to predict the sentiment of the tweets in the testing step. The model was prediction the same scores for every tweet that was being fed into the model during the testing step. After having an offline meeting with Abraham and Brandon, it was suggested that I look into update the encodings using the latest HuggingFace Api and by printing out the loss at each batch training step. The issue primarily came from the using the model's API and the way I was adding these encodings into a pytorch data loader. There were two important parameters that I had to configure in tokenizing the input tweets. They were the CLS position, padding and truncation to the tokenizer. This seemed to allow the model to start correctly classifying the input. See https://huggingface.co/transformers/model_doc/bert.html#transformers.BertTokenizer
+
+2. Here are the results from the training loop. This was run for 5 epochs and total time for running took around around an hour and a half.
+```
+Epoch 1
+ Average training loss: 0.66
+  Training epcoh took: 0:17:29
+Running Validation...
+  Accuracy: 0.75
+  Validation Loss: 0.58
+  Validation took: 0:00:59
+Epoch 2
+ Average training loss: 0.48
+  Training epcoh took: 0:17:29
+Running Validation...
+  Accuracy: 0.78
+  Validation Loss: 0.55
+  Validation took: 0:00:59
+Epoch 3
+Average training loss: 0.36
+  Training epcoh took: 0:17:29
+Running Validation...
+  Accuracy: 0.80
+  Validation Loss: 0.53
+  Validation took: 0:00:59
+Epoch 4
+  Average training loss: 0.28
+  Training epcoh took: 0:17:32
+Running Validation...
+  Accuracy: 0.80
+  Validation Loss: 0.61
+  Validation took: 0:00:59
+Epoch 5
+ Average training loss: 0.24
+  Training epcoh took: 0:17:31
+Running Validation...
+  Accuracy: 0.79
+  Validation Loss: 0.64
+  Validation took: 0:00:59
+```
+I will provide visualizations of accuracy and loss in a later notebook. But the general trend is that the training loss is going down, which may be a good indication to keep on training. If the loss was increasing or fluctuating it may be an indication of overfitting. The accuracy on the validation is steadily improving which could be a promising sign for more training as well. However the validation loss is increasing on each epoch. We do not know if the model is overfitting on the validation set since it is not being fed into the model as training data. This means that we might see some better results from training the model for more epochs on the idea cluster. The current model is limited by the hardware provided on google colab. I plan to run this model for around 100 epochs and graph the loss per epoch and AUC after that.
+
+3. The testing set also reveals promising results from the training. Below is a summary of the results of the model on the testing set.
+```
+Accuracy: 0.79
+Predicted  negative  neutral  positive
+Actual                                
+negative       1753      350       229
+neutral         455     3465      1650
+positive         74      433      6813
+```
+The model has a similary accuracy after 5 epochs on the validation set as the training set which means that overfitting may not have occured just yet. For a few number of iterations of training the results seem to be fairly accurate. It seems like that model stuggles most with predicting neutral tweets as it most of the time predicts them as positive. This may not be an issue as it is more favorable to predict a polar sentiment rather than a neutral. Another possible way to adjust the model is to instead of using the model with the greatest confience as the result, it may be favorable to take the higher of positive or negative if greatest confidence is neutral. 
+
+Overall the initial proof of concept for the model seems to yield results that can sometimes accurately classify sentiment. A great next steps is to run the model for much longer and analyze the performance there. Another goal would be to run the classfication on some existing tweets that we have in elasticsearch.
+
+Citation: https://alt.qcri.org/semeval2017/task4/
+
+## Next Steps
+
+* For the next week I will run the BERT sentiment model on the IDEA cluster for training with a greater epoch size
+* Add more logging and saving more variables for analysis. ie for plotting training loss, validation loss ect
+* Make a comparison vs VADER on the same testing set and evaluate the performance of each of the models
+* Define a sucess metric for comparing the to models
+* Tune model parameters such as learning rate and, layers and maybe add a scheduler to the training loop
+* Export the model and test it on our existing corpus of tweets
