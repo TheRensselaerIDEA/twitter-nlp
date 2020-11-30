@@ -15,8 +15,6 @@ import pickle
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 
-device = torch.device("cuda")
-
 """
 This section grabs the SemEval dataset from Dropbox.
 Requires a dropbox API key.
@@ -24,33 +22,26 @@ Requires a dropbox API key.
 import os.path
 import dropbox
 
-if not os.path.isfile('semeval.zip'):
-  ACCESS_TOKEN = "dhmkFjUUQYAAAAAAAAAAAcRFqu7bkzhtbmjYLVZEbMg4wiyYtytDtXzXkShJT4Kc" 
-  dbx = dropbox.Dropbox(ACCESS_TOKEN)
-  with open("semeval.zip", "wb") as f:
-      metadata, res = dbx.files_download(path="/2017_English_final.zip")
-      f.write(res.content)
+"""
+This section grabs the SemEval dataset from Dropbox.
+Requires a dropbox API key.
+"""
+def downloadDataset(fileurl: str, outpath: str='semeval.zip'):
+    if '.zip' not in outpath:
+        outpath = f'{outpath}.zip'
+
+    if not os.path.isfile(outpath):
+      res = requests.get(fileurl, allow_redirects=True)
+      with open(outpath, "wb") as f:
+          f.write(res.content)
 
 """
-This section processes the data files and loads the data into a dataframe
+Create a generator for SemEval Twitter Data
+The data files are separated by tab and each folder has it's own data format
 """
-# unzip data if folder is not present
-if not os.path.isdir('semeval'):
-  import zipfile
-  with zipfile.ZipFile('semeval.zip', 'r') as zip_ref:
-      zip_ref.extractall('semeval')
-
-# get all folders with relavent data in them
-task_folders = [f'semeval/2017_English_final/GOLD/{folder}'
-                for folder in os.listdir('semeval/2017_English_final/GOLD') 
-                if os.path.isdir(f'semeval/2017_English_final/GOLD/{folder}')
-]
-
-mapping = {'-2': 'negative', '-1': 'negative', '0': 'neutral', '1': 'positive', '2': 'positive'}
-
-# create a generator for SemEval Twitter Data
-# the data files are separated by tab and each folder has it's own data format
 def parseTwitter(folders):
+  mapping = {'-2': 'negative', '-1': 'negative', '0': 'neutral', '1': 'positive', '2': 'positive'}
+
   for folder in folders:
     for file in [f'{folder}/{f}' for f in os.listdir(folder) if 'twitter' in f]:
       with open(file, 'r') as f:
@@ -66,8 +57,27 @@ def parseTwitter(folders):
             tweet_data = [segments[0], mapping[segments[-2]], segments[-1]]
           yield tweet_data
 
-# create a pandas dataframe
-df = pd.DataFrame(parseTwitter(task_folders), columns=['TweetId', 'Sentiment', 'Text'])
+"""
+This section processes the data files and loads the data into a dataframe
+"""
+def loadData(datapath: str='semeval'):
+    # unzip data if folder is not present
+    if not os.path.isdir(datapath):
+      import zipfile
+      with zipfile.ZipFile(f'{datapath}.zip', 'r') as zip_ref:
+          zip_ref.extractall(datapath)
+
+    # get all folders with relavent data in them
+    task_folders = [f'{datapath}/2017_English_final/GOLD/{folder}'
+                    for folder in os.listdir(f'{datapath}/2017_English_final/GOLD') 
+                    if os.path.isdir(f'{datapath}/2017_English_final/GOLD/{folder}')
+    ]
+
+    # create a pandas dataframe
+    return pd.DataFrame(parseTwitter(task_folders), columns=['TweetId', 'Sentiment', 'Text'])
+
+downloadDataset("https://www.dropbox.com/s/byzr8yoda6bua1b/2017_English_final.zip?dl=1")
+df = loadData()
 
 # f1 score and compute balanced accuracy
 df.groupby(['Sentiment']).agg('count')
