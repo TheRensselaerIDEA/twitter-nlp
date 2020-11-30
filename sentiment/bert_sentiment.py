@@ -10,7 +10,8 @@ Original file is located at
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn as nn
+import torch.nn as nna
+import pickle
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 
@@ -24,7 +25,7 @@ import os.path
 import dropbox
 
 if not os.path.isfile('semeval.zip'):
-  ACCESS_TOKEN = input("Enter in your access token")
+  ACCESS_TOKEN = "dhmkFjUUQYAAAAAAAAAAAcRFqu7bkzhtbmjYLVZEbMg4wiyYtytDtXzXkShJT4Kc" 
   dbx = dropbox.Dropbox(ACCESS_TOKEN)
   with open("semeval.zip", "wb") as f:
       metadata, res = dbx.files_download(path="/2017_English_final.zip")
@@ -97,7 +98,6 @@ val_text, test_text, val_labels, test_labels = train_test_split(temp_text, temp_
 """
 Install CT-Bert from huggingface along with other modules
 """
-!pip3 install transformers
 from transformers import (
    AutoConfig,
    AutoTokenizer,
@@ -117,8 +117,6 @@ Use CT-BERT to Tokenize the tweet text for training, test and validation sets
 uses the latest API provided by huggingface for text encoding
 """
 max_seq_len = 35
-
-tokenizer()
 train_encodings = tokenizer(
     train_text.tolist(),
     return_tensors="pt",
@@ -194,8 +192,10 @@ model.train()
 train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=32, shuffle=True)
 val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=32, shuffle=True)
 
+accuracies, training_losses, val_losses = [], [], []
+
 optim = AdamW(model.parameters(), lr=2e-5, eps=1e-8)
-epochs = 5
+epochs = 25
 
 # main training loop
 for epoch in range(epochs):
@@ -234,7 +234,8 @@ for epoch in range(epochs):
     optim.step()
     
   # calculate average loss
-  avg_train_loss = total_train_loss / len(train_loader) 
+  avg_train_loss = total_train_loss / len(train_loader)
+  training_losses.append(avg_train_loss)
   # Measure how long this epoch took.
   training_time = format_time(time.time() - t0)
   print("  Average training loss: {0:.2f}".format(avg_train_loss))
@@ -271,10 +272,12 @@ for epoch in range(epochs):
   
   # Report the final accuracy for this validation run.
   avg_val_accuracy = total_eval_accuracy / len(val_loader)
+  accuracies.append(avg_val_accuracy)
   print("  Accuracy: {0:.2f}".format(avg_val_accuracy))
 
   # Calculate the average loss over all of the batches.
   avg_val_loss = total_eval_loss / len(val_loader)
+  val_losses.append(avg_val_loss)
     
   # Measure how long the validation run took.
   validation_time = format_time(time.time() - t0)
@@ -283,6 +286,9 @@ for epoch in range(epochs):
   print("  Validation took: {:}".format(validation_time))
 
 torch.save(model, './sentiment.pt')
+with open('training_data.pickle', 'wb') as f:
+  pickle.dump({'accuracy': accuracies, 'training_loss': training_losses, 'val_loss': val_losses}, f)
+
 
 """
 upload model to dropbox in case runtime disconects
@@ -302,7 +308,7 @@ def largeUpload(file_path, dest_path):
       else:
         dbx.files_upload_session_append(f.read(CHUNK_SIZE), cursor.session_id, cursor.offset)
         cursor.offset = f.tell()
-largeUpload('./sentiment.pt', '/sentiment.pt')
+# largeUpload('./sentiment.pt', '/sentiment.pt')
 
 """
 Load saved model
@@ -367,3 +373,13 @@ y_pred = pd.Series(hpred, name='Predicted')
 df_confusion = pd.crosstab(y_actu, y_pred)
 
 print(df_confusion)
+
+
+# plot metrics on the data
+from sklearn.metrics import precision_recall_fscore_support as score
+precision, recall, fscore, support = score(y_actu, y_pred)
+
+print('precision: {}'.format(precision))
+print('recall: {}'.format(recall))
+print('fscore: {}'.format(fscore))
+print('support: {}'.format(support))
