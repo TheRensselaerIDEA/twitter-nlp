@@ -27,6 +27,11 @@ search_param = {
     "bool": {
       "filter": [
         {
+          "exists": {
+            "field": "in_reply_to_status_id_str"
+          }
+        },
+        {
           "simple_query_string": {
             "fields": [
               "in_reply_to_screen_name"
@@ -42,6 +47,10 @@ search_param = {
 # helper to check if filtering worked
 def validateTweets(tweets):
   for tweet in tweets:
+    if tweet['_source']['in_reply_to_status_id_str'] is None:
+      print("Tweet reply to status id is None")
+      print(tweet)
+      return False
     if 'in_reply_to_status_id_str' not in tweet['_source'] or not tweet['_source']['in_reply_to_status_id_str'].isnumeric():
       print('Non Reply Tweet found')
       print(tweet)
@@ -68,6 +77,8 @@ def search(es_index, max_hits=None):
  
   # Start scrolling until we have all documents that match our query
   while (scroll_size > 0):
+    if len(response) >= max_hits:
+      return response
     if (max_hits != None and len(response) >= max_hits):
       break
     page = es.scroll(scroll_id=scroll_id, scroll='2m')

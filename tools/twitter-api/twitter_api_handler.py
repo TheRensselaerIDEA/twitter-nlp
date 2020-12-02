@@ -89,6 +89,7 @@ class TwitterAPIHandler:
         print("bad data point")
 
     #Issue the bulk update request
+    print("Number of Updates:", len(updates))
     bulk(self.es, updates, index=es_index, chunk_size=len(updates))
       
   
@@ -98,16 +99,18 @@ class TwitterAPIHandler:
     ElasticSearch Tweet was in response to. Once we get the original tweet, we write it back to 
     ElasticSearch with the key 'in_response_to_id'
     """
+    print("[x] Getting tweet data from elasticsearch")
     hits = self.GetElasticSearchHitsWithScrolling(es_index, max_hits=num_tweets)
+    print("[x] Getting tweet data from Twitter API")
     tweets = self.GetTweetsFromAPI(hits)
-    for i in range(0, len(tweets), 1000):
+    print("[x] Writing data to elasticsearch index of size", len(tweets[0]))
+    for i in range(0, len(tweets[0]), 1000):
       self.WriteDataToElasticSearch(tweets[0][i:i+1000], es_index)
-      del tweets[i:i+1000]
     
     
 if __name__ == "__main__":
   retriever = TwitterAPIHandler()
-  retriever.GetOriginalTweetsAndWriteToElasticSearch('coronavirus-data-all', None)
+  retriever.GetOriginalTweetsAndWriteToElasticSearch('coronavirus-data-all', 40000)
   """
   To run full functionality of the script, call:
   retriever.GetOriginalTweetsAndWriteToElasticSearch(self,es_index, num_tweets)
