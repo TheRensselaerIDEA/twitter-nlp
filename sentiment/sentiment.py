@@ -35,8 +35,7 @@ vader = SentimentIntensityAnalyzer()
 bert = BertSentiment(config.model_path)
 
 #Initialize elasticsearch settings
-print(config.elasticsearch_verify_certs)
-es = Elasticsearch(hosts=[config.elasticsearch_host], 
+es = Elasticsearch(hosts=[config.elasticsearch_host],
                    verify_certs=config.elasticsearch_verify_certs,
                    timeout=config.elasticsearch_timeout_secs)
 

@@ -50,7 +50,7 @@ class BertSentiment():
 	Takes in a tweet and calculates a sentiment prediction confidences
 	"""
 	def score(self, text):
-		encoding = self.tokenizer(text, return_tensors="pt", padding=True)
+		encoding = self.tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=35)
 		inputs = encoding["input_ids"].to(self.device)
 		logits = self.model(inputs, labels=None)[0]
 		temp = torch.flatten(logits.cpu())

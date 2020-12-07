@@ -1,47 +1,6 @@
 import re
 
 def get_query():
-#    query = {
-#    "_source": [
-#        "text",
-#        "full_text",
-#        "extended_tweet.full_text",
-#        "quoted_status.text",
-#        "quoted_status.full_text",
-#        "quoted_status.extended_tweet.full_text"
-#    ],
-#    "query": {
-#        "bool": {
-#        "filter": [
-#            {
-#            "bool": {
-#                "must_not": [
-#                   {
-#                   "exists": {
-#                       "field": "sentiment.vader.primary"
-#                     }
-#                   },
-#                   {
-#                   "exists": {
-#                       "field": "sentiment.bert.scores"
-#                     }
-#                   }
-#                ]
-#              }
-#            },
-#            {
-#            "bool": {
-#                "must_not": {
-#                "exists": {
-#                    "field": "retweeted_status.id"
-#                  }
-#                }
-#              }
-#            }
-#          ]
-#        }
-#      }
-#    }
     query = {
     "_source": [
         "text",
@@ -56,11 +15,26 @@ def get_query():
         "filter": [
             {
             "bool": {
-                "must_not": {
-                "exists": {
-                    "field": "sentiment.vader.primary"
+                "should": [{
+                   "bool": {
+                   "must_not": {
+                       "exists": {
+                           "field": "sentiment.vader.primary"
+                       }
+                    }
                   }
-                }
+                 },
+                 {
+                   "bool": {
+                   "must_not": {
+                      "exists": {
+                          "field": "sentiment.bert.class"
+                      }
+                    }
+                  }
+                 }
+                ],
+                "minimum_should_match" : 1 
               }
             },
             {
