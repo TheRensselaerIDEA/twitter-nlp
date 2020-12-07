@@ -1,0 +1,43 @@
+---
+title: "DARL Project Status Notebook"
+author: "Brandyn Sigouin"
+date: "20 November 2020"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+subtitle: "Covid Twitter"
+---
+
+## REQUIRED: Weekly Work Summary	
+
+
+* RCS ID: Sigoub
+* Project Name: Covid Twitter
+* Summary of work since last week 
+
+    * This week I was able to write code to update our elasticsearch index with new twitter data. I also had to resolve      issues related to updating an elasticsearch index with new data from the twitter API. The issue that existed prior       to this was that we were committing too many new fields to elasticsearch and so the new data was being rejected. I       worked with Abraham to resolve this issue to only include the pertinant data fields.
+    
+    * We are now able to fully update elasticsearch with the new data, which will enable us to finish the current
+    scope of our research as we now have access to a complete dataset.
+    
+* Summary of github commits 
+
+    * sigoub/data-update
+    * https://raw.githubusercontent.com/TheRensselaerIDEA/COVID-Twitter/sigoub/data-update/tools/twitter-api/twitter_api_handler.py
+    
+    * this commit implements the update as described in the personal contribution section.
+    
+    * this week's work was done soley by me, save for consultations with Abraham
+
+## Personal Contribution	
+
+* This week I contributed working code that will update an elasticsearch index with new twitter data. This new twitter data is the original tweets for our direct-response tweets that currently exist in elasticsearch. This update will enable us to finish the current aims of our research because we will have a complete dataset with accessable tweet-response pairs. After working around some storage limitations with Abraham, I am only committing the id, time/date of creation, full text, and the screen name for each new tweet. This gives us just the data we want without exausting our elasticsearch resources.   
+
+## Discussion of Primary Findings 	
+
+* Discuss primary findings: 
+
+    * I found that there are cases for which data is not available for certain tweets. This occurs for roughly 1.2% of         the tweets pulled down from the twitter API. This is based on a test set of 1000 tweets, for which 12 tweets had         insufficient data returned from Twitter. As a result, we will likely lose about 1.2% of our dataset due to the fact       that some Tweet data is no longer publically available. This number is small enough such that it should not hinder       our work. This is not really something I can demonstrate visually as this just comes from a single integer returned       by a test on 1000 tweets.
+
