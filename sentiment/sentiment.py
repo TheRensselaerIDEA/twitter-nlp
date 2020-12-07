@@ -2,6 +2,7 @@ import argparse
 import sentiment_helpers
 import time
 import logging
+from bert_eval import BertSentiment
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
@@ -31,7 +32,10 @@ print()
 #Load vader sentiment intensity analyzer
 vader = SentimentIntensityAnalyzer()
 
+bert = BertSentiment(config.model_path)
+
 #Initialize elasticsearch settings
+print(config.elasticsearch_verify_certs)
 es = Elasticsearch(hosts=[config.elasticsearch_host], 
                    verify_certs=config.elasticsearch_verify_certs,
                    timeout=config.elasticsearch_timeout_secs)
@@ -56,11 +60,12 @@ while True:
             continue
 
         #Run sentiment analysis on the batch
-        logging.info("Found {0} unscored docs. Calculating sentiment scores with Vader...".format(len(hits)))
+        logging.info("Found {0} unscored docs. Calculating sentiment scores with Vader and Bert...".format(len(hits)))
         updates = []
         for hit in hits:
             text, quoted_text = sentiment_helpers.get_tweet_text(hit)
             text = sentiment_helpers.clean_text_for_vader(text)
+            scores, result = bert.score(text)
             action = {
                 "_op_type": "update",
                 "_id": hit.meta["id"],
@@ -68,15 +73,25 @@ while True:
                     "sentiment": {
                         "vader": {
                             "primary": vader.polarity_scores(text)["compound"]
-                        }
+                        },
+			"bert" : {
+                            "scores": scores,
+                            "class": result
+			}
                     }
                 }
             }
             if quoted_text is not None:
                 quoted_text = sentiment_helpers.clean_text_for_vader(quoted_text)
                 quoted_concat_text = "{0} {1}".format(quoted_text, text)
+                quoted_scores, quoted_class = bert.score(quoted_text)
+                quoted_concat_scores, quoted_concat_class = bert.score(quoted_concat_text)
                 action["doc"]["sentiment"]["vader"]["quoted"] = vader.polarity_scores(quoted_text)["compound"]
                 action["doc"]["sentiment"]["vader"]["quoted_concat"] = vader.polarity_scores(quoted_concat_text)["compound"]
+                action["doc"]["sentiment"]["bert"]["quoted_scores"] = quoted_scores
+                action["doc"]["sentiment"]["bert"]["quoted_class"] = quoted_class
+                action["doc"]["sentiment"]["bert"]["quoted_concat_scores"] = quoted_concat_scores
+                action["doc"]["sentiment"]["bert"]["quoted_concat_class"] = quoted_concat_class
 
             updates.append(action)
 
