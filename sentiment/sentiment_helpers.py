@@ -15,11 +15,26 @@ def get_query():
         "filter": [
             {
             "bool": {
-                "must_not": {
-                "exists": {
-                    "field": "sentiment.vader.primary"
+                "should": [{
+                   "bool": {
+                   "must_not": {
+                       "exists": {
+                           "field": "sentiment.vader.primary"
+                       }
+                    }
                   }
-                }
+                 },
+                 {
+                   "bool": {
+                   "must_not": {
+                      "exists": {
+                          "field": "sentiment.bert.primary"
+                      }
+                    }
+                  }
+                 }
+                ],
+                "minimum_should_match" : 1 
               }
             },
             {
