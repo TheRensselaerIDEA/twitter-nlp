@@ -28,7 +28,7 @@ use_condaenv(condaenv = "bert_sentiment", conda = "/software/anaconda3/condabin/
 * Your github ID: shwehtom89
 * Github branch name of your submitted notebook: darl-shweht-final-notebook
 * link to knitted, merged notebook (post to LMS!): 
-    + https://htmlpreview.github.io/?https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/darl-shweht-07Dec2020/DARL-2020-Notebooks/darl_shweht_07Dec2020.html
+    + https://htmlpreview.github.io/?https://github.com/TheRensselaerIDEA/COVID-Twitter/blob/darl-shweht-final-notebook/DARL-2020-Notebooks/darl_shweht_final_notebook.html
 
 # Overview & Problems Tackled
 
