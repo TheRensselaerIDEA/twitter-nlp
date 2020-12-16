@@ -20,31 +20,38 @@ class DatasetVisualizer:
     replyCounts = dict()
     originalTweetIds = set()
     responseTweetIds = set()
-    allTweetIds = set()
+    allFoundTweetIds = set()
     for point in self.__data:
       source = point['_source']
-      originalTweeterName = source['in_reply_to_status']['screen_name']
-      originalTweetId = source['in_reply_to_status']['id_str']
-      responseTweeterName = responseTweeter = source['user']['screen_name']
-      responseTweetId = point['_id']
+      try:
+        originalTweeterName = source['in_reply_to_status']['screen_name']
+        originalTweetId = source['in_reply_to_status']['id_str']
+      except:
+        # print(source.keys())
+        # print(source['quoted_status'].keys())
+        originalTweeterName = source['quoted_status']['user']['screen_name']
+        originalTweetId = source['quoted_status']['id_str']
+
+      responseTweeterName = source['user']['screen_name']
+      responseTweetId = source['id_str']
       '''
       * logic for getting overall number of tweets per user (screen name)
       '''      
-      if originalTweetId not in allTweetIds:
+      if originalTweetId not in allFoundTweetIds:
         if originalTweeterName not in allTweeterCounts.keys():
           allTweeterCounts[originalTweeterName] = 1
         else:
           allTweeterCounts[originalTweeterName] += 1
         # mark the original tweet as seen
-        allTweetIds.add(originalTweetId)
+        allFoundTweetIds.add(originalTweetId)
       
-      if responseTweetId not in allTweetIds:
+      if responseTweetId not in allFoundTweetIds:
         if responseTweeterName not in allTweeterCounts.keys():
           allTweeterCounts[responseTweeterName] = 1
         else:
           allTweeterCounts[responseTweeterName] += 1
         # mark the response tweet as seen
-        allTweetIds.add(responseTweetId)
+        allFoundTweetIds.add(responseTweetId)
       
       '''
       * logic for getting number of tweets per user given that it was an original tweet
@@ -65,7 +72,7 @@ class DatasetVisualizer:
           responseTweeterCounts[responseTweeterName] = 1
         else:
           responseTweeterCounts[responseTweeterName] += 1
-        
+      
         # logic for getting number of responses per tweeter 
         if originalTweeterName not in replyCounts.keys():
           replyCounts[originalTweeterName] = 1
@@ -73,9 +80,9 @@ class DatasetVisualizer:
           replyCounts[originalTweeterName] += 1
         
         # mark the response tweet as seen
-        responseTweetIds.add(responseTweetId)
-    self.size = len(allTweetIds)
-        
+      responseTweetIds.add(responseTweetId)
+    self.size = len(allFoundTweetIds)
+    print("Number of unique tweets present in the dataset:", self.size)
     return allTweeterCounts, originalTweeterCounts, responseTweeterCounts, replyCounts
     
   def sortDictionary(self, dictionary, reverse=False):
@@ -111,18 +118,34 @@ class DatasetVisualizer:
     plt.savefig(title + ".png")
     
     return True
+    
+  def getBarChart(self, data, title, ylabel='Number of Tweets', xLabel="Top 3 Screen Names"):
+    data = data[:3]
+    labels = [point[0] for point in data]
+    yData = [point[1] for point in data]
+    plt.bar(labels, yData)
+    plt.title(title)
+    plt.ylabel(ylabel)
+    plt.xlabel(xLabel)
+    # plt.legend(labels)
+    plt.savefig(title+".png")
 
   def __getData(self, index):
     data = search(index, max_hits=None)
+    print("number of data points collected:",len(data))
     return data
 
 
 if __name__ == "__main__":
   dataViz = DatasetVisualizer("coronavirus-data-pubhealth-quotes")
   atc, otc, rtc, rc = dataViz.getDataAnalytics()
-  print(dataViz.getTopStats(atc))
-  print(dataViz.getTopStats(otc))
-  print(dataViz.getTopStats(rtc))
-  print(dataViz.getTopStats(rc))
+  topATC = dataViz.getTopStats(atc)
+  topOTC = dataViz.getTopStats(otc)
+  topRTC = dataViz.getTopStats(rtc)
+  topRC = dataViz.getTopStats(rc)
   
-  dataViz.getPieChart(dataViz.getTopStats(atc), "tweetDistribution")
+  print("One To Many Ratio:", sum([value[1] for value in topRC]) / sum([value[1] for value in topOTC]))
+  print("Top original tweet contributors:", [point[0] for point in topOTC])
+  print("Top original tweet contributor's contribution:", sum([point[1] for point in topRC]))
+  dataViz.getBarChart(topOTC, "Original Tweet Distribution")
+  dataViz.getBarChart(topRC, "Reply Distribution", ylabel="Number of Replies Received")
