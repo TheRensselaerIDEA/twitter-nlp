@@ -32,7 +32,7 @@ print()
 #Load vader sentiment intensity analyzer
 vader = SentimentIntensityAnalyzer()
 
-bert = BertSentiment(config.model_path)
+bert = BertSentiment(config.model_path, config.model_config)
 
 #Initialize elasticsearch settings
 es = Elasticsearch(hosts=[config.elasticsearch_host],
@@ -60,40 +60,48 @@ while True:
 
         #Run sentiment analysis on the batch
         logging.info("Found {0} unscored docs. Calculating sentiment scores with Vader and Bert...".format(len(hits)))
-        updates = []
-        for hit in hits:
-            text, quoted_text = sentiment_helpers.get_tweet_text(hit)
-            text = sentiment_helpers.clean_text_for_vader(text)
-            scores, result = bert.score(text)
+        texts, quoted_texts = zip(*map(sentiment_helpers.get_tweet_text, hits))
+        texts = list(map(sentiment_helpers.clean_text_for_vader, texts))
+        quoted = {index: quote for index, quote in map(lambda x: (x[0], sentiment_helpers.clean_text_for_vader(x[1])), filter(lambda y: y[1] is not None, enumerate(quoted_texts)))}
+        quoted_concat = {index: "{0} {1}".format(quote, texts[index]) for index, quote in quoted.items()}
+        
+        # use bert to batch score text inputs
+        bert_texts = bert.score(texts)
+        bert_quoted = bert.score(list(quoted.values()))
+        bert_concat = bert.score(list(quoted_concat.values()))
+        bert_quoted = {key: val for key, val in zip(quoted.keys(), zip(*bert_quoted))}
+        bert_concat = {key: val for key, val in zip(quoted_concat.keys(), zip(*bert_concat))}
+        
+        def create_update(hit):
             action = {
                 "_op_type": "update",
-                "_id": hit.meta["id"],
+                "_id": hit[1].meta["id"],
                 "doc": {
                     "sentiment": {
                         "vader": {
-                            "primary": vader.polarity_scores(text)["compound"]
+                            "primary": vader.polarity_scores(texts[hit[0]])["compound"]
                         },
 			"bert" : {
-                            "scores": scores,
-                            "class": result
+                            "scores": bert_texts[0][hit[0]],
+                            "class": bert_texts[1][hit[0]],
+                            "primary": bert_texts[2][hit[0]]
 			}
                     }
                 }
             }
-            if quoted_text is not None:
-                quoted_text = sentiment_helpers.clean_text_for_vader(quoted_text)
-                quoted_concat_text = "{0} {1}".format(quoted_text, text)
-                quoted_scores, quoted_class = bert.score(quoted_text)
-                quoted_concat_scores, quoted_concat_class = bert.score(quoted_concat_text)
-                action["doc"]["sentiment"]["vader"]["quoted"] = vader.polarity_scores(quoted_text)["compound"]
-                action["doc"]["sentiment"]["vader"]["quoted_concat"] = vader.polarity_scores(quoted_concat_text)["compound"]
-                action["doc"]["sentiment"]["bert"]["quoted_scores"] = quoted_scores
-                action["doc"]["sentiment"]["bert"]["quoted_class"] = quoted_class
-                action["doc"]["sentiment"]["bert"]["quoted_concat_scores"] = quoted_concat_scores
-                action["doc"]["sentiment"]["bert"]["quoted_concat_class"] = quoted_concat_class
+            if hit[0] in quoted:
+                action["doc"]["sentiment"]["vader"]["quoted"] = vader.polarity_scores(quoted_texts[hit[0]])["compound"]
+                action["doc"]["sentiment"]["vader"]["quoted_concat"] = vader.polarity_scores(quoted_concat[hit[0]])["compound"]
+                action["doc"]["sentiment"]["bert"]["quoted"] = bert_quoted[hit[0]][2]
+                action["doc"]["sentiment"]["bert"]["quoted_scores"] = bert_quoted[hit[0]][0]
+                action["doc"]["sentiment"]["bert"]["quoted_class"] = bert_quoted[hit[0]][1]
+                action["doc"]["sentiment"]["bert"]["quoted_concat"] = bert_concat[hit[0]][2]
+                action["doc"]["sentiment"]["bert"]["quoted_concat_scores"] = bert_concat[hit[0]][0]
+                action["doc"]["sentiment"]["bert"]["quoted_concat_class"] = bert_concat[hit[0]][1]
+            return action
 
-            updates.append(action)
-
+        updates = list(map(create_update, enumerate(hits)))
+        
         #Issue the bulk update request
         logging.info("Making bulk request to Elasticsearch with {0} update actions...".format(len(updates)))
         bulk(es, updates, index=config.elasticsearch_index_name, chunk_size=len(updates))

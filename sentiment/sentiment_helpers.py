@@ -28,7 +28,7 @@ def get_query():
                    "bool": {
                    "must_not": {
                       "exists": {
-                          "field": "sentiment.bert.class"
+                          "field": "sentiment.bert.primary"
                       }
                     }
                   }

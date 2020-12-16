@@ -10,7 +10,7 @@ Original file is located at
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn as nna
+import torch.nn as nn
 import pickle
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
@@ -188,7 +188,7 @@ Training loop to finetune CT Bert to classify sentiment
 """
 
 # declare a model, export to GPU if available and set to training
-device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+device = torch.device('cuda:1') if torch.cuda.is_available() else torch.device('cpu')
 
 model = AutoModelForSequenceClassification.from_pretrained(
     "digitalepidemiologylab/covid-twitter-bert-v2",
@@ -235,7 +235,8 @@ for epoch in range(epochs):
     labels = batch['labels'].to(device)
 
     # feed the batch of data into the model
-    loss, logits = model(input_ids, attention_mask=attention_mask, labels=labels)
+    outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
+    loss, logits = outputs[0], outputs[1]
     total_train_loss += loss.item()
 
     # clip the norm of the gradients to 1
@@ -269,7 +270,8 @@ for epoch in range(epochs):
 
     # feed tata into model without training
     with torch.no_grad():
-      loss, logits = model(b_input_ids, attention_mask=b_input_mask, labels=b_labels)
+      outputs = model(b_input_ids, attention_mask=b_input_mask, labels=b_labels)
+      loss, logits = outputs[0], outputs[1]
     total_eval_loss += loss.item()
     
     logits = logits.detach().cpu().numpy()
@@ -295,10 +297,7 @@ for epoch in range(epochs):
   print("  Validation Loss: {0:.2f}".format(avg_val_loss))
   print("  Validation took: {:}".format(validation_time))
 
-torch.save(model, './sentiment.pt')
-with open('training_data.pickle', 'wb') as f:
-  pickle.dump({'accuracy': accuracies, 'training_loss': training_losses, 'val_loss': val_losses}, f)
-
+torch.save(model.state_dict(), './bert_sentiment.pt')
 
 """
 upload model to dropbox in case runtime disconects
@@ -351,7 +350,8 @@ for batch in test_loader:
   b_labels = batch['labels'].to(device)
 
   with torch.no_grad():
-    loss, logits = model(b_input_ids, attention_mask=b_input_mask, labels=b_labels)
+    outputs = model(b_input_ids, attention_mask=b_input_mask, labels=b_labels)
+    loss, logits = outputs[0], outputs[1]
   loss_data = np.append(loss_data, loss.item())
     
   logits = logits.detach().cpu().numpy()

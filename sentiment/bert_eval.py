@@ -1,6 +1,6 @@
 import torch
 import requests
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoConfig, BertForSequenceClassification
 from torch.nn.functional import softmax
 from typing import List
 
@@ -15,11 +15,11 @@ class BertSentiment():
 	@param path: local relative path of the bert model
 	@param remote: defaults to empty, if specified will download model from url
 	""" 
-	def __init__(self, path: str, remote: str=""):
+	def __init__(self, path: str, config: str, remote: str=""):
 		if len(remote) != 0:
 			self.download(remote)
 		self.tokenizer = tokenizer
-		self.load(path)
+		self.load(path, config)
 	
 	"""
 	Downloads bert model from remote
@@ -38,11 +38,14 @@ class BertSentiment():
 
 	"""
 	Loads pytorch model in for inference
-	@patam path: local path to the bert model
+	@param path: local path to the bert model
+        @param config: local path to bert config
 	"""
-	def load(self, path:str):
-		self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-		self.model = torch.load(path)
+	def load(self, path:str, config:str):
+		self.device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
+		self.config = AutoConfig.from_pretrained(config)
+		self.model = BertForSequenceClassification(self.config)
+		self.model.load_state_dict(torch.load(path, self.device))
 		self.model.to(self.device)
 		self.model.eval()
 	
@@ -50,11 +53,13 @@ class BertSentiment():
 	Takes in a tweet and calculates a sentiment prediction confidences
 	"""
 	def score(self, text):
-		encoding = self.tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=35)
-		inputs = encoding["input_ids"].to(self.device)
-		logits = self.model(inputs, labels=None)[0]
-		temp = torch.flatten(logits.cpu())
-		preds = softmax(temp, dim=0)
-		sentiment = mapping[torch.argmax(preds).item()]
-		return preds.tolist(), sentiment
+		encodings = self.tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=35)
+		inputs = encodings["input_ids"].to(self.device)
+		with torch.no_grad():
+			logits = self.model(inputs, labels=None)[0]
+		preds = softmax(logits.cpu(), dim=1)
+		infer = torch.argmax(preds, dim=1)
+		sentiment = [mapping[p.item()] for p in infer]
+		infer = infer - 1
+		return preds.tolist(), sentiment, infer.tolist()
 
