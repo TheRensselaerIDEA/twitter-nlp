@@ -19,7 +19,7 @@ RCS ID: Sigoub
 Contributed Branches: sigoub/twitter-api, sigoub/twitter-test, sigoub/get-data-script, sigoub/data-update, sigoub/data-visualize, sigoub/data-viz
   
 ## Overview and Problems Tackled
-* This semester, main contributions involve dataset collection and dataset analytics. As the project is oriented towards anaylizing tweets and their responses, my job was to scope our dataset to relevent tweeters while retrieving new tweets as necessary from the Twitter API to complete the tweet-response pair representations in elasticsearch.
+* This semester, main contributions involve dataset collection and dataset analytics. As the project is oriented towards anaylizing tweets and their responses, my job was to scope our dataset to relevent tweeters while retrieving new tweets as necessary from the Twitter API to complete the tweet-response pair representations in elasticsearch. This work established the data from which COVID-Twitter's results are derived.
 
 * My contributions provided the tweet-response data that is fed into our DialoGPT and BERT models for analyzing public response towards public health authorities in respect to COVID-19.
 
@@ -33,6 +33,8 @@ Contributed Branches: sigoub/twitter-api, sigoub/twitter-test, sigoub/get-data-s
 ## Results
 
 * Collected a dataset of 78,147 data points consisting of 83,874 original tweets and their responses.
+
+* NOTE: When referring to a "data point" in our dataset, this means one singleton instance from our elasticsearch index. Each "data point" actually contains two tweets. An original tweet plus a direct reply or a quote tweet.
 
 * Over 40,000 brand new data points pulled directly from the Twitter API
 

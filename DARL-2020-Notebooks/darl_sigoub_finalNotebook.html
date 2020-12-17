@@ -392,7 +392,7 @@ summary {
 <div id="overview-and-problems-tackled" class="section level2">
 <h2>Overview and Problems Tackled</h2>
 <ul>
-<li><p>This semester, main contributions involve dataset collection and dataset analytics. As the project is oriented towards anaylizing tweets and their responses, my job was to scope our dataset to relevent tweeters while retrieving new tweets as necessary from the Twitter API to complete the tweet-response pair representations in elasticsearch.</p></li>
+<li><p>This semester, main contributions involve dataset collection and dataset analytics. As the project is oriented towards anaylizing tweets and their responses, my job was to scope our dataset to relevent tweeters while retrieving new tweets as necessary from the Twitter API to complete the tweet-response pair representations in elasticsearch. This work established the data from which COVID-Twitter’s results are derived.</p></li>
 <li><p>My contributions provided the tweet-response data that is fed into our DialoGPT and BERT models for analyzing public response towards public health authorities in respect to COVID-19.</p></li>
 <li><p>Utilized the Tweepy python library to interface with the Twitter Statuses API. Used existing data points in our elasticsearch index to find the ids of the original tweets and pull those tweets down from the Twitter API. Each call created a tweet-response pair that our DialoGPT and BERT models can use to analyze tweets. This method created roughly 40,000 new data points for our models.</p></li>
 </ul>
@@ -408,6 +408,7 @@ summary {
 <h2>Results</h2>
 <ul>
 <li><p>Collected a dataset of 78,147 data points consisting of 83,874 original tweets and their responses.</p></li>
+<li><p>NOTE: When referring to a “data point” in our dataset, this means one singleton instance from our elasticsearch index. Each “data point” actually contains two tweets. An original tweet plus a direct reply or a quote tweet.</p></li>
 <li><p>Over 40,000 brand new data points pulled directly from the Twitter API</p></li>
 <li><p>Discovered that our dataset (on average) consists of 1 original Tweet to every 9 replies. This insight demonstrates the increased technical challenge associated with training a natural language generation model. Tradionally, machine learning models are a many-to-one problem where many data points map to a small set of classes. These results show that our dataset and our problem contradicts this as we have roughly 9 times more “classes” or targets that we do input data points. Thus, tasks such as fine-tuning DialoGPT on twitter data presents a unique difficulty as the model will have to generalize across a distribution of target responses instead of a single class.</p></li>
 <li><p>Below are some visualizations capturing this one to many relationship which exists in our dataset:</p></li>
