@@ -7,6 +7,10 @@
     "elasticsearch_timeout_secs": 30,
     "use_large_tfhub_url": "https://tfhub.dev/google/universal-sentence-encoder-large/5",
     "use_large_batch_size": 128,
+    "sbert_model_name": "all-MiniLM-L12-v2",
+    "sbert_batch_size": 128,
+    "sbert_max_seq_length": 512,
+    "embedding_type": "sbert",
     "sleep_idle_secs": 5,
     "sleep_not_idle_secs": 0.01,
     "log_level": "WARNING"

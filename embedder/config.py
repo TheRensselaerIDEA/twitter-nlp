@@ -21,6 +21,10 @@ class Config(object):
         #Embedding settings
         self.use_large_tfhub_url = ""
         self.use_large_batch_size = 128
+        self.sbert_model_name = ""
+        self.sbert_batch_size = 128
+        self.bert_max_seq_length = 512
+        self.embedding_type="use_large"
 
         #Processing settings
         self.sleep_idle_secs = 5

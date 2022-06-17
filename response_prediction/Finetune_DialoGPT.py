@@ -1,4 +1,8 @@
 """
+MOSTLY THE SAME AS Rostyslav Neskorozhenyi's Rick & Morty bot training notebook, with small modifications to work
+with our tweet/response dataset.
+https://colab.research.google.com/drive/15wa925dj7jvdvrz8_z3vU7btqAFQLVlG
+
 Fine-tuning the library models for language modeling on a text file (GPT, GPT-2, BERT, RoBERTa).
 GPT and GPT-2 are fine-tuned using a causal language modeling (CLM) loss while BERT and RoBERTa are fine-tuned
 using a masked language modeling (MLM) loss.
@@ -61,21 +65,21 @@ class Args():
         self.block_size = 512
         self.do_train = True
         self.do_eval = True
-        self.evaluate_during_training = False
-        self.per_gpu_train_batch_size = 2
-        self.per_gpu_eval_batch_size = 2
+        self.evaluate_during_training = True
+        self.per_gpu_train_batch_size = 8
+        self.per_gpu_eval_batch_size = 8
         self.gradient_accumulation_steps = 1
         self.learning_rate = 5e-5
         self.weight_decay = 0.0
         self.adam_epsilon = 1e-8
         self.max_grad_norm = 1.0
-        self.num_train_epochs = 1
+        self.num_train_epochs = 10
         self.max_steps = -1
         self.warmup_steps = 0
         self.logging_steps = 1000
         self.save_steps = 3500
         self.save_total_limit = None
-        self.eval_all_checkpoints = False
+        self.eval_all_checkpoints = True
         self.no_cuda = False
         self.overwrite_output_dir = True
         self.overwrite_cache = True
@@ -189,7 +193,7 @@ def _rotate_checkpoints(args, checkpoint_prefix="checkpoint", use_mtime=False) -
         
 # Training and Evaluating
 
-def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedTokenizer) -> Tuple[int, float]:
+def train(args, train_dataset, df_val, model: PreTrainedModel, tokenizer: PreTrainedTokenizer) -> Tuple[int, float]:
     """ Train the model """
     if args.local_rank in [-1, 0]:
         tb_writer = SummaryWriter()
@@ -342,7 +346,7 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
                     if (
                         args.local_rank == -1 and args.evaluate_during_training
                     ):  # Only evaluate when single GPU otherwise metrics may not average well
-                        results = evaluate(args, model, tokenizer)
+                        results = evaluate(args, model, tokenizer, None, df_val)
                         for key, value in results.items():
                             tb_writer.add_scalar("eval_{}".format(key), value, global_step)
                     tb_writer.add_scalar("lr", scheduler.get_lr()[0], global_step)
@@ -503,7 +507,7 @@ def main(df_trn, df_val):
     if args.do_train:
         train_dataset = load_and_cache_examples(args, tokenizer, df_trn, df_val, evaluate=False)
 
-        global_step, tr_loss = train(args, train_dataset, model, tokenizer)
+        global_step, tr_loss = train(args, train_dataset, df_val, model, tokenizer)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
     # Saving best-practices: if you use save_pretrained for the model and tokenizer, you can reload them using from_pretrained()

@@ -9,3 +9,7 @@ embedder/embedderlog.txt
 twitter_monitor/jdllog.txt
 sentiment/sentimentlog.txt
 analysis/snapshots/*.Rdata
+response_prediction/cached
+response_prediction/output*
+response_prediction/runs
+response_prediction/checkpoint*

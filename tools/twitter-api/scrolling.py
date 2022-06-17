@@ -1,12 +1,15 @@
-from elasticsearch import Elasticsearch, helpers
-from random import randint
+from elasticsearch import Elasticsearch
 import json
 config = json.load(open("config.json"))
 
 # configure elasticsearch client
 es_config = config["config"]["elasticsearch"]
 client_config = config["config"]["client"]
-es_url = f"{es_config['es_host']}:{es_config['es_port']}/{es_config['es_path']}"
+if "es_path" in es_config and es_config["es_path"] != "":
+  es_url = f"{es_config['es_host']}:{es_config['es_port']}/{es_config['es_path']}"
+else:
+  es_url = es_config['es_host']
+config_es_index = config["config"]["es_index"]
 es = Elasticsearch(
   [es_url],
   # turn on SSL
@@ -24,12 +27,14 @@ es = Elasticsearch(
 search_param = {
   "_source": True,
   "query": {
-    "constant_score" : {
-      "filter" : {
-        "exists" : {
-          "field" : "in_reply_to_status_id_str"
+    "bool" : {
+      "filter" : [
+        {
+          "exists" : {
+            "field" : "in_reply_to_status_id_str"
+          }
         }
-      }
+      ]
     }
   }
 }
@@ -44,19 +49,21 @@ def validateTweets(tweets):
   return True
  
 # method for continuously searching for all tweets
-def search(es_index, max_hits=None):
+def search(es_index=None, max_hits=None):
   print('###########################')
   print('        Begin Search       ')
   print('###########################')
+  
+  if es_index is None:
+    es_index = config_es_index
+  
   response = []
-
   # perform a search for 2ms and get initial index
   page = es.search(index=es_index,
                        scroll='2m',
                        size=1000,
                        body=search_param)
   scroll_id = page['_scroll_id']
-  ids = [scroll_id]
   scroll_size = page['hits']['total']['value']
   response.extend(page['hits']['hits'])
   print('%d Tweets Gathered' % (len(response)))
@@ -68,14 +75,13 @@ def search(es_index, max_hits=None):
     page = es.scroll(scroll_id=scroll_id, scroll='2m')
     # Update the scroll ID
     scroll_id = page['_scroll_id']
-    ids.append(scroll_id)
     # Get the number of results that we returned in the last scroll
     validateTweets(page['hits']['hits'])
     scroll_size = len(page['hits']['hits'])
     response.extend(page['hits']['hits'])
     print('%d Tweets Gathered' % (len(response)))
   
-  es.clear_scroll(body=None, scroll_id=",".join(ids))
+  es.clear_scroll(scroll_id=scroll_id)
   return response
  
 if __name__ == '__main__':

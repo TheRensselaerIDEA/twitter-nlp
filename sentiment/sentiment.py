@@ -2,7 +2,9 @@ import argparse
 import sentiment_helpers
 import time
 import logging
+import torch
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
 from elasticsearch_dsl import Search
@@ -30,6 +32,13 @@ print()
 
 #Load vader sentiment intensity analyzer
 vader = SentimentIntensityAnalyzer()
+
+#Load sentiment classification model
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(device)
+sentiment_tokenizer = AutoTokenizer.from_pretrained(config.sentiment_modelpath)
+sentiment_model = AutoModelForSequenceClassification.from_pretrained(config.sentiment_modelpath)
+sentiment_model.to(device)
 
 #Initialize elasticsearch settings
 es = Elasticsearch(hosts=[config.elasticsearch_host], 
@@ -68,6 +77,11 @@ while True:
                     "sentiment": {
                         "vader": {
                             "primary": vader.polarity_scores(text)["compound"]
+                        },
+                        "roberta": {
+                            "primary": sentiment_helpers.get_sentiment([text], 1, 
+                                            config.sentiment_max_seq_length, 
+                                            sentiment_model, sentiment_tokenizer, device).item()
                         }
                     }
                 }
@@ -77,6 +91,13 @@ while True:
                 quoted_concat_text = "{0} {1}".format(quoted_text, text)
                 action["doc"]["sentiment"]["vader"]["quoted"] = vader.polarity_scores(quoted_text)["compound"]
                 action["doc"]["sentiment"]["vader"]["quoted_concat"] = vader.polarity_scores(quoted_concat_text)["compound"]
+
+                action["doc"]["sentiment"]["roberta"]["quoted"] = sentiment_helpers.get_sentiment([quoted_text], 1, 
+                                                                        config.sentiment_max_seq_length,
+                                                                        sentiment_model, sentiment_tokenizer, device).item()
+                action["doc"]["sentiment"]["roberta"]["quoted_concat"] = sentiment_helpers.get_sentiment([quoted_concat_text], 1, 
+                                                                            config.sentiment_max_seq_length,
+                                                                            sentiment_model, sentiment_tokenizer, device).item()
 
             updates.append(action)
 

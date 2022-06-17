@@ -1,4 +1,4 @@
-def get_query():
+def get_query(embedding_type):
     query = {
     "_source": [
         "text",
@@ -15,7 +15,7 @@ def get_query():
             "bool": {
                 "must_not": {
                 "exists": {
-                    "field": "embedding.use_large.primary"
+                    "field": "embedding.%s.primary" % embedding_type
                   }
                 }
               }

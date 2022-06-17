@@ -1,7 +1,5 @@
-from scrolling import es, search
-from elasticsearch import Elasticsearch
+from scrolling import es, search, config_es_index
 from elasticsearch.helpers import bulk
-from random import randint
 import json
 import tweepy
 
@@ -41,24 +39,22 @@ class TwitterAPIHandler:
     """
     Gets the original tweet for each response-type hit from Twitter 
     and writes that original tweet to the exisiting data
-    """
-    output = list()
-    responseTweetIds = [hit['_source']['in_reply_to_status_id'] for hit in hits]
+    # """
+    output = []
     numUnavailable = 0
-    for i in range(0, len(responseTweetIds), 100):
-      apiResponse = self.api.statuses_lookup(responseTweetIds[i:i+100], tweet_mode="extended", map=True)
+    for i in range(0, len(hits), 100):
+      responseTweetIds = list(set([hit["_source"]["in_reply_to_status_id_str"] for hit in hits[i:i+100]]))
+      apiResponse = self.api.statuses_lookup(responseTweetIds, tweet_mode="extended", map_=True)
+      apiResponseDict = {tweet._json["id_str"]: tweet._json for tweet in apiResponse if "id_str" in tweet._json}
       
-      numUnavailable += (100 - len(apiResponse))
-      for j in range(i, i+100):
-        currHit = hits[j]
-        inReplyToId = currHit['_source']['in_reply_to_status_id']
-        for tweet in apiResponse:
-          if tweet._json['id'] == inReplyToId:
-            currHit['_source']['in_reply_to_status'] = tweet._json
-            output.append(currHit)
-            break
-        
-        
+      numUnavailable += (len(responseTweetIds) - len(apiResponseDict))
+      for j in range(i, min(i+100, len(hits))):
+          currHit = hits[j]
+          inReplyToId = currHit["_source"]["in_reply_to_status_id_str"]
+          if inReplyToId in apiResponseDict:
+              currHit["_source"]["in_reply_to_status"] = apiResponseDict[inReplyToId]
+              output.append(currHit) 
+
     return output, numUnavailable
       
   
@@ -66,6 +62,9 @@ class TwitterAPIHandler:
     """
     Write the modified data back to the elasticsearch index
     """
+    if es_index is None:
+        es_index = config_es_index
+    
     updates = list()
     for hit in hits:
       irs = hit["_source"]["in_reply_to_status"]
@@ -89,7 +88,7 @@ class TwitterAPIHandler:
         print("bad data point")
 
     #Issue the bulk update request
-    bulk(self.es, updates, index=es_index, chunk_size=len(updates))
+    bulk(self.es, updates, index=es_index)
       
   
   def GetOriginalTweetsAndWriteToElasticSearch(self, es_index, num_tweets):
@@ -105,7 +104,7 @@ class TwitterAPIHandler:
     
 if __name__ == "__main__":
   retriever = TwitterAPIHandler()
-  retriever.GetOriginalTweetsAndWriteToElasticSearch('coronavirus-data-all', None)
+  retriever.GetOriginalTweetsAndWriteToElasticSearch(None, None)
   """
   To run full functionality of the script, call:
   retriever.GetOriginalTweetsAndWriteToElasticSearch(self,es_index, num_tweets)

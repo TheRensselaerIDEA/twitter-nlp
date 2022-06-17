@@ -63,6 +63,20 @@ def verify_or_setup_index(es, config):
             "dims": 512
         }
 
+        mappings["properties"]["embedding.sbert.primary"] = {
+            "type": "dense_vector",
+            "dims": 384
+        }
+        mappings["properties"]["embedding.sbert.quoted"] = {
+            "type": "dense_vector",
+            "dims": 384
+        }
+        mappings["properties"]["embedding.sbert.quoted_concat"] = {
+            "type": "dense_vector",
+            "dims": 384
+        }
+        
+
     es.indices.create(config.elasticsearch_index_name, {
         "mappings": mappings
     })

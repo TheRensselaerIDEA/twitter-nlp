@@ -19,6 +19,8 @@ class Config(object):
         self.elasticsearch_timeout_secs = 30
 
         #Processing settings
+        self.sentiment_modelpath = ""
+        self.sentiment_max_seq_length = 512
         self.sleep_idle_secs = 5
         self.sleep_not_idle_secs = 0.01
         self.log_level = "ERROR"

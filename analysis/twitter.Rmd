@@ -191,6 +191,7 @@ if (!snapshot_loaded) {
   summarize_max_len <- 60
   summarize_num_beams <- 6
   summarize_temperature <- 1.0
+  summarize_do_sample <- FALSE
   
   #--------------------------
   # T-SNE HYPERPARAMS
@@ -510,6 +511,7 @@ if (!exists("summaries.df") && isTRUE(summarize_clusters)) {
                                            max_len=summarize_max_len,
                                            num_beams=summarize_num_beams,
                                            temperature=summarize_temperature,
+                                           do_sample=summarize_do_sample,
                                            model=summarize_model,
                                            summarizer_url=summarizer_url)
   

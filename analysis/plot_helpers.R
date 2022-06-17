@@ -126,7 +126,7 @@ sentiment_to_html_emoji <- function(sentiment_score, sentiment_threshold) {
 # colored by their cluster or subcluster membership.
 # Cluster / subcluster centers are highlighted in black.
 ################################################################
-plot_tweets <- function(tsne.plot, title, sentiment_threshold, type, mode, webGL, xlabel="X", ylabel="Y", zlabel="Z") {
+plot_tweets <- function(tsne.plot, title, sentiment_threshold, type, mode, webGL, xlabel="X", ylabel="Y", zlabel="Z", render_text=FALSE) {
   isWebGL <- isTRUE(webGL) && mode=="2d"
   
   plot_type <- if(type=="clusters") {"Cluster"} else {"Subcluster"}
@@ -141,7 +141,7 @@ plot_tweets <- function(tsne.plot, title, sentiment_threshold, type, mode, webGL
                              if(type=="clusters") {cluster} else {subcluster},
                              "<br>Sentiment:", round(sentiment, 4), 
                               sentiment_to_html_emoji(sentiment, sentiment_threshold),
-                             "<br>Tweet ID:", paste0("[", id_str, "]")),
+                             if(render_text) {paste("<br>Text:", full_text)} else {paste("<br>Tweet ID:", paste0("[", id_str, "]"))}),
                  color=~if(type=="clusters") {cluster.label} else {subcluster.label}, 
                  colors=colorRamp(brewer.pal(8, "Set2")), 
                  type=if(mode=="3d") {"scatter3d"} else {"scatter"}, 

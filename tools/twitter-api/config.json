@@ -1,18 +1,18 @@
 {
   "config": {
     "elasticsearch": {
-      "es_host" : "XXX",
+      "es_host" : "localhost",
       "es_path" : "elasticsearch",
-      "es_port" : "443"
+      "es_port" : "8080"
     },
     "client" : {
       "use_ssl": true,
       "verify_certs": false,
       "ssl_show_warn": false,
-      "timeout": 30,
+      "timeout": 120,
       "max_retries": 10,
       "retry_on_timeout": true
     },
-    "es_index": "coronavirus-data-all"
+    "es_index": "vaccine-data-pubhealth-quotes"
   }
 }

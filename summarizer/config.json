@@ -2,8 +2,7 @@
     "py/object": "config.Config",
     "transformers_models": [
         "sshleifer/distilbart-xsum-12-6", 
-        "sshleifer/distilbart-cnn-12-6", 
-        "airKlizz/distilbart-multi-combine-wiki-news"
+        "sshleifer/distilbart-cnn-12-6"
     ],
     "batch_size": 32
 }

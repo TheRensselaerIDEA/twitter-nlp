@@ -1,14 +1,14 @@
 {
     "py/object": "config.Config",
-    "elasticsearch_host": "localhost",
+    "elasticsearch_host": "http://idea-vm-elasticsearch:9200",
     "elasticsearch_verify_certs": false,
-    "elasticsearch_index_name": "coronavirus-data2",
-    "elasticsearch_batch_size": 500,
-    "elasticsearch_timeout_secs": 30,
+    "elasticsearch_index_name": "coronavirus-data-pubhealth-quotes",
+    "elasticsearch_batch_size": 2000,
+    "elasticsearch_timeout_secs": 120,
+    "sentiment_modelpath": "cardiffnlp/twitter-roberta-base-sentiment",
+    "sentiment_max_seq_length": 512,
     "sleep_idle_secs": 5,
     "sleep_not_idle_secs": 0.01,
-    "log_level": "WARNING",
-    "semeval_dataset" : "semeval",
-    "semeval_url" : "https://www.dropbox.com/s/byzr8yoda6bua1b/2017_English_final.zip?dl=1",
-    "thresholds" : [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45]
+    "log_level": "WARNING"
+
 }

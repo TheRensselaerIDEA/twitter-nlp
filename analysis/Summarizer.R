@@ -9,6 +9,7 @@ summarize <- function(text,
                       max_len=60, 
                       num_beams=4,
                       temperature=1.0,
+                      do_sample=TRUE,
                       model=NULL,
                       summarizer_url="http://localhost:8080/batchsummarize") {
   
@@ -19,6 +20,7 @@ summarize <- function(text,
   body <- list(max_len = max_len, 
             num_beams = num_beams,
             temperature = temperature,
+            do_sample = do_sample,
             text = text)
   if (!is.null(model)) {
     body$model <- model
@@ -35,6 +37,7 @@ summarize_tweet_clusters <- function(tweet.vectors.df,
                                     max_len=60,
                                     num_beams=4,
                                     temperature=1.0,
+                                    do_sample=TRUE,
                                     model=NULL,
                                     summarizer_url="http://localhost:8080/batchsummarize",
                                     use_quoted_centers=FALSE) {
@@ -58,6 +61,7 @@ summarize_tweet_clusters <- function(tweet.vectors.df,
                                                max_len=max_len,
                                                num_beams=num_beams,
                                                temperature=temperature,
+                                               do_sample=do_sample,
                                                model=model,
                                                summarizer_url=summarizer_url)
   summaries.df[rownames(subcluster_summaries.df), "summary"] <- subcluster_summaries.df$summary
@@ -76,6 +80,7 @@ summarize_tweet_clusters <- function(tweet.vectors.df,
                                             max_len=max_len,
                                             num_beams=num_beams,
                                             temperature=temperature,
+                                            do_sample=do_sample,
                                             model=model,
                                             summarizer_url=summarizer_url)
   summaries.df[rownames(cluster_summaries.df), "summary"] <- cluster_summaries.df$summary
