@@ -1,0 +1,131 @@
+```{r setup, include=FALSE}
+# Required R package installation:
+# These will install packages if they are not already installed
+# Set the correct default repository
+r = getOption("repos")
+r["CRAN"] = "http://cran.rstudio.com"
+options(repos = r)
+
+
+if (!require("knitr")) {
+  install.packages("knitr")
+  library(knitr)
+}
+
+if(!require('plotly')) {
+  install.packages("plotly")
+  library(plotly)
+}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+source("Elasticsearch.R")
+source("plot_helpers.R")
+source("text_helpers.R")
+```
+
+```{r, echo=FALSE}
+elasticsearch_index <- "coronavirus-data-all"
+elasticsearch_host <- "lp01.idea.rpi.edu"
+elasticsearch_path <- "elasticsearch"
+elasticsearch_port <- 443
+elasticsearch_schema <- "https"
+
+embedder_url <- "http://localhost:8008/embed/use_large/"
+```
+
+### Configure the search query here:
+
+```{r}
+# query start date/time (inclusive)
+rangestart <- "2020-01-01 00:00:00"
+# query end date/time (exclusive)
+rangeend <- "2020-10-01 00:00:00"
+
+tweet <- "The staffing cutbacks are unfortunate but necessary during these uncertain times."
+
+aspect1 <- "I am a single mother"
+aspect2 <- "How am I going to eat"
+
+sentiment_type <- "vader"
+sentiment_threshold <- 0.05
+resultsize <- 1000
+min_results <- 1
+```
+
+```{r, echo=FALSE}
+results <- do_search(indexname=elasticsearch_index, 
+                     rangestart=rangestart,
+                     rangeend=rangeend,
+                     semantic_phrase=tweet,
+                     must_have_embedding="embedding.use_large.quoted",
+                     sentiment_type=sentiment_type,
+                     resultsize=resultsize,
+                     resultfields='"id_str", 
+                                    "created_at", 
+                                    "user.screen_name", 
+                                    "text", 
+                                    "full_text", 
+                                    "extended_tweet.full_text", 
+                                    "quoted_status.id_str", 
+                                    "quoted_status.created_at", 
+                                    "quoted_status.user.screen_name", 
+                                    "quoted_status.text", 
+                                    "quoted_status.full_text", 
+                                    "quoted_status.extended_tweet.full_text",
+                                    "embedding.use_large.primary"',
+                     elasticsearch_host=elasticsearch_host,
+                     elasticsearch_path=elasticsearch_path,
+                     elasticsearch_port=elasticsearch_port,
+                     elasticsearch_schema=elasticsearch_schema)
+
+required_fields <- c("cosine_similarity",
+            					"id_str", 
+            					"created_at", 
+            					"user_screen_name", 
+            					"full_text",
+            					"sentiment",
+            					"quoted_status.id_str", 
+          					  "quoted_status.created_at", 
+          					  "quoted_status.user_screen_name",
+          					  "quoted_status.full_text",
+          					  "quoted_status.sentiment")
+validate_results(results$df, min_results, required_fields)
+
+
+tweet.vectors.df <- results$df[,required_fields]
+tweet.vectors.matrix <- t(simplify2array(results$df[,"embedding.use_large.primary"]))
+```
+
+```{r, echo=FALSE}
+aspect1_embedding <- embed_use_large(aspect1, embedder_url)
+aspect2_embedding <- embed_use_large(aspect2, embedder_url)
+
+tweet.vectors.df$aspect1_cosine_similarity <- apply(tweet.vectors.matrix, 1, 
+                function(v) (v %*% aspect1_embedding)/(norm(v, type="2")*norm(aspect1_embedding, type="2")))
+tweet.vectors.df$aspect2_cosine_similarity <- apply(tweet.vectors.matrix, 1, 
+                function(v) (v %*% aspect2_embedding)/(norm(v, type="2")*norm(aspect2_embedding, type="2")))
+```
+
+```{r, echo=FALSE}
+plot.df <- tweet.vectors.df
+plot.df$full_text <- sapply(plot.df$full_text, function(t) paste(strwrap(t ,width=60), collapse="<br>"))
+
+fig <- plot_ly(plot.df,
+                 x=~aspect1_cosine_similarity, 
+                 y=~aspect2_cosine_similarity, 
+                 hoverinfo="text",
+                 hovertext=~paste("Sentiment:", round(sentiment, 4), 
+                                  sentiment_to_html_emoji(sentiment, sentiment_threshold),
+                                  "<br>Tweet ID:", paste0("[", id_str, "]"),
+                                  "<br>Response:", full_text),
+                 color=~sentiment,
+                 type="scatter",
+                 mode="markers")
+fig <- fig %>% layout(title="Responses to related tweets", 
+                      xaxis=list(zeroline=FALSE, title="Similarity to Aspect 1"), 
+                      yaxis=list(zeroline=FALSE, title="Similarity to Aspect 2"))
+fig
+
+htmltools::HTML(load_tweet_viewer())
+```

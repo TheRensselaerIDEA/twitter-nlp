@@ -1,14 +1,14 @@
 {
     "py/object": "config.Config",
-    "model_path": "epoch=1-step=5852",
+    "model_path": "covid19/lightning_logs/version_0/checkpoints/epoch=1-step=5852",
     "use_large_tfhub_url": "https://tfhub.dev/google/universal-sentence-encoder-large/5",
     "sbert_model_name": "all-MiniLM-L12-v2",
     "sbert_max_seq_length": 512,
     "embedding_type": "sbert",
-    "generate_batch_size": 32,
-    "embed_batch_size": 32,
+    "generate_batch_size": 2,
+    "embed_batch_size": 4,
     "embed_enabled": true,
-    "sentiment_batch_size": 32,
+    "sentiment_batch_size": 4,
     "sentiment_modelpath": "cardiffnlp/twitter-roberta-base-sentiment",
     "sentiment_max_seq_length": 512
 }

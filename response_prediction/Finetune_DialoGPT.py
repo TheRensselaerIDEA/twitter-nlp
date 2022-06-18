@@ -76,7 +76,7 @@ class Args():
         self.num_train_epochs = 10
         self.max_steps = -1
         self.warmup_steps = 0
-        self.logging_steps = 1000
+        self.logging_steps = 875
         self.save_steps = 3500
         self.save_total_limit = None
         self.eval_all_checkpoints = True
@@ -93,11 +93,11 @@ args = Args()
 
 # Load the dataset
 
-df = pd.read_csv('tweet_response.csv')
+df = pd.read_csv('tweet_response_training.csv')
 
 # Split our dataset into a training and test parts.
 
-trn_df, val_df = train_test_split(df, test_size = 0.1)
+trn_df, val_df = train_test_split(df, test_size = 0.1, random_state=args.seed)
 
 # Now will convert our dataset in a format suitable for our model. 
 # Basically we will concatenate responses in one string for each row 
@@ -113,7 +113,7 @@ def construct_conv(row, tokenizer, eos = True):
 class ConversationDataset(Dataset):
     def __init__(self, tokenizer: PreTrainedTokenizer, args, df, block_size=512):
 
-        block_size = block_size - (tokenizer.max_len - tokenizer.max_len_single_sentence)
+        block_size = block_size - (tokenizer.model_max_length - tokenizer.max_len_single_sentence)
 
         directory = args.cache_dir
         cached_features_file = os.path.join(

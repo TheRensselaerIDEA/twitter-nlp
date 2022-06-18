@@ -1,0 +1,103 @@
+```{r setup, include=FALSE}
+# Required R package installation:
+# These will install packages if they are not already installed
+# Set the correct default repository
+r = getOption("repos")
+r["CRAN"] = "http://cran.rstudio.com"
+options(repos = r)
+
+
+if (!require("knitr")) {
+  install.packages("knitr")
+  library(knitr)
+}
+
+if(!require('plotly')) {
+  install.packages("plotly")
+  library(plotly)
+}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+if (!exists("tweet.vectors.df")){
+  load("/data/COVID-Twitter/analysis/snapshots/pubhealth_quotes.Rdata")
+}
+source("Elasticsearch.R")
+source("plot_helpers.R")
+source("text_helpers.R")
+```
+
+```{r, echo=FALSE}
+embedder_url <- "http://localhost:8008/embed/use_large/"
+```
+
+### Configure the search query here:
+
+```{r}
+#tweet <- "Please wear a face covering whenever possible. Be respectful to your neighbor and help stop the spread."
+tweet <- "Schools should not be allowed to reopen at all until there is a vaccine."
+#tweet <- "A new study has uncovered evidence that the current strain of the coronavirus could not have been transmitted to humans naturally, suggesting it was the result of a laboratory accident in China."
+
+response <- "Don't trust the government."
+```
+
+```{r, echo=FALSE}
+tweet_embedding <- embed_use_large(tweet, embedder_url)
+response_embedding <- embed_use_large(response, embedder_url)
+
+#assign tweet to a cluster
+quoted_centers <- quoted.vectors.matrix[quoted.vectors.df$vector_type=="cluster_center",]
+tweet_cosine_similarity <- (quoted_centers %*% tweet_embedding) / 
+                                    (sqrt(diag(quoted_centers %*% t(quoted_centers)))*norm(tweet_embedding, type="2"))
+tweet_cluster <- quoted.vectors.df[quoted.vectors.df$vector_type=="cluster_center", 
+                                   "cluster"][which.max(tweet_cosine_similarity)]
+
+#rank responses in cluster by proximity of quoted tweet the the prompt tweet
+cluster.responses.df <- tweet.vectors.df[tweet.vectors.df$cluster==tweet_cluster,]
+cluster.responses.matrix <- tweet.vectors.matrix[tweet.vectors.df$cluster==tweet_cluster,]
+cluster.responses.df$response_cosine_similarity <- apply(cluster.responses.matrix, 1, 
+                function(v) 1+((v %*% response_embedding)/(norm(v, type="2")*norm(response_embedding, type="2"))))
+cluster.quoted.matrix <- quoted.vectors.matrix[quoted.vectors.df$cluster==tweet_cluster,]
+cluster.responses.df$quoted_cosine_similarity <- apply(cluster.quoted.matrix, 1, 
+                function(v) 1+((v %*% tweet_embedding)/(norm(v, type="2")*norm(tweet_embedding, type="2"))))
+
+cluster.responses.df <- cluster.responses.df[cluster.responses.df$vector_type=="tweet",]
+cluster.responses.df$subcluster.label <- factor(
+              sapply(cluster.responses.df$subcluster, 
+             function(c) format_label(clusters[[tweet_cluster]]$subclusters[[c]]$label, tweet_cluster, c)),
+              levels=sapply(1:cluster.k, 
+             function(c) format_label(clusters[[tweet_cluster]]$subclusters[[c]]$label, tweet_cluster, c)))
+cluster.responses.df$full_text <- sapply(cluster.responses.df$full_text, 
+                                     function(t) paste(strwrap(t ,width=60), collapse="<br>"))
+```
+### Similar responses to tweets on topic: `r clusters[[tweet_cluster]]$quoted_label` 
+
+#### (`r clusters[[tweet_cluster]]$quoted_summary`)
+
+```{r, echo=FALSE}
+#plot the nearest neighbors to the prompt tweet
+fig <- plot_ly(cluster.responses.df[1:min(nrow(cluster.responses.df), 200),],
+                 x=~sentiment, 
+                 y=~quoted_cosine_similarity, 
+                 hoverinfo="text",
+                 hovertext=~paste("<br>Group persona:", subcluster.label,
+                                  "<br>Sentiment:", round(sentiment, 4), 
+                                  sentiment_to_html_emoji(sentiment, sentiment_threshold),
+                                  "<br>Tweet ID:", paste0("[", id_str, "]"),
+                                  "<br>Response:", full_text),
+                 color=~subcluster.label,
+                 colors=colorRamp(brewer.pal(8, "Set2")),
+                 #size=~1/(1+exp(-(12*response_cosine_similarity-8))),
+                 type="scatter",
+                 mode="markers",
+                 marker=list(size=~10/(1+exp(-(6*response_cosine_similarity-6)))),
+                 width=900)
+fig <- fig %>% layout(title="Responses by group persona to related tweets", 
+                      xaxis=list(zeroline=FALSE, title="Sentiment"), 
+                      yaxis=list(zeroline=FALSE, title="Similarity to prompt tweet"),
+                      legend=list(traceorder="normal"),
+                      autosize=FALSE)
+fig
+
+htmltools::HTML(load_tweet_viewer())
+```

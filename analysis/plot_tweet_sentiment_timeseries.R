@@ -98,7 +98,6 @@ plot_tweet_sentiment_timeseries <- function(tweet.vectors.df, group.by = "day", 
   tweet.tibble <- tibble(sentiment = tweets.df$sentiment, week = tweets.df$week, date = tweets.df$date, datetime = tweets.df$created_at)
   if (group.by == "week") {
     # Compute statistics
-    summary.tibble <- tweet.tibble %>% group_by(week) %>% summarize(mean_sentiment = mean(sentiment), sd_sentiment = sd(sentiment),);
     summary.tibble <- tweet.tibble %>% group_by(week) %>% summarize(mean_sentiment = mean(sentiment), sd_sentiment = sd(sentiment), count = length(datetime), divisiveness = divisiveness_score(sentiment))
     summary.tibble$divisiveness[is.na(summary.tibble$divisiveness)] <- 0
     if (plot.ma == TRUE) {
@@ -132,7 +131,7 @@ plot_tweet_sentiment_timeseries <- function(tweet.vectors.df, group.by = "day", 
         scale_color_gradient2(name = "Sentiment Moving Average", low = "red", mid = "azure4", high = "green", midpoint = 0)
       fig2 <- fig2 + geom_line(aes(x = week, y = divisiveness_MA), color = "gold")
     }
-    ggarrange(fig1, nrow = 2, heights = c(0.75, 0.25))
+    ggarrange(fig1, fig2, nrow = 2, heights = c(0.75, 0.25))
   } else if (group.by == "day") {
     # Compute statistics
     summary.tibble <- tweet.tibble %>% group_by(date) %>% summarize(mean_sentiment = mean(sentiment), sd_sentiment = sd(sentiment), count = length(datetime), divisiveness = divisiveness_score(sentiment))
@@ -275,36 +274,3 @@ plot_tweet_location <- function(tweet.vectors.df, group.by = "day", compute.sent
     ggarrange(fig1, fig2, nrow = 2, heights = c(0.75, 0.25))
   } 
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

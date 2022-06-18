@@ -73,7 +73,7 @@ if (!snapshot_loaded) {
   elasticsearch_port <- 443
   elasticsearch_schema <- "https"
   
-  embedder_url <- "http://localhost:8008/embed/use_large/"
+  embedder_url <- "http://localhost:8008/embed"
   summarizer_url <- "http://idea-node-05:8080/batchsummarize"
 }
 ```
@@ -108,16 +108,19 @@ if (!snapshot_loaded) {
   #semantic_phrase <- "I am diabetic and out of work because of coronavirus. I am worried I won't be able to get insulin without insurance."
   semantic_phrase <- ""
   
-  # sentiment type (only 'vader' is supported for now)
+  # sentiment type (only 'vader' and 'roberta' are supported for now)
   # if the requested sentiment type is not available for the current index or sample, the sentiment
   # column in the result set will contain NA values.
-  sentiment_type <- "vader"
+  sentiment_type <- "roberta"
   
   # query lower bound for sentiment (inclusive). Enter a numeric value or for no lower bound set to NA.
   sentiment_lower <- NA
   
   # query upper bound for sentiment (inclusive). Enter a numeric value or for no upper bound set to NA.
   sentiment_upper <- NA
+  
+  # embedding type (only 'use_large' and 'sbert' are supported for now)
+  embedding_type <- "sbert"
   
   # return results in chronological order or as a random sample within the range
   # (ignored if semantic_phrase is not blank)
@@ -241,11 +244,11 @@ show_cluster_sentiment_discrete <- TRUE
 show_cluster_divisiveness <- FALSE
 # threshold that represents the cutoff from neutral to positive above zero
 # and neutral to negative below zero. Used to turn sentiment into a variable with discrete values
-sentiment_threshold <- 0.05 # 0.05 recommended for VADER sentiment
+sentiment_threshold <- 0.25 # 0.05 recommended for VADER sentiment
 # sentiment plots start date (set NA to infer from search results)
-plot_range_start <- "2020-03-15"
+plot_range_start <- NA
 # sentiment plots end date (set NA to infer from search results)
-plot_range_end <- "2020-07-25"
+plot_range_end <- NA
 # perform linear regression analysis on weekly divisiveness
 perform_divisiveness_linreg <- FALSE
 
@@ -256,7 +259,7 @@ perform_divisiveness_linreg <- FALSE
 # Get the tweets from Elasticsearch using the search parameters defined above
 ###############################################################################
 if (!snapshot_loaded) {
-  resultfields <- '"id_str", "created_at", "user.screen_name", "user.verified", "user.location","normalized_state", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary"'
+  resultfields <- sprintf('"id_str", "created_at", "user.screen_name", "user.verified", "user.location","normalized_state", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.%s.primary"', embedding_type)
   
   results <- do_search(indexname=elasticsearch_index, 
                        rangestart=rangestart,
@@ -269,6 +272,7 @@ if (!snapshot_loaded) {
                        sentiment_type=sentiment_type,
                        sentiment_lower=sentiment_lower,
                        sentiment_upper=sentiment_upper,
+                       embedding_type=embedding_type,
                        random_sample=random_sample,
                        random_seed=random_seed,
                        resultsize=resultsize,
@@ -277,7 +281,11 @@ if (!snapshot_loaded) {
                        elasticsearch_path=elasticsearch_path,
                        elasticsearch_port=elasticsearch_port,
                        elasticsearch_schema=elasticsearch_schema,
-                       embed_use_large_url=embedder_url)
+                       embed_url=embedder_url)
+  
+  if (!("normalized_state" %in% colnames(results$df))) { results$df$normalized_state = NA }
+  if (!("place.full_name" %in% colnames(results$df))) { results$df$place.full_name = NA }
+  if (!("place.country" %in% colnames(results$df))) { results$df$place.country = NA }
   
   # this dataframe must contains the tweet text and other metadata.
   # validate that all necessary fields exist in the queried index and were returned:
@@ -287,7 +295,7 @@ if (!snapshot_loaded) {
   tweet.vectors.df <- results$df[,required_fields]
   
   # this matrix contains the embedding vectors for every tweet in tweet.vectors.df
-  tweet.vectors.matrix <- t(simplify2array(results$df[,"embedding.use_large.primary"]))
+  tweet.vectors.matrix <- t(simplify2array(results$df[,sprintf("embedding.%s.primary", embedding_type)]))
 }
 ```
 

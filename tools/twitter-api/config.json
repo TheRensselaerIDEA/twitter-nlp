@@ -1,12 +1,12 @@
 {
   "config": {
     "elasticsearch": {
-      "es_host" : "localhost",
-      "es_path" : "elasticsearch",
-      "es_port" : "8080"
+      "es_host" : "http://localhost:9200",
+      "es_path" : "",
+      "es_port" : ""
     },
     "client" : {
-      "use_ssl": true,
+      "use_ssl": false,
       "verify_certs": false,
       "ssl_show_warn": false,
       "timeout": 120,

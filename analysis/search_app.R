@@ -1,7 +1,7 @@
 # load the shiny package
 library(shiny)
 library(DT)
-source("appparams.R")
+source("search_appparams.R")
 
 
 
@@ -81,7 +81,7 @@ ui <- fluidPage(
 
 
 server <- function(input, output) {
-  results <-do_search(indexname="covidevents-data", 
+  results <-do_search(indexname=elasticsearch_index, 
                       rangestart=rangestart,
                       rangeend=rangeend,
                       text_filter=text_filter,
@@ -90,10 +90,10 @@ server <- function(input, output) {
                       random_sample=random_sample,
                       resultsize=resultsize,
                       resultfields='"user.screen_name", "user.verified", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "embedding.use_large.primary", "dataset_file", "dataset_entry.annotation.part1.Response", "dataset_entry.annotation.part2-opinion.Response"',
-                      elasticsearch_host="",
-                      elasticsearch_path="elasticsearch",
-                      elasticsearch_port=443,
-                      elasticsearch_schema="https")
+                      elasticsearch_host=elasticsearch_host,
+                      elasticsearch_path=elasticsearch_path,
+                      elasticsearch_port=elasticsearch_port,
+                      elasticsearch_schema=elasticsearch_schema)
   
   
   

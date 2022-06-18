@@ -27,12 +27,12 @@ if (!require("dplyr")) {
 
 source("elasticsearch_queries.R")
 
-embed_use_large <- function(text, embed_use_large_url) {
-  req <- paste(embed_use_large_url, URLencode(text, reserved=TRUE), sep="")
+embed <- function(text, embed_url, embedding_type) {
+  req <- paste(embed_url, "/", embedding_type, "/", URLencode(text, reserved=TRUE), sep="")
   res <- GET(req)
   res.text <- content(res, "text", encoding="UTF-8")
   res.json <- fromJSON(res.text)
-  text_embedding <- res.json$use_large
+  text_embedding <- res.json[[embedding_type]]
 }
 
 do_search_raw <- function(indexname, 
@@ -123,6 +123,7 @@ do_search <- function(indexname,
                       sentiment_type="",
                       sentiment_lower=NA,
                       sentiment_upper=NA,
+                      embedding_type="use_large",
                       random_sample=FALSE,
                       random_seed=NA,
                       resultsize=10,
@@ -131,7 +132,7 @@ do_search <- function(indexname,
                       elasticsearch_path="",
                       elasticsearch_port=9200,
                       elasticsearch_schema="http",
-                      embed_use_large_url="http://localhost:8008/embed/use_large/",
+                      embed_url="http://localhost:8008/embed",
                       return_es_query_only=FALSE) {
 
   #Validate params
@@ -160,7 +161,7 @@ do_search <- function(indexname,
   
   if (is.logical(must_have_embedding)) {
     if (must_have_embedding) {
-      must_have_embedding <- "embedding.use_large.primary"
+      must_have_embedding <- sprintf("embedding.%s.primary", embedding_type)
     } else {
       must_have_embedding <- NULL
     }
@@ -188,7 +189,7 @@ do_search <- function(indexname,
       stop("can't do a semantic search without embeddings. set must_have_embedding to TRUE or to the name of the 
            desired embedding field.")
     }
-    text_embedding <- embed_use_large(semantic_phrase, embed_use_large_url)
+    text_embedding <- embed(semantic_phrase, embed_url, embedding_type)
     query <- semantic_query(resultfields,
                             gte_str,
                             lt_str,
@@ -248,20 +249,7 @@ do_search <- function(indexname,
     }
     
     #merge 'text' and 'full_text'
-    if ("text" %in% colnames(results.df)) {
-      if ("full_text" %in% colnames(results.df)) {
-        results.df$full_text <- ifelse(is.na(results.df$full_text), results.df$text, results.df$full_text)
-      } else {
-        results.df$full_text <- results.df$text
-      }
-    }
-    if ("quoted_status.text" %in% colnames(results.df)) {
-      if ("quoted_status.full_text" %in% colnames(results.df)) {
-        results.df$quoted_status.full_text <- ifelse(is.na(results.df$quoted_status.full_text), results.df$quoted_status.text, results.df$quoted_status.full_text)
-      } else {
-        results.df$quoted_status.full_text <- results.df$quoted_status.text
-     }
-    }
+    results.df <- merge_full_text(results.df)
     
     #TODO: drop original 'text' column
     #TODO: merge 'hashtags' and 'full_hashtags', merge 'urls' and 'full_urls'
@@ -293,4 +281,22 @@ validate_results <- function(df, min_results, required_fields=character(0)) {
     stop(paste("The results found for the provided search parameters are missing the following required field(s): ", 
                paste(missing_fields, collapse=", "), ". Try expanding your search.", sep=""))
   }
+}
+
+merge_full_text <- function(results.df) {
+  if ("text" %in% colnames(results.df)) {
+    if ("full_text" %in% colnames(results.df)) {
+      results.df$full_text <- ifelse(is.na(results.df$full_text), results.df$text, results.df$full_text)
+    } else {
+      results.df$full_text <- results.df$text
+    }
+  }
+  if ("quoted_status.text" %in% colnames(results.df)) {
+    if ("quoted_status.full_text" %in% colnames(results.df)) {
+      results.df$quoted_status.full_text <- ifelse(is.na(results.df$quoted_status.full_text), results.df$quoted_status.text, results.df$quoted_status.full_text)
+    } else {
+      results.df$quoted_status.full_text <- results.df$quoted_status.text
+    }
+  }
+  return(results.df)
 }

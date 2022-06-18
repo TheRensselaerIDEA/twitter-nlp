@@ -42,11 +42,13 @@ class TwitterAPIHandler:
     # """
     output = []
     numUnavailable = 0
+    numAvailable = 0
     for i in range(0, len(hits), 100):
       responseTweetIds = list(set([hit["_source"]["in_reply_to_status_id_str"] for hit in hits[i:i+100]]))
       apiResponse = self.api.statuses_lookup(responseTweetIds, tweet_mode="extended", map_=True)
       apiResponseDict = {tweet._json["id_str"]: tweet._json for tweet in apiResponse if "id_str" in tweet._json}
       
+      numAvailable += len(apiResponseDict)
       numUnavailable += (len(responseTweetIds) - len(apiResponseDict))
       for j in range(i, min(i+100, len(hits))):
           currHit = hits[j]
@@ -54,6 +56,8 @@ class TwitterAPIHandler:
           if inReplyToId in apiResponseDict:
               currHit["_source"]["in_reply_to_status"] = apiResponseDict[inReplyToId]
               output.append(currHit) 
+
+      print(f"Pulled down {numAvailable}/{numAvailable+numUnavailable} tweets for {len(output)}/{len(hits)} responses...")
 
     return output, numUnavailable
       
@@ -88,6 +92,7 @@ class TwitterAPIHandler:
         print("bad data point")
 
     #Issue the bulk update request
+    print(f"Making bulk request with {len(updates)} responses...")
     bulk(self.es, updates, index=es_index)
       
   
@@ -105,6 +110,7 @@ class TwitterAPIHandler:
 if __name__ == "__main__":
   retriever = TwitterAPIHandler()
   retriever.GetOriginalTweetsAndWriteToElasticSearch(None, None)
+  print("Done!")
   """
   To run full functionality of the script, call:
   retriever.GetOriginalTweetsAndWriteToElasticSearch(self,es_index, num_tweets)

@@ -1,8 +1,7 @@
 {
     "py/object": "config.Config",
     "transformers_models": [
-        "sshleifer/distilbart-xsum-12-6", 
-        "sshleifer/distilbart-cnn-12-6"
+        "sshleifer/distilbart-xsum-12-6"
     ],
-    "batch_size": 32
+    "batch_size": 2
 }

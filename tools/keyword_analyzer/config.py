@@ -1,11 +1,11 @@
 """
-Config class containing all the settings for running reindex tool
+Config class containing all the settings for running keyword analyzer
 """
 
 import jsonpickle
 
 class Config(object):
-    """Container for reindex tool settings.
+    """Container for keyword analyzer tool settings.
 
     """
     def __init__(self):
@@ -16,8 +16,9 @@ class Config(object):
         self.elasticsearch_verify_certs = False
         self.elasticsearch_index_name = ""
         self.elasticsearch_timeout_secs = 30
-        self.max_docs = None
-        self.elasticsearch_query = None
+
+        #Processing settings
+        self.log_level = "ERROR"
 
     @staticmethod
     def load(filepath):

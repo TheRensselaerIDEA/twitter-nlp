@@ -28,7 +28,7 @@ knitr::opts_chunk$set(echo = TRUE)
 source("Elasticsearch.R")
 source("Summarizer.R")
 source("general_helpers.R")
-source("text_helpers-copy.R")
+source("text_helpers.R")
 source("plot_helpers.R")
 
 
@@ -83,7 +83,7 @@ sentiment_upper <- NA
 random_sample <- TRUE
   
   # number of results to return (to return all results, set to NA)
-resultsize <- 100000
+resultsize <- 10000
   
   # minimum number of results to return. This should be set according to the needs of the analysis (i.e. enough samples for statistical significance)
 min_results <- 500
@@ -148,12 +148,12 @@ summarize_temperature <- 1.0
   # T-SNE HYPERPARAMS
   #--------------------------
   # hyperparams for clusters
-tsne_clusters_perplexity <- 70
-tsne_clusters_max_iter <- 2000
+tsne_clusters_perplexity <- 25
+tsne_clusters_max_iter <- 750
   
   # hyperparams for subclusters
-tsne_subclusters_perplexity <- 25
-tsne_subclusters_max_iter <- 750
+tsne_subclusters_perplexity <- 12
+tsne_subclusters_max_iter <- 500
 
 
 # plot mode - '2d' or '3d'.

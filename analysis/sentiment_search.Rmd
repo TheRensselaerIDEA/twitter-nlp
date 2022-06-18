@@ -1,8 +1,3 @@
----
-output:
-  html_document: default
-  pdf_document: default
----
 ```{r setup, include=FALSE}
 # Required R package installation:
 # These will install packages if they are not already installed
@@ -32,7 +27,7 @@ source("plot_tweet_sentiment_timeseries.R")
 
 ```{r}
 # query start date/time (inclusive)
-rangestart <- "2020-03-01 00:00:00"
+rangestart <- "2020-01-01 00:00:00"
 
 # query end date/time (exclusive)
 rangeend <- "2020-08-01 00:00:00"
@@ -59,7 +54,7 @@ random_sample <- TRUE
 # if using random sampling, optionally specify a seed for reproducibility. For no seed, set to NA.
 random_seed <- NA
 # number of results to return (to return all results, set to NA)
-resultsize <- 10000
+resultsize <- 5000
 # minimum number of results to return. This should be set according to the needs of the analysis (i.e. enough samples for statistical significance)
 min_results <- 1
 ```
@@ -67,7 +62,7 @@ min_results <- 1
 ### Results:
 
 ```{r, echo=FALSE}
-results <- do_search(indexname="coronavirus-data-masks",  #coronavirus-data-masks
+results <- do_search(indexname="coronavirus-data-masks", 
                      rangestart=rangestart,
                      rangeend=rangeend,
                      text_filter=text_filter,
@@ -77,19 +72,16 @@ results <- do_search(indexname="coronavirus-data-masks",  #coronavirus-data-mask
                      random_sample=random_sample,
                      random_seed=random_seed,
                      resultsize=resultsize,
-                     resultfields='"created_at", "user.screen_name", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "sentiment.vader.primary"',
+                     resultfields='"created_at", "user.screen_name", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "sentiment.vader.primary", "normalized_state"',
                      elasticsearch_host="lp01.idea.rpi.edu",
                      elasticsearch_path="elasticsearch",
                      elasticsearch_port=443,
                      elasticsearch_schema="https")
 
-required_fields <- c("created_at", "user_screen_name", "user_location", "place.full_name", "place.country", "full_text", "sentiment.vader.primary")
+required_fields <- c("created_at", "user_screen_name", "user_location", "place.full_name", "place.country", "full_text", "sentiment.vader.primary", "normalized_state")
 validate_results(results$df, min_results, required_fields)
 
-```
 
-### Print:
-```{r, echo=FALSE}
 #Transform results for sentiment plot
 results.df <- results$df
 colnames(results.df)[colnames(results.df) == "sentiment.vader.primary"] <- "sentiment"

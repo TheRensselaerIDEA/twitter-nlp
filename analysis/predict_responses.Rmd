@@ -1,0 +1,119 @@
+---
+title: "Twitter Response Generator"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# Required R package installation:
+# These will install packages if they are not already installed
+# Set the correct default repository
+r = getOption("repos")
+r["CRAN"] = "http://cran.rstudio.com"
+options(repos = r)
+
+
+if (!require("knitr")) {
+  install.packages("knitr")
+  library(knitr)
+}
+
+if (!require("kableExtra")) {
+  install.packages("kableExtra")
+  library(kableExtra)
+}
+
+if (!require("httr")) {
+  install.packages("httr")
+  library(httr)
+}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+source("text_helpers.R")
+```
+
+```{r, echo=FALSE}
+response_sampler_url <- "http://idea-node-05:8080/batchsampleresponses"
+embedding_type <- "sbert"
+embedding_dims <- if (embedding_type=="use_large") 512 else 384
+```
+
+### Predict responses to a prompt tweet:
+
+```{r}
+# Prompt author (e.g., WHO, CDCgov, CDCDirector, etc...)
+prompt_authors <- list("WHO", "CDCgov", "CDCDirector")#, "ECDC_EU")
+# Prompt message
+prompt_messages <- list("4 steps to stay fit to beat #COVID19: eat a healthy diet #notobacco be physically active stop harmful use of alcohol",
+                        "Thank you for doing your part beat #COVID19! We are excited to share these 4 steps anybody can take to stay fit against #COVID19: eat a healthy diet, reduce tobacco use, be physically active, and drink alcohol in moderation.")
+
+# Number of responses to predict
+response_sample_size <- 30
+output_latex <- FALSE
+
+# Generation hyperparams
+num_beams <- 3
+temperature <- 1.5
+random_seed <- 42
+```
+
+
+```{r, echo=FALSE}
+sample_model_responses <- function(prompt_author, prompt_message, response_sample_size, num_beams, 
+                                   temperature, random_seed) {
+  
+  body <- list(sample_size = response_sample_size, 
+               num_beams = num_beams,
+               temperature = temperature,
+               prompts = list(list(author=prompt_author, message=clean_text(prompt_message))))
+  
+  if (isFALSE(is.null(random_seed)) && isFALSE(is.na(random_seed))) {
+    body["random_state"] <- random_seed
+  }
+  
+  res <- POST(url=response_sampler_url, encode="json", body=body)
+  
+  res.list <- content(res)
+  model_responses  <- lapply(1:length(res.list), function(i) {
+    return (list(responses=data.frame(quoted_status.screen_name=body$prompts[[i]]$author,
+                                      quoted_status.full_text=body$prompts[[i]]$message,
+                                      full_text=unlist(res.list[[i]][[1]]),
+                                      sentiment=unlist(res.list[[i]][[3]])),
+                 responses.vectors=matrix(sapply(do.call("rbind", res.list[[i]][[2]]), function(x) x), 
+                                          nrow=response_sample_size, ncol=embedding_dims)))
+  })
+  return(model_responses)
+}
+```
+
+```{r, echo=FALSE}
+if (output_latex){
+  output <- list()
+} else {
+  output <- htmltools::tagList()
+}
+
+output_idx <- 1
+for (prompt_message in prompt_messages) {
+  for (prompt_author in prompt_authors) {
+    results <- sample_model_responses(prompt_author, prompt_message, response_sample_size, num_beams, 
+                                      temperature, random_seed)
+    avg_sentiment <- mean(results[[1]]$responses$sentiment)
+    sd_sentiment <- sd(results[[1]]$responses$sentiment)
+    caption <- paste0("Responses to ", prompt_author, ": ", prompt_message, " (mean: ", round(avg_sentiment, 3), 
+                      "; sd: ", round(sd_sentiment, 3), ")")
+    if (output_latex) {
+      results_latex <- kable(results[[1]]$responses[,c("full_text", "sentiment")], "latex",  
+                             col.names=c("Generated Responses:", "Sentiment:"), caption=caption, booktabs=TRUE)
+      output[[output_idx]] <- results_latex
+    } else {
+      results_table <- kable(results[[1]]$responses[,c("full_text", "sentiment")], 
+                             col.names=c("Generated Responses:", "Sentiment:"), caption=caption) %>% 
+        kable_styling()
+      output[[output_idx]] <- htmltools::HTML(results_table)
+    }
+    output_idx <- output_idx + 1
+  }
+}
+output
+```

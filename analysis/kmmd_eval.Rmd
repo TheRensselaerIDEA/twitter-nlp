@@ -1,0 +1,987 @@
+```{r setup, include=FALSE}
+# Required R package installation:
+# These will install packages if they are not already installed
+# Set the correct default repository
+r = getOption("repos")
+r["CRAN"] = "http://cran.rstudio.com"
+options(repos = r)
+
+
+if (!require("knitr")) {
+  install.packages("knitr")
+  library(knitr)
+}
+
+if (!require("ggplot2")) {
+  install.packages("ggplot2")
+  library(ggplot2)
+}
+
+if (!require("kernlab")) {
+  install.packages("kernlab")
+  library(kernlab)
+}
+
+if (!require("matrixStats")) {
+  install.packages("matrixStats")
+  library(matrixStats)
+}
+
+if (!require("kableExtra")) {
+  install.packages("kableExtra")
+  library(kableExtra)
+}
+
+if (!require("gridExtra")) {
+  install.packages("gridExtra")
+  library(gridExtra)
+}
+
+if (!require("httr")) {
+  install.packages("httr")
+  library(httr)
+}
+
+if (!require("lubridate")) {
+  install.packages("lubridate")
+  library(lubridate)
+}
+
+if (!require("ggpubr")) {
+  install.packages("ggpubr")
+  library(ggpubr)
+}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+source("Elasticsearch.R")
+source("text_helpers.R")
+```
+
+```{r, echo=FALSE}
+#elasticsearch_index <- "coronavirus-data-pubhealth-quotes"
+elasticsearch_index <- "vaccine-data-pubhealth-quotes"
+elasticsearch_host <- "lp01.idea.rpi.edu"
+elasticsearch_path <- "elasticsearch"
+elasticsearch_port <- 443
+elasticsearch_schema <- "https"
+
+response_sampler_url <- "http://idea-node-05:8080/batchsampleresponses"
+embedding_type <- "sbert"
+embedding_dims <- if (embedding_type=="use_large") 512 else 384
+sentiment_type <- "roberta"
+```
+
+### Generate a test set of prompt tweets:
+
+```{r}
+# query start date/time (inclusive)
+#rangestart <- "2020-03-01 00:00:00"
+rangestart <- "2021-10-01 00:00:00"
+  
+# query end date/time (exclusive)
+#rangeend <- "2020-10-01 00:00:00"
+rangeend <- "2022-02-01 00:00:00"
+
+# Size of test set - max number of original tweets for which we want to compare response distributions
+#resultsize <- 200
+resultsize <- 150
+
+# Number of responses to sample (and generate) for each tweet in the test set
+response_sample_size <- 30
+
+# Generation hyperparameters
+gen_num_beams <- 3
+gen_temperature <- 1.5
+
+# Optionally specify seeds for reproducibility when sampling test tweets from Elasticsearch. 
+# For no seed, set to NA.
+ground_truth_seed <- 100     # Used when taking the first ground truth samples
+random_response_seed <- 9876 # Used when taking the random response samples
+model_seed <- 42 # Used when generating the model samples
+
+# Mode (eval, train)
+#   eval:  performs the baseline and model evaluations
+#   train: outputs a training set that excludes the tweets to be used in eval mode for these settings
+mode <- "eval"
+```
+
+```{r, echo=FALSE}
+####################################################################
+# TEST SET RETRIEVAL
+####################################################################
+gte_str <- format(ymd_hms(rangestart), "%Y-%m-%dT%H:%M:%S")
+lt_str <- format(ymd_hms(rangeend), "%Y-%m-%dT%H:%M:%S")
+date_filter <- sprintf('
+{
+  "range": {
+    "quoted_status.created_at": {
+      "gte": "%s",
+      "lt": "%s",
+      "format": "strict_date_hour_minute_second",
+      "time_zone": "+00:00"
+    }
+  }
+}', gte_str, lt_str)
+
+query <- sprintf('{
+  "_source": false,
+  "query": {
+    "bool": {
+      "filter": [%s]
+    }
+  },
+  "aggs": {
+    "unique_quoted_ids": {
+      "terms": {
+        "field": "quoted_status.id_str.keyword", 
+        "size": %s,
+        "min_doc_count": %s
+      }
+    }
+  }
+}', date_filter, resultsize, response_sample_size*2)
+
+results <- do_search_raw(elasticsearch_index, 
+                         query,
+                         resultsize=0,
+                         elasticsearch_host=elasticsearch_host,
+                         elasticsearch_path=elasticsearch_path,
+                         elasticsearch_port=elasticsearch_port,
+                         elasticsearch_schema=elasticsearch_schema)
+
+results.df <- results$aggregations$unique_quoted_ids$buckets
+
+results_details <- lapply(results.df$key, function(k) {
+    query <- sprintf('{
+        "_source": ["quoted_status.user.screen_name", 
+                    "quoted_status.extended_tweet.full_text", 
+                    "quoted_status.text"
+        ], 
+        "query": {
+              "bool": {
+                "filter": [
+                  {
+                    "term": {
+                      "quoted_status.id_str.keyword": "%s"
+                    }
+                  }
+                ]
+              }
+            }
+      }', k)
+    results <- do_search_raw(elasticsearch_index, 
+                         query,
+                         resultsize=1,
+                         elasticsearch_host=elasticsearch_host,
+                         elasticsearch_path=elasticsearch_path,
+                         elasticsearch_port=elasticsearch_port,
+                         elasticsearch_schema=elasticsearch_schema)
+    
+    results.df <- results$hits$hits
+    colnames(results.df) <- sub("_source.", "", colnames(results.df))
+    colnames(results.df) <- sub("extended_tweet.", "", colnames(results.df))
+    colnames(results.df) <- sub("user.", "", colnames(results.df))
+    results.df <- merge_full_text(results.df)
+    return(c(results.df$quoted_status.full_text, results.df$quoted_status.screen_name))
+  })
+results_details <- do.call(rbind, results_details)
+
+results.df$quoted_status.full_text <- results_details[,1]
+results.df$quoted_status.screen_name <- results_details[,2]
+
+#clean text and filter out blanks
+results.df$quoted_status.full_text <- sapply(results.df$quoted_status.full_text, clean_text)
+results.df <- subset(results.df, quoted_status.full_text != "")
+
+#filter out duplicate tweets with the same message from the same source occurring multiple times.
+#responses for duplicated tweets are usually dependent on external context (e.g., a URL which changes in each instance)
+#and it would be impossible for the model to accurately predict them without that context.
+text_key <- paste(results.df$quoted_status.screen_name, results.df$quoted_status.full_text, sep="||")
+dupes <- duplicated(text_key) | duplicated(text_key, fromLast=TRUE)
+results.df <- results.df[!dupes,]
+rownames(results.df) <- NULL
+
+#show breakdown of test set by author screen name
+screen_name_counts <- table(results.df$quoted_status.screen_name)
+screen_name_counts
+```
+
+\  
+
+### Retrieved test set of `r nrow(results.df)` tweets with a total of `r sum(results.df$doc_count)` responses.
+
+\ 
+
+```{r, echo=FALSE}
+####################################################################
+# BINNED RESULT PLOT
+####################################################################
+binsize <- 20
+maxbin <- 200
+breaks <- c(seq(response_sample_size*2, maxbin, binsize), Inf)
+tags <- c(sapply(breaks[1:(length(breaks)-2)], function(b) paste0("[", b, "-", b+binsize-1, "]")), paste0(">= ", maxbin))
+group_tags <- cut(results.df$doc_count, breaks=breaks, include.lowest=TRUE, right=FALSE, labels=tags)
+
+ggplot(data=as_tibble(group_tags), mapping=aes(x=value)) + 
+  geom_bar(fill="lightblue") +
+  stat_count(geom="text", aes(label=..count.., vjust=-0.5)) +
+  labs(x="Number of responses") +
+  theme_minimal()
+
+kable(results.df[1:10,], caption="Example tweets in test set:") %>% 
+  kable_styling()
+
+```
+
+```{r, echo=FALSE}
+####################################################################
+# UTILITY FUNCTIONS FOR RESPONSE RETRIEVAL AND GENERATION
+####################################################################
+get_random_params <- function(random_seed) {
+  if (isFALSE(is.null(random_seed)) && isFALSE(is.na(random_seed))) {
+    random_params <- sprintf(' "seed": %s, "field": "id_str.keyword" ', ifelse(is.character(random_seed), 
+                              sprintf('"%s"', random_seed), random_seed))
+  } else {
+    random_params <- ''
+  }
+  return (random_params)
+}
+
+get_response_set <- function(response_sample_size, random_seed=NA, get_embeddings_and_sentiment=TRUE, 
+                             quoted_status_id=NA, quoted_status_exclude_ids=NULL, return_quoted_status_id=FALSE) {
+  random_params = get_random_params(random_seed)
+  source_fields <- sprintf('["quoted_status.user.screen_name", 
+                             "quoted_status.extended_tweet.full_text", 
+                             "quoted_status.text", 
+                             "extended_tweet.full_text", 
+                             "text"%s%s]', 
+                           ifelse(get_embeddings_and_sentiment, 
+                                  sprintf(', "embedding.%s.primary", "sentiment.%s.primary"', 
+                                          embedding_type, sentiment_type), 
+                                  ""),
+                           ifelse(return_quoted_status_id, ', "quoted_status.id_str"', ""))
+  
+  id_filter <- ifelse(is.na(quoted_status_id), "", sprintf('
+    {
+      "term": {
+        "quoted_status.id_str.keyword": "%s"
+      }
+    },', quoted_status_id))
+  
+  id_exclusion_filter <- ifelse(is.null(quoted_status_exclude_ids), "", sprintf('
+    {
+      "bool": {
+        "must_not": {
+          "terms": {
+            "quoted_status.id_str.keyword": ["%s"]
+          }
+        }
+      }
+    },', paste(quoted_status_exclude_ids, collapse='", "')))
+
+  query <- sprintf('
+    "query": {
+      "bool": {
+        "filter": [
+          %s
+          %s
+          %s
+        ]
+      }
+    }', id_filter, id_exclusion_filter, date_filter)
+  
+  if (!is.na(response_sample_size)) {
+    query <- sprintf('
+      "query": {
+        "function_score": {
+          %s,
+          "random_score": {%s},
+          "boost_mode": "replace"
+        }
+      }', query, random_params)
+  }
+  
+  query <- sprintf('{
+    "_source": %s,
+    %s
+  }', source_fields, query)
+  
+  resp_results <- do_search_raw(elasticsearch_index, 
+                                query,
+                                resultsize=response_sample_size,
+                                elasticsearch_host=elasticsearch_host,
+                                elasticsearch_path=elasticsearch_path,
+                                elasticsearch_port=elasticsearch_port,
+                                elasticsearch_schema=elasticsearch_schema)
+  
+  resp_results.df <- resp_results$hits$hits
+  colnames(resp_results.df) <- sub("_source.", "", colnames(resp_results.df))
+  colnames(resp_results.df) <- sub("extended_tweet.", "", colnames(resp_results.df))
+  colnames(resp_results.df) <- sub("user.", "", colnames(resp_results.df))
+  resp_results.df <- merge_full_text(resp_results.df)
+  
+  #clean text
+  resp_results.df$quoted_status.full_text <- sapply(resp_results.df$quoted_status.full_text, clean_text)
+  resp_results.df$full_text <- sapply(resp_results.df$full_text, clean_text)
+  
+  select_fields <- c("quoted_status.screen_name", "quoted_status.full_text", "full_text")
+  if (return_quoted_status_id) {
+    select_fields <- c("quoted_status.id_str", select_fields)
+  }
+  
+  if (get_embeddings_and_sentiment) {
+    select_fields <- c(select_fields, sprintf("sentiment.%s.primary", sentiment_type))
+    resp_results.df <- resp_results.df[, select_fields]
+    resp_results.matrix <- t(simplify2array(resp_results$hits$hits[, sprintf("_source.embedding.%s.primary", embedding_type)]))
+    return(list(responses=resp_results.df, responses.vectors=resp_results.matrix))
+  } else {
+    resp_results.df <- resp_results.df[, select_fields]
+    return(resp_results.df)
+  }
+}
+
+### FUNCTION TO SAMPLE GROUND TRUTH RESPONSES FOR TWEETS IN TEST SET
+sample_ground_truth_responses <- function(results.df, response_sample_size, random_seed) {
+  gt_responses = lapply(results.df$key, function(k) {
+    return(get_response_set(response_sample_size, random_seed, quoted_status_id=k))
+  })
+  return(gt_responses)
+}
+
+### FUNCTION TO SAMPLE RANDOM RESPONSES
+sample_random_responses <- function(set_size, response_sample_size, random_seed) {
+  rand_results <- get_response_set(response_sample_size * set_size, random_seed)
+  
+  random_responses <- lapply(seq(1, response_sample_size * set_size, response_sample_size), function(i) {
+    return (list(responses=rand_results$responses[i:(i+response_sample_size-1),], 
+                 responses.vectors=rand_results$responses.vectors[i:(i+response_sample_size-1),]))
+  })
+  return(random_responses)
+}
+
+### FUNCTION TO SAMPLE MODEL RESPONSES FOR TWEETS IN TEST SET
+sample_model_responses <- function(results.df, response_sample_size, num_beams, temperature, random_seed) {
+  
+  body <- list(sample_size = response_sample_size, 
+               num_beams = num_beams,
+               temperature = temperature,
+               prompts = unname(apply(results.df, 1, function(row) { 
+                 list(author=row[["quoted_status.screen_name"]], message=row[["quoted_status.full_text"]])}))
+               )
+  
+  if (isFALSE(is.null(random_seed)) && isFALSE(is.na(random_seed))) {
+    body["random_state"] <- random_seed
+  }
+  
+  res <- POST(url=response_sampler_url, encode="json", body=body)
+  
+  res.list <- content(res)
+  model_responses  <- lapply(1:length(res.list), function(i) {
+    return (list(responses=data.frame(quoted_status.screen_name=body$prompts[[i]]$author,
+                                      quoted_status.full_text=body$prompts[[i]]$message,
+                                      full_text=unlist(res.list[[i]][[1]]),
+                                      sentiment=unlist(res.list[[i]][[3]])),
+                 responses.vectors=matrix(sapply(do.call("rbind", res.list[[i]][[2]]), function(x) x), 
+                                          nrow=response_sample_size, ncol=embedding_dims)))
+  })
+  return(model_responses)
+}
+```
+
+```{r, echo=FALSE}
+####################################################################
+# UTILITY FUNCTIONS FOR STATISTICAL ANALYSIS
+####################################################################
+smooth.probabilities <- function(probs, smoothing = 1e-4) {
+  # Borrowed from https://github.com/gabybudel/DBHC/blob/master/R/hmmclustering.R
+  is.zero <- (probs == 0)
+  if(any(is.zero)) {
+    # Only smooth if there are parameters equal to zero
+    n.zeros <- sum(is.zero)
+    n.nonzeros <- sum(!is.zero)
+    probs[is.zero] <- n.nonzeros*smoothing/n.zeros  # divide smoothing amount
+                                                    # equally
+    probs[!is.zero] <- probs[!is.zero] - smoothing  # subtract smoothing amount
+  }
+  return(probs)
+}
+
+make_rec_df <- function(residuals) {
+  # Adapted from: https://github.com/ModelOriented/auditor/blob/master/R/support_function_plot.R
+  # to avoid needing DALEX explainer objects
+  # More info: https://jinbo-bi.uconn.edu/rec/
+  err <- sort(abs(residuals))
+  err <- c(0, err)
+  n <- length(err)
+  rec_x <- numeric(n)
+  rec_y <- numeric(n)
+  rec_x[1] <- rec_y[1] <- correct <- absDev <- 0
+  for(i in 2:n) {
+    if (err[i] > err[i-1]) absDev <- correct / n
+    rec_x[i] <- err[i]
+    rec_y[i] <- absDev
+    correct <- correct + 1
+  }
+
+  df <- data.frame(rec_x = rec_x, rec_y = rec_y)
+  colnames(df) <- paste0("_", colnames(df), sep = "_")
+  df
+}
+
+### REC AOC COMPUTATION FUNCTION
+score_rec <- function(rec_df) {
+  # Adapted from: https://github.com/ModelOriented/auditor/blob/master/R/score_rec.R
+  # to avoid needing DALEX explainer objects
+  # More info: https://jinbo-bi.uconn.edu/rec/
+  x <- rec_df$`_rec_x_`
+  y <- rec_df$`_rec_y_`
+  
+  aoc <- max(x) * max(y)
+  for (i in 2:length(x)) {
+    aoc <- aoc - 0.5 * (x[i] - x[i - 1]) * (y[i] + y[i - 1])
+  }
+  
+  return(aoc)
+}
+
+### COSINE SIMILARITY COMPUTATION FUNCTION
+compute_cossim <- function(X_list, Y_list) {
+  cossim_results <- lapply(1:length(X_list), function(i) {
+    # the embeddings are unit vectors so all we need is the dot products.
+    cossim <- X_list[[i]]$responses.vectors %*% t(Y_list[[i]]$responses.vectors)
+    data.frame(min=rowMins(cossim), max=rowMaxs(cossim), mean=rowMeans2(cossim), stddev=rowSds(cossim))
+  })
+  return(cossim_results)
+}
+
+### COSINE SIMILARITY REC COMPUTATION FUNCTION
+compute_cossim_rec <- function(cossim_results, statistic, rel_max=1) {
+  cossim_df <- do.call(rbind, cossim_results)
+  error <- 1-(cossim_df[[statistic]] / rel_max)
+  rec_df <- make_rec_df(error)
+  rec_aoc <- score_rec(rec_df)
+  return(list(rec_df=rec_df, rec_aoc=rec_aoc))
+}
+
+### COSINE SIMILARITY t-TEST COMPUTATION FUNCTION
+compute_cossim_ttest <- function(cossim_results_X, cossim_results_Y, statistic) {
+  cossim_df_X <- do.call(rbind, cossim_results_X)
+  cossim_df_Y <- do.call(rbind, cossim_results_Y)
+  stat_X <- cossim_df_X[[statistic]]
+  stat_Y <- cossim_df_Y[[statistic]]
+  tt_result <- t.test(stat_X, stat_Y, paired=TRUE)
+  return(tt_result)
+}
+
+### MMD COMPUTATION FUNCTION
+compute_mmd <- function(X_list, Y_list) {
+  mmd_results <- lapply(1:length(X_list), function(i) {
+    mmd <- kmmd(X_list[[i]]$responses.vectors, Y_list[[i]]$responses.vectors, asymptotic=TRUE)
+    data.frame(H0=mmd@H0, AsympH0=mmd@AsympH0, MMD1=mmd@mmdstats[1], MMD3=mmd@mmdstats[2])
+  })
+  mmd_results <- do.call(rbind, mmd_results)
+  return(mmd_results)
+}
+```
+
+```{r, echo=FALSE}
+####################################################################
+# UTILITY FUNCTIONS FOR PLOTTING
+####################################################################
+
+### REC PLOTTING FUNCTION
+plot_rec <- function(rec_list, error_type_label, screen_name) {
+  rec_df_list <- lapply(names(rec_list), function(label) {
+    rec_df <- rec_list[[label]]$rec_df
+    rec_aoc <- rec_list[[label]]$rec_aoc
+    rec_auc <- 1-rec_aoc
+    label_display <- ifelse(label=="ground_truth_baseline", "1. Primary vs. Reference", 
+                            ifelse(label=="random_baseline", "3. Primary vs. Random", "2. Primary vs. Model"))
+    rec_df$label <- sprintf("%s (AUC=%s)", label_display, round(rec_auc, digits=3))
+    return(rec_df)
+  })
+  rec_df <- do.call(rbind, rec_df_list)
+  rec_plot <- ggplot(rec_df, aes(x=`_rec_x_`, y=`_rec_y_`, group=label, color=label)) +
+    geom_line() + 
+    ggtitle(paste0("REC curves for model and baselines (", screen_name, ")")) + 
+    xlab(error_type_label) + 
+    ylab("Accuracy")
+  
+  return(rec_plot)
+}
+
+### t-TEST PLOTTING FUNCTION
+plot_ttest <- function(ttest_list, type_label, screen_name) {
+  ttests <- sapply(ttest_list, function(t) {
+    c(difference=t$estimate[[1]], conf.int.low=t$conf.int[[1]], conf.int.high=t$conf.int[[2]], p.value=t$p.value)
+  })
+  ttests.df <- as.data.frame(t(ttests))
+  
+  ttests_plot <- ggplot(ttests.df) + 
+    geom_bar(aes(x=rownames(ttests.df), y=difference), stat="identity", fill="skyblue", alpha=0.7) + 
+    geom_errorbar(aes(x=rownames(ttests.df), ymin=conf.int.low, ymax=conf.int.high), width=0.4, 
+                  color="orange", alpha=0.9, size=1.3) + 
+    geom_text(aes(x=rownames(ttests.df), y=difference, label=paste("p-val:", round(p.value, 3))), vjust=5) +
+    xlab("Comparison vs. Random Baseline") + 
+    ylab("Difference in Mean") + 
+    ggtitle(paste0("Two-tailed paired t-Test for ", type_label, " (", screen_name, ")"))
+  
+  return (ttests_plot)
+}
+
+### COSINE SIM. CORRELATION PLOTTING FUNCTION
+plot_cossim_corr <- function(cossim_results_X, cossim_results_Y, statistic, X_name, Y_name, screen_name) {
+  cossim_df_X <- do.call(rbind, cossim_results_X)
+  cossim_df_Y <- do.call(rbind, cossim_results_Y)
+  stat_df <- data.frame(stat_X=cossim_df_X[[statistic]], stat_Y=cossim_df_Y[[statistic]])
+  
+  corr_plot <- ggscatter(stat_df, x="stat_X", y="stat_Y", add="reg.line", conf.int=FALSE, 
+                         cor.coef=TRUE, cor.method="pearson", size=0.5,
+                         xlab=paste0(statistic, " cosine sim. (", X_name, ")"),
+                         ylab=paste0(statistic, " cosine sim. (", Y_name, ")"),
+                         title=paste0(statistic, " cosine similarity correlation \n(Pearson's r; ", screen_name, ")"))
+  return (corr_plot)
+}
+
+### SENTIMENT PLOTTING FUNCTION
+plot_sentiment <- function(sentiment_results, screen_name) {
+  ### Plot failed chi sq. test percentages
+  P_value_table <- c(100*sentiment_results$fail_reject_GT_GT2,
+                     100*sentiment_results$fail_reject_GT_Model,
+                     100*sentiment_results$fail_reject_GT_Random)
+  P_value_Label <- c("Primary vs. Reference","Primary vs. Model","Primary vs. Random")
+  sent_plot <- barplot(P_value_table, names.arg=P_value_Label, xlab="Compared samples", 
+                       ylab="Percentage", 
+                       main=paste0("Percentage of Test Tweets where Chi Sq. test failed to reject H0 (",
+                                   screen_name, ")"),
+                       col="orange", border="black", cex.main=0.9)
+  
+  ### Plot sentiment density
+  Sent_random_plot <- density(unlist(sentiment_results$Sentiment_table_Random))
+  Sent_GT_plot <- density(unlist(sentiment_results$Sentiment_table_GT))
+  Sent_Model_plot <- density(unlist(sentiment_results$Sentiment_table_Model))
+  plot(Sent_GT_plot, main=paste("Sentiment distribution for", screen_name ,"organizations"), 
+      xlab = "Sentiment values", ylab = "Density", ylim=c(0,2.5))
+  line(Sent_random_plot)
+  line(Sent_Model_plot)
+  polygon(Sent_random_plot, lty = 1, lwd = 3, border="gray")
+  polygon(Sent_GT_plot, lty =3, lwd = 3, border="black")
+  polygon(Sent_Model_plot, lty = 1, lwd = 3, border="black")
+  legend(0, 2, legend=c("Random sentiment","Primary sentiment","Model sentiment"),
+         col=c("grey","black","black"), lty=c(1,3,1), lwd=c(3,3,3))
+  sent_density_plot <- recordPlot()
+  plot.new()
+  
+  return (list(sent_plot, sent_density_plot))
+}
+
+### MMD PLOTTING FUNCTION
+plot_mmd <- function(mmd.df, study_title, screen_name) {
+  color_table <- tibble(
+    RejectH0 = c("FALSE", "TRUE"),
+    Color = c("lightblue", "lightcoral")
+  )
+  mmd.df$RejectH0 <- factor(as.character(mmd.df$H0 | mmd.df$AsympH0), levels=color_table$RejectH0)
+  
+  mmd1_plot <- ggplot(data=mmd.df, aes(x=rownames(mmd.df), y=MMD1, fill=RejectH0)) + 
+    geom_bar(stat = "identity") +
+    geom_hline(aes(yintercept=mean(MMD1))) +
+    scale_fill_manual(values=color_table$Color) +
+    labs(caption=paste("Mean:", format(mean(mmd.df$MMD1), digits=3))) +
+    xlab("Test Tweet") +
+    guides(fill=guide_legend(title="Rejected H0 or AsympH0")) +
+    ggtitle(paste0(study_title, " (", screen_name, 
+                   ") \nusing 1st order MMD statistic \n(Rejected H0 -> distributions are different)")) +
+    theme(plot.title = element_text(hjust=0.5)) + 
+    coord_cartesian(ylim=c(0, 0.5))
+  
+  mmd3_plot <- ggplot(data=mmd.df, aes(x=rownames(mmd.df), y=MMD3, fill=RejectH0)) + 
+    geom_bar(stat = "identity") +
+    geom_hline(aes(yintercept=mean(MMD3))) +
+    scale_fill_manual(values=color_table$Color) +
+    labs(caption=paste("Mean:", format(mean(mmd.df$MMD3), digits=3))) +
+    xlab("Test Tweet") +
+    guides(fill=guide_legend(title="Rejected H0 or AsympH0")) +
+    ggtitle(paste0(study_title, " (", screen_name, 
+                   ") \nusing 3rd order MMD statistic \n(Rejected H0 -> distributions are different)")) +
+    theme(plot.title = element_text(hjust=0.5)) +
+    coord_cartesian(ylim=c(-0.02, 0.2))
+  
+  return(list(mmd1_plot, mmd3_plot))
+}
+```
+
+```{r, echo=FALSE}
+####################################################################
+# PRIMARY STATISTICAL ANALYSIS FUNCTIONS
+####################################################################
+
+### SENTIMENT ANALYSIS FUNCTION
+sentiment_analysis <- function(ground_truth_responses, ground_truth_responses2, random_responses, model_responses) {
+  #Sentiment tables for responses
+  Sentiment_GT_responses <- lapply(ground_truth_responses, function(Sent_GT){
+     return((Sent_GT$responses$sentiment.roberta.primary)) 
+    })
+  Sentiment_GT_responses2 <- lapply(ground_truth_responses2, function(Sent_GT2){
+     return((Sent_GT2$responses$sentiment.roberta.primary)) 
+    })
+  Sentiment_Model_responses <- lapply(model_responses, function(Sent_Mod){
+    return ((Sent_Mod$responses$sentiment))
+    })
+  Sentiment_Random_responses <- lapply(random_responses, function(Sent_Rand){
+    return ((Sent_Rand$responses$sentiment.roberta.primary))
+    })
+  
+  sent_breaks <- c(-1.0,-0.25,0.25,1.0)
+  Sent_GT_Count <- lapply(Sentiment_GT_responses, function(gtr) { hist(gtr,breaks=sent_breaks,plot=FALSE)$counts })
+  Sent_GT2_Count <- lapply(Sentiment_GT_responses2, function(gtr) { hist(gtr,breaks=sent_breaks,plot=FALSE)$counts })
+  Sent_Model_Count <- lapply(Sentiment_Model_responses, function(gtr) { hist(gtr,breaks=sent_breaks,plot=FALSE)$counts })
+  Sent_Rand_Count <- lapply(Sentiment_Random_responses, function(gtr) { hist(gtr,breaks=sent_breaks,plot=FALSE)$counts })
+  
+  #Convert all sentiments lists to dataframes
+  Sentiment_table_GT <- data.frame(Sentiment_GT_responses)
+  Sentiment_table_GT2 <- data.frame(Sentiment_GT_responses2)
+  Sentiment_table_Model <- data.frame(Sentiment_Model_responses)
+  Sentiment_table_Random <- data.frame(Sentiment_Random_responses)
+  
+  for(i in 1:length(Sentiment_GT_responses)){
+    names(Sentiment_table_GT)[i] <- i
+    names(Sentiment_table_GT2)[i] <- i
+    names(Sentiment_table_Model)[i] <- i
+    names(Sentiment_table_Random)[i] <- i
+    
+  }
+
+  ### ChiSq COMPUTATION FUNCTION
+  ### H0 = The responses for sentiments are similarly distributed. 
+  Chi_Sq_GT_Model <- list()
+  Chi_Sq_GT_Random <- list()
+  Chi_Sq_GT_GT2 <- list()
+  
+  
+  P_value_Chi_Sq_GT_Model <- list()
+  P_value_Chi_Sq_GT_Random <- list()
+  P_value_Chi_Sq_GT_GT2 <- list()
+  
+  Results_Chi_Sq_GT_Model <- list()
+  Results_Chi_Sq_GT_Random <- list()
+  Results_Chi_Sq_GT_GT2 <- list()
+  
+  fail_reject_GT_Model <- 0
+  fail_reject_GT_Random <- 0
+  fail_reject_GT_GT2 <- 0
+  
+  for(i in 1:length(Sent_GT_Count)){
+    p <- Sent_GT_Count[[i]] / response_sample_size
+    p <- smooth.probabilities(p)
+    Chi_Sq_GT_Model=chisq.test(Sent_Model_Count[[i]], p=p)
+    Chi_Sq_GT_Random=chisq.test(Sent_Rand_Count[[i]], p=p)
+    Chi_Sq_GT_GT2=chisq.test(Sent_GT2_Count[[i]], p=p)
+    
+    P_value_Chi_Sq_GT_Model[[i]] <- Chi_Sq_GT_Model$p.value
+    P_value_Chi_Sq_GT_Random[[i]] <- Chi_Sq_GT_Random$p.value
+    P_value_Chi_Sq_GT_GT2[[i]] <- Chi_Sq_GT_GT2$p.value
+    
+  
+    if (P_value_Chi_Sq_GT_Model[[i]] >= 0.05){
+      fail_reject_GT_Model <- fail_reject_GT_Model + 1
+    }
+    
+    if (P_value_Chi_Sq_GT_Random[[i]] >= 0.05){
+      fail_reject_GT_Random <- fail_reject_GT_Random + 1
+    }
+    
+    if (P_value_Chi_Sq_GT_GT2[[i]] >= 0.05){
+      fail_reject_GT_GT2 <- fail_reject_GT_GT2 + 1
+    }
+  }  
+  
+  fail_reject_GT_Model <- fail_reject_GT_Model / length(Sent_GT_Count)
+  fail_reject_GT_Random <- fail_reject_GT_Random / length(Sent_GT_Count)
+  fail_reject_GT_GT2 <- fail_reject_GT_GT2 / length(Sent_GT_Count)
+  
+  return (list(
+    Sentiment_table_GT=Sentiment_table_GT,
+    Sentiment_table_GT2=Sentiment_table_GT2,
+    Sentiment_table_Model=Sentiment_table_Model,
+    Sentiment_table_Random=Sentiment_table_Random,
+    fail_reject_GT_Model=fail_reject_GT_Model,
+    fail_reject_GT_Random=fail_reject_GT_Random,
+    fail_reject_GT_GT2=fail_reject_GT_GT2
+  ))
+
+}
+
+### SEMANTIC ANALYSIS FUNCTION
+semantic_analysis <- function(ground_truth_responses, ground_truth_responses2, random_responses, model_responses){
+  #Compute Cosine Similarity REC statistics
+  random_baseline_cossim <- compute_cossim(ground_truth_responses, random_responses)
+  model_comparison_cossim <- compute_cossim(ground_truth_responses, model_responses)
+  ground_truth_baseline_cossim <- compute_cossim(ground_truth_responses, ground_truth_responses2)
+  
+  max_of_gt_means <- max(do.call(rbind, ground_truth_baseline_cossim)$mean)
+  max_of_gt_maxes <- max(do.call(rbind, ground_truth_baseline_cossim)$max)
+  mean_cossim_rec_list <- list(random_baseline=compute_cossim_rec(random_baseline_cossim, "mean", max_of_gt_means),
+                               model_comparison=compute_cossim_rec(model_comparison_cossim, "mean", max_of_gt_means),
+                               ground_truth_baseline=compute_cossim_rec(ground_truth_baseline_cossim, "mean", max_of_gt_means))
+  mean_cossim_ttest <- list(ground_truth=compute_cossim_ttest(ground_truth_baseline_cossim, random_baseline_cossim, "mean"),
+                            model=compute_cossim_ttest(model_comparison_cossim, random_baseline_cossim, "mean"))
+  
+  max_cossim_rec_list <- list(random_baseline=compute_cossim_rec(random_baseline_cossim, "max", max_of_gt_maxes),
+                              model_comparison=compute_cossim_rec(model_comparison_cossim, "max", max_of_gt_maxes),
+                              ground_truth_baseline=compute_cossim_rec(ground_truth_baseline_cossim, "max", max_of_gt_maxes))
+  max_cossim_ttest <- list(ground_truth=compute_cossim_ttest(ground_truth_baseline_cossim, random_baseline_cossim, "max"),
+                           model=compute_cossim_ttest(model_comparison_cossim, random_baseline_cossim, "max"))
+  
+  return (list(
+    random_baseline_cossim=random_baseline_cossim,
+    model_comparison_cossim=model_comparison_cossim,
+    ground_truth_baseline_cossim=ground_truth_baseline_cossim,
+    mean_cossim_rec_list=mean_cossim_rec_list,
+    mean_cossim_ttest=mean_cossim_ttest,
+    max_cossim_rec_list=max_cossim_rec_list,
+    max_cossim_ttest=max_cossim_ttest
+  ))
+}
+
+### MMD ANALYSIS FUNCTION
+MMD_analysis <- function(ground_truth_responses, ground_truth_responses2, random_responses, model_responses){
+  #Compute MMD statistics
+  random_baseline <- compute_mmd(ground_truth_responses, random_responses)
+  model_comparison <- compute_mmd(ground_truth_responses, model_responses)
+  ground_truth_baseline <- compute_mmd(ground_truth_responses, ground_truth_responses2)
+  
+  return (list(
+    random_baseline=random_baseline,
+    model_comparison=model_comparison,
+    ground_truth_baseline=ground_truth_baseline
+  ))
+}
+
+```
+
+```{r, echo=FALSE}
+####################################################################
+# TRAINING DATA EXPORT
+####################################################################
+export_training_data <- function(results.df) {
+  training.df <- get_response_set(NA, get_embeddings_and_sentiment=FALSE, quoted_status_exclude_ids=results.df$key,
+                                  return_quoted_status_id=TRUE)
+  
+  #filter out duplicate tweets with the same message from the same source occurring multiple times.
+  #responses for duplicated tweets are usually dependent on external context (e.g., a URL which changes in each instance)
+  #and it would be impossible for the model to accurately predict them without that context.
+  training.df.quoted_only <- unique(training.df[,c("quoted_status.id_str", 
+                                                   "quoted_status.screen_name", 
+                                                   "quoted_status.full_text")])
+  text_key <- paste(training.df.quoted_only$quoted_status.screen_name, 
+                    training.df.quoted_only$quoted_status.full_text, sep="||")
+  dupes <- duplicated(text_key)
+  dupe_ids <- training.df.quoted_only[dupes, "quoted_status.id_str"]
+  training.df <- training.df[!(training.df$quoted_status.id_str %in% dupe_ids),]
+  
+  
+  #filter out blanks
+  training.df <- subset(training.df, quoted_status.full_text != "" & full_text != "")
+  
+  #filter out training examples where quoted_status.full_text exists in the test set
+  #(this could happen if a tweet not in the exclude_list has identical text to one in the list)
+  additional_excludes <- training.df$quoted_status.full_text %in% results.df$quoted_status.full_text
+  training.df <- training.df[!additional_excludes,]
+  
+  #write output
+  colnames(training.df) <- c("message_id", "author", "message", "response")
+  write.csv(training.df, "tweet_response_training.csv", row.names=FALSE)
+  
+  #return stats
+  training_stats <- table(training.df$message_id)
+  return (list(
+    num_messages = nrow(training_stats),
+    num_responses = nrow(training.df),
+    avg_resp_per_msg = mean(training_stats),
+    std_resp_per_msg = sd(training_stats)
+  ))
+}
+
+if (mode == "train") {
+  export_training_data(results.df)
+}
+```
+
+```{r, echo=FALSE}
+####################################################################
+# RETRIEVE RANDOM AND GROUND TRUTH RESPONSE SETS 
+# & GENERATE MODEL RESPONSE SET
+####################################################################
+if (mode == "eval") {
+  #Sample ground truth responses and split into two distinct sets
+  ground_truth_responses <- sample_ground_truth_responses(results.df, response_sample_size*2, ground_truth_seed)
+  ground_truth_responses2 <- lapply(ground_truth_responses, function(gtr){
+    responses <- gtr$responses[(response_sample_size+1):(response_sample_size*2),]
+    rownames(responses) <- NULL
+    responses.vectors <- gtr$responses.vectors[(response_sample_size+1):(response_sample_size*2),]
+    return (list(responses=responses, responses.vectors=responses.vectors))
+  })
+  ground_truth_responses <- lapply(ground_truth_responses, function(gtr){
+    return (list(responses=gtr$responses[1:response_sample_size,],
+                 responses.vectors=gtr$responses.vectors[1:response_sample_size,]))
+  })
+  #Sample random & model responses
+  random_responses <- sample_random_responses(nrow(results.df), response_sample_size, random_response_seed)
+  model_responses <- sample_model_responses(results.df, response_sample_size, 
+                                            num_beams=gen_num_beams, 
+                                            temperature=gen_temperature, 
+                                            random_seed=model_seed)
+}
+```
+
+```{r, echo=FALSE}
+####################################################################
+# COMPUTE RANDOM RESPONSE AND GROUND TRUTH BASELINES 
+# & COMPUTE MODEL COMPARISON TO GROUND TRUTH
+####################################################################
+if (mode == "eval") {
+  screen_names <- names(screen_name_counts[screen_name_counts >= 20])
+  screen_names <- c("ALL", screen_names)
+  
+  screen_names_results <- lapply(screen_names, function(screen_name) {
+    if (screen_name == "ALL") {
+      screen_name_selector <- rep(TRUE, length(ground_truth_responses))
+    } else {
+      screen_name_selector <- sapply(ground_truth_responses, function(gtr) { 
+        unique(gtr$responses$quoted_status.screen_name==screen_name) 
+      })
+    }
+    
+    sn_gt_responses <- ground_truth_responses[screen_name_selector]
+    sn_gt_responses2 <- ground_truth_responses2[screen_name_selector]
+    sn_random_responses <- random_responses[screen_name_selector]
+    sn_model_responses <- model_responses[screen_name_selector]
+    
+    return (list(
+      sentiment_results = sentiment_analysis(sn_gt_responses, sn_gt_responses2, sn_random_responses, sn_model_responses),
+      semantic_results = semantic_analysis(sn_gt_responses, sn_gt_responses2, sn_random_responses, sn_model_responses),
+      mmd_results = MMD_analysis(sn_gt_responses, sn_gt_responses2, sn_random_responses, sn_model_responses)
+    ))
+  })
+  names(screen_names_results) <- screen_names
+}
+```
+
+```{r, echo=FALSE}
+####################################################################
+# CREATE SENTIMENT PLOTS
+####################################################################
+if (mode == "eval") {
+  for (screen_name in screen_names){
+    plot_sentiment(screen_names_results[[screen_name]]$sentiment_results, screen_name)
+  }
+
+  #Plot density for all organization sentiments together on the same plot.
+  densities <- lapply(screen_names_results, function(sn){
+    density(unlist(sn$sentiment_results$Sentiment_table_GT))
+  })
+  max_density_y <- lapply(densities, function(sn){
+    max(sn$y)
+  })
+  max_density_screen_name <- which.max(max_density_y)
+  plot(densities[[max_density_screen_name]], main="Primary sentiment distribution by organization", 
+       xlab = "Sentiment values", ylab = "Density", ylim=c(0,1.5))
+  polygon(densities$WHO, lty = 1, lwd = 2, border="black")
+  polygon(densities$CDCgov, lty = 3, lwd = 2, border="black")
+  polygon(densities$CDCDirector, lty = 1, lwd = 2, border="grey")
+  legend(0, 1, legend=c("WHO","CDCgov","CDCDirector"),
+       col=c("black","black","grey"), lty=c(1,3,1), lwd=c(2,2,2))
+}
+```
+
+```{r, echo=FALSE, fig.height=8, fig.width=10}
+####################################################################
+# CREATE COSINE SIMILARITY REC PLOTS
+####################################################################
+if (mode == "eval") {
+  for (screen_name in screen_names){
+    grid.arrange(
+      plot_ttest(screen_names_results[[screen_name]]$semantic_results$max_cossim_ttest, 
+                 "\nMin Cosine Dist.", screen_name),
+      plot_rec(screen_names_results[[screen_name]]$semantic_results$max_cossim_rec_list, 
+               "Test Tweet Response Min Cosine Dist.", screen_name),
+      plot_ttest(screen_names_results[[screen_name]]$semantic_results$mean_cossim_ttest, 
+                 "\nAvg Cosine Dist.", screen_name),
+      plot_rec(screen_names_results[[screen_name]]$semantic_results$mean_cossim_rec_list, 
+               "Test Tweet Response Avg Cosine Dist.", screen_name),
+      nrow=2,
+      ncol=2,
+      widths=c(3, 7)
+    )
+  }
+}
+```
+
+```{r, echo=FALSE, fig.height=8, fig.width=10}
+####################################################################
+# CREATE COSINE SIMILARITY CORRELATION PLOTS
+####################################################################
+if (mode == "eval") {
+  for (screen_name in screen_names){
+    grid.arrange(
+      plot_cossim_corr(screen_names_results[[screen_name]]$semantic_results$model_comparison_cossim,
+                       screen_names_results[[screen_name]]$semantic_results$ground_truth_baseline_cossim,
+                       "max", "Primary vs. Model", "Primary vs. Reference", screen_name),
+      plot_cossim_corr(screen_names_results[[screen_name]]$semantic_results$random_baseline_cossim,
+                       screen_names_results[[screen_name]]$semantic_results$ground_truth_baseline_cossim,
+                       "max", "Primary vs. Random", "Primary vs. Reference", screen_name),
+      plot_cossim_corr(screen_names_results[[screen_name]]$semantic_results$model_comparison_cossim,
+                       screen_names_results[[screen_name]]$semantic_results$ground_truth_baseline_cossim,
+                       "mean", "Primary vs. Model", "Primary vs. Reference", screen_name),
+      plot_cossim_corr(screen_names_results[[screen_name]]$semantic_results$random_baseline_cossim,
+                       screen_names_results[[screen_name]]$semantic_results$ground_truth_baseline_cossim,
+                       "mean", "Primary vs. Random", "Primary vs. Reference", screen_name),
+      nrow=2,
+      ncol=2
+    )
+  }
+}
+```
+
+```{r, echo=FALSE, fig.height=8}
+####################################################################
+# CREATE MMD PLOTS
+####################################################################
+if (mode == "eval") {
+  for (screen_name in screen_names){
+    random_baseline_plots <- plot_mmd(screen_names_results[[screen_name]]$mmd_results$random_baseline, 
+                                      "Primary vs. Random", screen_name)
+    model_comparison_plots <- plot_mmd(screen_names_results[[screen_name]]$mmd_results$model_comparison, 
+                                       "Primary vs. Model", screen_name)
+    ground_truth_baseline_plots <- plot_mmd(screen_names_results[[screen_name]]$mmd_results$ground_truth_baseline, 
+                                            "Primary vs. Reference", screen_name)
+    grid.arrange(random_baseline_plots[[1]], model_comparison_plots[[1]], ground_truth_baseline_plots[[1]], 
+                 random_baseline_plots[[2]], model_comparison_plots[[2]], ground_truth_baseline_plots[[2]],
+                 layout_matrix=cbind(c(1, 2, 3), c(4, 5, 6)))
+  }
+}
+```
+
+```{r, echo=FALSE}
+if (mode == "eval") {
+  message_idx <- 14
+  display_n <- 5
+  message <- paste0("Message (", results.df$quoted_status.screen_name[[message_idx]], "): ", 
+                    results.df$quoted_status.full_text[[message_idx]])
+  
+  ground_truth_latex.df <- data.frame(ground_truth=ground_truth_responses[[message_idx]]$responses$full_text)
+  cossim_order <- order(screen_names_results$ALL$semantic_results$model_comparison_cossim[[message_idx]]$mean, decreasing=TRUE)
+  ground_truth_latex.df <- ground_truth_latex.df[cossim_order,,drop=FALSE]
+  ground_truth_latex <- kable(ground_truth_latex.df[1:display_n,], "latex", 
+                              col.names=c("Primary ground-truth responses:"), caption=message, booktabs=TRUE)
+  
+  generated_cossim <- compute_cossim(model_responses, ground_truth_responses)
+  generated_latex.df <- data.frame(generated=model_responses[[message_idx]]$responses$full_text)
+  cossim_order <- order(generated_cossim[[message_idx]]$mean, decreasing=TRUE)
+  generated_latex.df <- generated_latex.df[cossim_order,,drop=FALSE]
+  generated_latex <- kable(generated_latex.df[1:display_n,], "latex", 
+                           col.names=c("Generated responses:"), caption=message, booktabs=TRUE)
+}
+```

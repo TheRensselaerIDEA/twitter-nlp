@@ -81,9 +81,10 @@ def start():
         if config.elasticsearch_query is not None:
             reindex_body["source"]["query"] = config.elasticsearch_query
 
-        res = es.reindex(reindex_body, wait_for_completion=False, refresh=True, requests_per_second=args.reqpersec, slices=args.slices)
+        res = es.reindex(reindex_body, max_docs=config.max_docs, wait_for_completion=False, refresh=True, requests_per_second=args.reqpersec, slices=args.slices)
 
         task_id = res["task"]
+        print(task_id)
         while True:
             task = es.tasks.get(task_id)
 

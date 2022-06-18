@@ -140,7 +140,8 @@ class GPT2FineTuner(pl.LightningModule):
         return {"input_ids": input_ids, "labels": input_ids, "attention_mask": attention_mask}
     
     def train_dataloader(self):
-        train_loader = DataLoader(self.train_dataset, batch_size=self.hparams.batch_size, collate_fn=self.collate)
+        train_loader = DataLoader(self.train_dataset, batch_size=self.hparams.batch_size, collate_fn=self.collate, 
+                                  drop_last=True, shuffle=True)
         return train_loader
     
     def val_dataloader(self):

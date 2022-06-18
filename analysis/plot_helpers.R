@@ -482,7 +482,7 @@ load_tweet_viewer <- function() {
     <script type="text/javascript">
       var oEmbed_xhr = null;
       var oEmbed_timer = null;
-      $(window).load(function() {
+      $(window).on("load", function() {
         var plots = $(".js-plotly-plot");
         for (var i = 0; i < plots.length; i++){
           $(".js-plotly-plot")[i].on("plotly_hover", function(data) {
