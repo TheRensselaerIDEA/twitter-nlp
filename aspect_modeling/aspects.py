@@ -1,7 +1,11 @@
 import numpy as np
+from hdbscan import HDBSCAN
+from sklearn.cluster import KMeans
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search
 from textwrap import wrap
+
+from cluster_helpers import detect_optimal_clusters
 
 def text_wrap(text):
     return "<br>".join(wrap(text, width=80))
@@ -94,3 +98,22 @@ def compute_aspect_similarities(tweet_embeddings, embedding_type, embedding_mode
     aspect_similarities = tweet_embeddings @ aspect_embeddings.T
 
     return aspect_similarities
+
+def cluster_aspect_similarities(aspect_similarities, clustering_type, kmeans_n_clusters, 
+                                hdbscan_min_cluster_size, hdbscan_min_samples):
+    if clustering_type == "kmeans":
+        if kmeans_n_clusters > 0:
+            kmeans_n_clusters = min(kmeans_n_clusters, aspect_similarities.shape[0])
+            kmeans = KMeans(n_clusters=kmeans_n_clusters)
+            kmeans.fit(aspect_similarities)
+        else:
+            kmeans = detect_optimal_clusters(aspect_similarities)
+        cluster_assignments = kmeans.predict(aspect_similarities)
+    elif clustering_type == "hdbscan":
+        hdbscan = HDBSCAN(min_cluster_size=hdbscan_min_cluster_size,
+                          min_samples=hdbscan_min_samples)
+        cluster_assignments = hdbscan.fit_predict(aspect_similarities)
+    else:
+        raise ValueError(f"Unsupported clustering type '{clustering_type}'.")
+
+    return cluster_assignments
