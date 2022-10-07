@@ -3,9 +3,14 @@ Utility methods for clustering.
 """
 
 from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
 from kneed import KneeLocator
 import numpy as np
 from tqdm import trange
+
+def get_silhouette_score(embeddings, cluster_assignments):
+    score = silhouette_score(embeddings, cluster_assignments)
+    return score
 
 def detect_optimal_clusters(embeddings, k_range=(1,30), n_init=10, max_iter=300, 
                             random_state=None, show_progress=False, plot_elbow=False):

@@ -6,7 +6,7 @@ from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search
 from textwrap import wrap
 
-from cluster_helpers import detect_optimal_clusters
+import cluster_helpers 
 
 def text_wrap(text):
     return "<br>".join(wrap(text, width=80))
@@ -143,7 +143,7 @@ def cluster_aspect_similarities(aspect_similarities, clustering_type, kmeans_n_c
             kmeans = KMeans(n_clusters=kmeans_n_clusters)
             kmeans.fit(aspect_similarities)
         else:
-            kmeans = detect_optimal_clusters(aspect_similarities)
+            kmeans = cluster_helpers.detect_optimal_clusters(aspect_similarities)
         cluster_assignments = kmeans.predict(aspect_similarities)
     elif clustering_type == "hdbscan":
         hdbscan = HDBSCAN(min_cluster_size=hdbscan_min_cluster_size,
@@ -152,4 +152,5 @@ def cluster_aspect_similarities(aspect_similarities, clustering_type, kmeans_n_c
     else:
         raise ValueError(f"Unsupported clustering type '{clustering_type}'.")
 
-    return cluster_assignments
+    silhouette_score = cluster_helpers.get_silhouette_score(aspect_similarities, cluster_assignments)
+    return cluster_assignments, silhouette_score

@@ -5,6 +5,7 @@ import tensorflow_hub as hub
 import tensorflow as tf
 from itertools import compress
 from sentence_transformers import SentenceTransformer
+from scipy.stats import linregress, pearsonr
 
 import aspects as asp
 from display_helpers import format_date_range
@@ -123,6 +124,7 @@ def run():
                        for i in range(2)]
             min_aspect_similarity = st.slider("Min Aspect Similarity", -1.0, 1.0, key="min_aspect_similarity", 
                                               value=0.25, step=0.05)
+            show_trendline = st.checkbox("Show Trendline", key="show_trendline")
 
         with clustering_tab:
             clustering_space = st.selectbox("Clustering Space", ["aspect", "embedding"], key="clustering_space")
@@ -157,23 +159,35 @@ def run():
     filtered_aspect_similarities = aspect_similarities[combined_filter]
     filtered_tweet_embeddings = tweet_embeddings[combined_filter]
     filtered_tweet_text = list(compress(tweet_text, combined_filter))
+    n_results = filtered_aspect_similarities.shape[0]
 
     # Step 4: Run clustering
     vectors_to_cluster = filtered_aspect_similarities if clustering_space == "aspect" else filtered_tweet_embeddings
     if vectors_to_cluster.shape[0] > 0:
-        cluster_assignments = get_cluster_assignments(vectors_to_cluster, clustering_type, kmeans_n_clusters, 
-                                                      hdbscan_min_cluster_size, hdbscan_min_samples)
+        cluster_assignments, silhouette_score = get_cluster_assignments(
+            vectors_to_cluster, clustering_type, kmeans_n_clusters, hdbscan_min_cluster_size, hdbscan_min_samples
+        )
         actual_n_clusters = np.max(cluster_assignments) + 1
     else:
         cluster_assignments = []
+        silhouette_score = 0.
         actual_n_clusters = 0
     
-    # Step 5: Display the results
-    n_results = filtered_aspect_similarities.shape[0]
+    # Step 5: Run linear regression
+    linreg = None
+    if n_results > 0:
+        linreg = linregress(x=filtered_aspect_similarities[:, 0],
+                            y=filtered_aspect_similarities[:, 1])
+    rvalue = linreg.rvalue if linreg is not None else 0.
+    pvalue = linreg.pvalue if linreg is not None else 0.
+
+    # Step 6: Display the results
     with st.expander(f"Results ({n_results} responses)", expanded=True):
         st.markdown(f"**Index:** {es_index}; &nbsp;&nbsp; "
                     f"**Query:** \"{query}\" ({format_date_range(date_range)}); &nbsp;&nbsp; "
-                    f"**Clusters:** {actual_n_clusters}", unsafe_allow_html=True)
+                    f"**Pearson's r:** {rvalue:.3f} (p={pvalue:.3f}); &nbsp;&nbsp; "
+                    f"**Clusters:** {actual_n_clusters}; &nbsp;&nbsp; "
+                    f"**Silhouette:** {silhouette_score:.3f}", unsafe_allow_html=True)
         results_plot = go.Figure()
         results_plot.layout.margin = go.layout.Margin(b=0, l=0, r=0, t=30)
         results_plot.update_layout(xaxis_title=aspects[0], yaxis_title=aspects[1])
@@ -182,7 +196,12 @@ def run():
                                           mode="markers",
                                           marker=dict(color=cluster_assignments, colorscale="Viridis"),
                                           hoverinfo="text",
-                                          hovertext=filtered_tweet_text))
+                                          hovertext=filtered_tweet_text,
+                                          showlegend=False))
+        if show_trendline and linreg is not None:
+            x = np.linspace(filtered_aspect_similarities[:, 0].min(), filtered_aspect_similarities[:, 0].max(), 2)
+            y = linreg.slope * x + linreg.intercept
+            results_plot.add_trace(go.Scatter(x=x, y=y, mode="lines", line={"dash": "longdash"}, showlegend=False))
         st.plotly_chart(results_plot, use_container_width=True)
 
 if __name__ == "__main__":
