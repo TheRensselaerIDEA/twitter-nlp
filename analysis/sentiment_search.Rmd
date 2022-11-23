@@ -27,10 +27,10 @@ source("plot_tweet_sentiment_timeseries.R")
 
 ```{r}
 # query start date/time (inclusive)
-rangestart <- "2020-01-01 00:00:00"
+rangestart <- "2022-04-01 00:00:00"
 
 # query end date/time (exclusive)
-rangeend <- "2020-08-01 00:00:00"
+rangeend <- "2022-11-01 00:00:00"
 
 # text filter restricts results to only those containing words, phrases, or meeting a boolean condition. This query syntax is very flexible and supports a wide variety of filter scenarios:
 # words: text_filter <- "cdc nih who"  ...contains "cdc" or "nih" or "who"
@@ -46,7 +46,21 @@ location_filter <- ""
 must_have_geo <- FALSE
 
 # query semantic similarity phrase
-semantic_phrase <- ""
+semantic_phrase <- "food security"
+
+# sentiment type (only 'vader' and 'roberta' are supported for now)
+# if the requested sentiment type is not available for the current index or sample, the sentiment
+# column in the result set will contain NA values.
+sentiment_type <- "roberta"
+
+# query lower bound for sentiment (inclusive). Enter a numeric value or for no lower bound set to NA.
+sentiment_lower <- NA
+
+# query upper bound for sentiment (inclusive). Enter a numeric value or for no upper bound set to NA.
+sentiment_upper <- NA
+
+# embedding type (only 'use_large' and 'sbert' are supported for now)
+embedding_type <- "sbert"
 
 # return results in chronological order or as a random sample within the range
 # (ignored if semantic_phrase is not blank)
@@ -62,29 +76,33 @@ min_results <- 1
 ### Results:
 
 ```{r, echo=FALSE}
-results <- do_search(indexname="coronavirus-data-masks", 
+results <- do_search(indexname="ukraine-data-lite-oct22",
                      rangestart=rangestart,
                      rangeend=rangeend,
                      text_filter=text_filter,
                      location_filter=location_filter,
                      semantic_phrase=semantic_phrase,
                      must_have_geo=must_have_geo,
+                     embedding_type=embedding_type,
+                     must_have_embedding=TRUE,
+                     sentiment_type=sentiment_type,
+                     sentiment_lower=sentiment_lower,
+                     sentiment_upper=sentiment_upper,
                      random_sample=random_sample,
                      random_seed=random_seed,
                      resultsize=resultsize,
-                     resultfields='"created_at", "user.screen_name", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text", "sentiment.vader.primary", "normalized_state"',
+                     resultfields='"created_at", "user.screen_name", "user.location", "place.full_name", "place.country", "text", "full_text", "extended_tweet.full_text"',
                      elasticsearch_host="lp01.idea.rpi.edu",
                      elasticsearch_path="elasticsearch",
                      elasticsearch_port=443,
                      elasticsearch_schema="https")
 
-required_fields <- c("created_at", "user_screen_name", "user_location", "place.full_name", "place.country", "full_text", "sentiment.vader.primary", "normalized_state")
+required_fields <- c("created_at", "user_screen_name", "user_location", "place.full_name", "place.country", "full_text", "sentiment")
 validate_results(results$df, min_results, required_fields)
 
 
 #Transform results for sentiment plot
 results.df <- results$df
-colnames(results.df)[colnames(results.df) == "sentiment.vader.primary"] <- "sentiment"
 results.df$vector_type <- "tweet"
 
 #Transform results for tweet display
