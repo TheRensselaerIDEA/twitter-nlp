@@ -8,10 +8,10 @@ from sentence_transformers import SentenceTransformer
 from scipy.stats import linregress, pearsonr
 
 import aspects as asp
-from display_helpers import format_date_range
+from display_helpers import format_date_range, build_topic_dataframes
 
 es_uri = "https://localhost:8080/elasticsearch/"
-title = "Aspect-driven Twitter Response Analysis"
+title = "Twitter Response Analysis"
 st.set_page_config(
     page_title=title,
     page_icon="📊",
@@ -40,6 +40,11 @@ es_indices = {
         "example_aspects": ["can't stop", "stay away"]
     },
     "ukraine-data-lite": {
+        "embedding_type": "sbert",
+        "example_query": "US should arm Ukraine with fighter jets.",
+        "example_aspects": ["risks of getting involved", "Russian war crimes"]
+    },
+    "ukraine-data-lite-oct22": {
         "embedding_type": "sbert",
         "example_query": "US should arm Ukraine with fighter jets.",
         "example_aspects": ["risks of getting involved", "Russian war crimes"]
@@ -92,8 +97,18 @@ def get_aspect_similarities(tweet_embeddings, embedding_type, aspects):
 
 @st.cache(allow_output_mutation=True, max_entries=1)
 def get_cluster_assignments(*args, **kwargs):
-    cluster_assignments = asp.cluster_aspect_similarities(*args, **kwargs)
+    cluster_assignments = asp.cluster_vectors(*args, **kwargs)
     return cluster_assignments
+
+@st.cache(allow_output_mutation=True, max_entries=1)
+def get_embedding_display_proj(*args, **kwargs):
+    proj = asp.compute_embedding_display_proj(*args, **kwargs)
+    return proj
+
+@st.cache(allow_output_mutation=True, max_entries=1)
+def get_cluster_keywords(*args, **kwargs):
+    keywords, tfidf_scores = asp.compute_cluster_keywords(*args, **kwargs)
+    return keywords, tfidf_scores
 
 def run():
     # Step 1: Collect query, aspect, and clustering parameters
@@ -101,8 +116,10 @@ def run():
         st.title(title)
         query_tab, aspects_tab, clustering_tab = st.tabs(["Query", "Aspects", "Clustering"])
         with query_tab:
+            sorted_es_indices = sorted(es_indices.keys())
             es_index = st.selectbox("Elasticsearch Index *", 
-                                    sorted(es_indices.keys()), 
+                                    sorted_es_indices,
+                                    index = sorted_es_indices.index("ukraine-data-lite-oct22"),
                                     key="elasticsearch_index")
             embedding_type = es_indices[es_index]["embedding_type"]
 
@@ -129,6 +146,12 @@ def run():
         with clustering_tab:
             clustering_space = st.selectbox("Clustering Space", ["aspect", "embedding"], key="clustering_space")
             clustering_type = st.selectbox("Clustering Type", ["kmeans", "hdbscan"], key="clustering_type")
+            num_topic_keywords = st.slider("# of keywords per cluster (topic)", 1, 20, key="num_topic_keywords", value=10, step=1)
+            
+            dreduce_dim = None
+            if clustering_space == "embedding":
+                max_dim = 512 if embedding_type == "use_large" else 384
+                dreduce_dim = st.slider("Reduce to dimension before clustering", 2, max_dim, key="dreduce_dim", value=max_dim, step=1)
 
             kmeans_n_clusters = None
             hdbscan_min_cluster_size = None
@@ -141,6 +164,8 @@ def run():
                                                      value=5, step=5)
                 hdbscan_min_samples = st.slider("Min Samples", 1, 100, key="hdbscan_min_samples",
                                                 value=1, step=1)
+            
+
 
     # Step 2: Execute the query and compute aspect similarities
     # (results are cached for unchanged query and aspect parameters)
@@ -148,7 +173,9 @@ def run():
         date_range = date_boundaries
     elif len(date_range) == 1:
         date_range = (date_range[0], date_boundaries[1])
-    tweet_text, tweet_embeddings, tweet_scores = get_query_results(es_index, embedding_type, query, date_range, max_results)
+    tweet_text, tweet_text_display, tweet_embeddings, tweet_scores = get_query_results(
+        es_index, embedding_type, query, date_range, max_results
+    )
     aspect_similarities = get_aspect_similarities(tweet_embeddings, embedding_type, aspects)
 
     # Step 3: Filter results by min query and aspect similarity
@@ -159,30 +186,44 @@ def run():
     filtered_aspect_similarities = aspect_similarities[combined_filter]
     filtered_tweet_embeddings = tweet_embeddings[combined_filter]
     filtered_tweet_text = list(compress(tweet_text, combined_filter))
-    n_results = filtered_aspect_similarities.shape[0]
-
+    filtered_tweet_text_display = list(compress(tweet_text_display, combined_filter))
+    
     # Step 4: Run clustering
     vectors_to_cluster = filtered_aspect_similarities if clustering_space == "aspect" else filtered_tweet_embeddings
+    n_results = vectors_to_cluster.shape[0]
+    cluster_assignments = []
+    silhouette_score = 0.
+    elbow_plot = None
+    actual_n_clusters = 0
+    
     if vectors_to_cluster.shape[0] > 0:
-        cluster_assignments, silhouette_score = get_cluster_assignments(
-            vectors_to_cluster, clustering_type, kmeans_n_clusters, hdbscan_min_cluster_size, hdbscan_min_samples
+        cluster_assignments, silhouette_score, elbow_plot = get_cluster_assignments(
+            vectors_to_cluster, clustering_type, kmeans_n_clusters, hdbscan_min_cluster_size, hdbscan_min_samples, dreduce_dim
         )
         actual_n_clusters = np.max(cluster_assignments) + 1
-    else:
-        cluster_assignments = []
-        silhouette_score = 0.
-        actual_n_clusters = 0
+
+    if clustering_space == "embedding":
+        vectors_to_cluster = get_embedding_display_proj(vectors_to_cluster)
+
+    # Step 5: Run topic modeling on clusters with tf-idf
+    cluster_keywords = None
+    if len(cluster_assignments) > 0:
+        filtered_tweet_responses = [tweet_text[1] for tweet_text in filtered_tweet_text]
+        cluster_keywords, cluster_tfidf_scores = get_cluster_keywords(
+            filtered_tweet_responses, cluster_assignments, num_topic_keywords
+        )
     
-    # Step 5: Run linear regression
+    # Step 6: Run linear regression
     linreg = None
     if n_results > 0:
-        linreg = linregress(x=filtered_aspect_similarities[:, 0],
-                            y=filtered_aspect_similarities[:, 1])
+        linreg = linregress(x=vectors_to_cluster[:, 0],
+                            y=vectors_to_cluster[:, 1])
     rvalue = linreg.rvalue if linreg is not None else 0.
     pvalue = linreg.pvalue if linreg is not None else 0.
 
-    # Step 6: Display the results
+    # Step 7: Display the results
     with st.expander(f"Results ({n_results} responses)", expanded=True):
+        # display query / clustering results
         st.markdown(f"**Index:** {es_index}; &nbsp;&nbsp; "
                     f"**Query:** \"{query}\" ({format_date_range(date_range)}); &nbsp;&nbsp; "
                     f"**Pearson's r:** {rvalue:.3f} (p={pvalue:.3f}); &nbsp;&nbsp; "
@@ -190,19 +231,38 @@ def run():
                     f"**Silhouette:** {silhouette_score:.3f}", unsafe_allow_html=True)
         results_plot = go.Figure()
         results_plot.layout.margin = go.layout.Margin(b=0, l=0, r=0, t=30)
-        results_plot.update_layout(xaxis_title=aspects[0], yaxis_title=aspects[1])
-        results_plot.add_trace(go.Scatter(x=filtered_aspect_similarities[:, 0],
-                                          y=filtered_aspect_similarities[:, 1],
-                                          mode="markers",
-                                          marker=dict(color=cluster_assignments, colorscale="Viridis"),
-                                          hoverinfo="text",
-                                          hovertext=filtered_tweet_text,
-                                          showlegend=False))
+        if clustering_space == "aspect":
+            results_plot.update_layout(xaxis_title=aspects[0], yaxis_title=aspects[1])
+        for i in np.unique(cluster_assignments).tolist():
+            cluster_vectors = vectors_to_cluster[cluster_assignments == i]
+            cluster_tweet_text_display = list(compress(filtered_tweet_text_display, cluster_assignments == i))
+            results_plot.add_trace(go.Scatter(x=cluster_vectors[:, 0],
+                                              y=cluster_vectors[:, 1],
+                                              mode="markers",
+                                              marker=dict(color=i, colorscale="Viridis"),
+                                              hoverinfo="text",
+                                              hovertext=cluster_tweet_text_display,
+                                              legendgroup=i,
+                                              name=f"Cluster {i+1}"))
         if show_trendline and linreg is not None:
-            x = np.linspace(filtered_aspect_similarities[:, 0].min(), filtered_aspect_similarities[:, 0].max(), 2)
+            x = np.linspace(vectors_to_cluster[:, 0].min(), vectors_to_cluster[:, 0].max(), 2)
             y = linreg.slope * x + linreg.intercept
             results_plot.add_trace(go.Scatter(x=x, y=y, mode="lines", line={"dash": "longdash"}, showlegend=False))
         st.plotly_chart(results_plot, use_container_width=True)
+
+    # display topic results
+    if cluster_keywords is not None:
+        topics_df, avg_tfidf_df = build_topic_dataframes(cluster_assignments, cluster_keywords, cluster_tfidf_scores)
+        with st.expander(f"Results ({n_results} response topics)", expanded=True):
+            st.write("Topics:")
+            st.dataframe(topics_df)
+            st.write("Average TF-IDF scores (coherence metric?):")
+            st.dataframe(avg_tfidf_df)
+
+    # display k-means elbow plot
+    if elbow_plot is not None:
+        with st.expander("k-means Elbow plot", expanded=True):
+            st.pyplot(elbow_plot)
 
 if __name__ == "__main__":
     run()

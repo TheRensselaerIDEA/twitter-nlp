@@ -9,10 +9,14 @@ import numpy as np
 from tqdm import trange
 
 def get_silhouette_score(embeddings, cluster_assignments):
-    score = silhouette_score(embeddings, cluster_assignments)
+    n_labels =  np.unique(cluster_assignments).shape[0]
+    if n_labels > 1 and n_labels < embeddings.shape[0]:
+        score = silhouette_score(embeddings, cluster_assignments)
+    else:
+        score = 0.
     return score
 
-def detect_optimal_clusters(embeddings, k_range=(1,30), n_init=10, max_iter=300, 
+def detect_optimal_clusters(embeddings, k_range=(2,30), n_init=10, max_iter=300, 
                             random_state=None, show_progress=False, plot_elbow=False):
     # Determine actual k-range. The max can't be higher than the number of embeddings
     # and must also be greater than or equal to the min.
@@ -38,7 +42,7 @@ def detect_optimal_clusters(embeddings, k_range=(1,30), n_init=10, max_iter=300,
         optimal_k = round(kneedle.elbow)
         if plot_elbow:
             kneedle.plot_knee()
-            kneedle.plot_knee_normalized()
+            #kneedle.plot_knee_normalized()
     else:
         #Fallback to KMeans default, or closest value in the k-range (this shouldn't really happen)
         print("Could not find optimal k using elbow method. Falling back to KMeans default.")
