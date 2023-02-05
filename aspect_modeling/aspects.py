@@ -8,6 +8,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search
 from textwrap import wrap
+from gensim import corpora
+from gensim.utils import simple_preprocess
+from gensim.models.coherencemodel import CoherenceModel
 
 import cluster_helpers 
 
@@ -179,7 +182,7 @@ def compute_embedding_display_proj(embeddings):
     embedding_projections = proj_umap.fit_transform(embeddings)
     return embedding_projections
 
-def compute_cluster_keywords(tweet_text, cluster_assignments, num_keywords):
+def compute_cluster_keywords(tweet_text, cluster_assignments, num_keywords, coherence_metrics):
     tfidf = TfidfVectorizer(stop_words="english", ngram_range=(1, 1))
     tfidf_vectors = tfidf.fit_transform(tweet_text)
     tfidf_vocab = np.array(tfidf.get_feature_names())
@@ -196,5 +199,15 @@ def compute_cluster_keywords(tweet_text, cluster_assignments, num_keywords):
         cluster_keywords.append(keywords)
         cluster_tfidf_scores.append(tfidf_scores)
 
-    return cluster_keywords, cluster_tfidf_scores
+    # compute topic coherence
+    tweet_text_preprocessed = [simple_preprocess(t) for t in tweet_text]
+    tweet_text_dictionary = corpora.Dictionary(tweet_text_preprocessed)
+    cluster_coherence = {}
+    for coherence_metric in coherence_metrics:
+        cm = CoherenceModel(
+            topics=cluster_keywords, texts=tweet_text_preprocessed, dictionary=tweet_text_dictionary, coherence=coherence_metric
+        )
+        cluster_coherence[coherence_metric] = cm.get_coherence_per_topic()
+
+    return cluster_keywords, cluster_tfidf_scores, cluster_coherence
     

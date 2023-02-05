@@ -6,6 +6,7 @@ import tensorflow as tf
 from itertools import compress
 from sentence_transformers import SentenceTransformer
 from scipy.stats import linregress, pearsonr
+from gensim.models.coherencemodel import COHERENCE_MEASURES
 
 import aspects as asp
 from display_helpers import format_date_range, build_topic_dataframes
@@ -107,8 +108,8 @@ def get_embedding_display_proj(*args, **kwargs):
 
 @st.cache(allow_output_mutation=True, max_entries=1)
 def get_cluster_keywords(*args, **kwargs):
-    keywords, tfidf_scores = asp.compute_cluster_keywords(*args, **kwargs)
-    return keywords, tfidf_scores
+    keywords = asp.compute_cluster_keywords(*args, **kwargs)
+    return keywords
 
 def run():
     # Step 1: Collect query, aspect, and clustering parameters
@@ -144,15 +145,15 @@ def run():
             show_trendline = st.checkbox("Show Trendline", key="show_trendline")
 
         with clustering_tab:
+            # Clustering space & dimension reduction
             clustering_space = st.selectbox("Clustering Space", ["aspect", "embedding"], key="clustering_space")
-            clustering_type = st.selectbox("Clustering Type", ["kmeans", "hdbscan"], key="clustering_type")
-            num_topic_keywords = st.slider("# of keywords per cluster (topic)", 1, 20, key="num_topic_keywords", value=10, step=1)
-            
             dreduce_dim = None
             if clustering_space == "embedding":
                 max_dim = 512 if embedding_type == "use_large" else 384
                 dreduce_dim = st.slider("Reduce to dimension before clustering", 2, max_dim, key="dreduce_dim", value=max_dim, step=1)
-
+            
+            # Clustering type & hparams
+            clustering_type = st.selectbox("Clustering Type", ["kmeans", "hdbscan"], key="clustering_type")
             kmeans_n_clusters = None
             hdbscan_min_cluster_size = None
             hdbscan_min_samples = None
@@ -164,9 +165,13 @@ def run():
                                                      value=5, step=5)
                 hdbscan_min_samples = st.slider("Min Samples", 1, 100, key="hdbscan_min_samples",
                                                 value=1, step=1)
+
+            # Topic modeling settings
+            num_topic_keywords = st.slider("# of keywords per cluster (topic)", 1, 20, key="num_topic_keywords", value=10, step=1)
+            coherence_metrics = st.multiselect(
+                "Topic Coherence Metrics", list(COHERENCE_MEASURES), default=["u_mass", "c_w2v"], key="coherence_metrics"
+            )
             
-
-
     # Step 2: Execute the query and compute aspect similarities
     # (results are cached for unchanged query and aspect parameters)
     if not date_range:
@@ -209,8 +214,8 @@ def run():
     cluster_keywords = None
     if len(cluster_assignments) > 0:
         filtered_tweet_responses = [tweet_text[1] for tweet_text in filtered_tweet_text]
-        cluster_keywords, cluster_tfidf_scores = get_cluster_keywords(
-            filtered_tweet_responses, cluster_assignments, num_topic_keywords
+        cluster_keywords, cluster_tfidf_scores, cluster_coherence = get_cluster_keywords(
+            filtered_tweet_responses, cluster_assignments, num_topic_keywords, coherence_metrics
         )
     
     # Step 6: Run linear regression
@@ -252,12 +257,14 @@ def run():
 
     # display topic results
     if cluster_keywords is not None:
-        topics_df, avg_tfidf_df = build_topic_dataframes(cluster_assignments, cluster_keywords, cluster_tfidf_scores)
+        topics_df, metrics_df = build_topic_dataframes(
+            cluster_assignments, cluster_keywords, cluster_tfidf_scores, cluster_coherence
+        )
         with st.expander(f"Results ({n_results} response topics)", expanded=True):
             st.write("Topics:")
             st.dataframe(topics_df)
-            st.write("Average TF-IDF scores (coherence metric?):")
-            st.dataframe(avg_tfidf_df)
+            st.write("Metrics:")
+            st.dataframe(metrics_df)
 
     # display k-means elbow plot
     if elbow_plot is not None:
