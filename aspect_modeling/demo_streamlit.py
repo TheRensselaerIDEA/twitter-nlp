@@ -158,7 +158,7 @@ def run():
             hdbscan_min_cluster_size = None
             hdbscan_min_samples = None
             if clustering_type == "kmeans":
-                kmeans_n_clusters = st.slider("# of Clusters (set 0 to detect)", 0, 30, key="kmeans_n_clusters", 
+                kmeans_n_clusters = st.slider("Num. Clusters (set 0 to detect)", 0, 30, key="kmeans_n_clusters", 
                                               value=5, step=1)
             else:
                 hdbscan_min_cluster_size = st.slider("Min Cluster Size", 5, 100, key="hdbscan_min_cluster_size", 
@@ -167,7 +167,7 @@ def run():
                                                 value=1, step=1)
 
             # Topic modeling settings
-            num_topic_keywords = st.slider("# of keywords per cluster (topic)", 1, 20, key="num_topic_keywords", value=10, step=1)
+            num_topic_keywords = st.slider("Num. keywords per cluster (topic)", 1, 20, key="num_topic_keywords", value=10, step=1)
             coherence_metrics = st.multiselect(
                 "Topic Coherence Metrics", list(COHERENCE_MEASURES), default=["u_mass", "c_w2v"], key="coherence_metrics"
             )
