@@ -57,7 +57,7 @@ es_indices = {
     }
 }
 
-@st.cache(allow_output_mutation=True, max_entries=2)
+@st.cache_resource(max_entries=2)
 def get_embedding_model(embedding_type):
     if embedding_type == "sbert":
         embedding_model = SentenceTransformer("all-MiniLM-L12-v2")
@@ -71,7 +71,7 @@ def get_embedding_model(embedding_type):
         raise ValueError(f"Unsupported embedding type '{embedding_type}'.")
     return embedding_model
 
-@st.cache(allow_output_mutation=True, max_entries=1)
+@st.cache_data(max_entries=1)
 def get_query_results(es_index, embedding_type, query, date_range, max_results):
     embedding_model = get_embedding_model(embedding_type)
     query_results = asp.run_query(
@@ -84,29 +84,29 @@ def get_query_results(es_index, embedding_type, query, date_range, max_results):
         max_results=max_results)
     return query_results
 
-@st.cache(allow_output_mutation=True)
+@st.cache_data
 def get_date_boundaries(es_index, embedding_type):
     date_boundaries = asp.get_index_date_boundaries(es_uri, es_index, embedding_type)
     return date_boundaries
 
-@st.cache(allow_output_mutation=True, max_entries=1)
+@st.cache_data(max_entries=1)
 def get_aspect_similarities(tweet_embeddings, embedding_type, aspects):
     embedding_model = get_embedding_model(embedding_type)
     aspect_similarities = asp.compute_aspect_similarities(
         tweet_embeddings, embedding_type, embedding_model, aspects)
     return aspect_similarities
 
-@st.cache(allow_output_mutation=True, max_entries=1)
+@st.cache_data(max_entries=1)
 def get_cluster_assignments(*args, **kwargs):
     cluster_assignments = asp.cluster_vectors(*args, **kwargs)
     return cluster_assignments
 
-@st.cache(allow_output_mutation=True, max_entries=1)
+@st.cache_data(max_entries=1)
 def get_embedding_display_proj(*args, **kwargs):
     proj = asp.compute_embedding_display_proj(*args, **kwargs)
     return proj
 
-@st.cache(allow_output_mutation=True, max_entries=1)
+@st.cache_data(max_entries=1)
 def get_cluster_keywords(*args, **kwargs):
     keywords = asp.compute_cluster_keywords(*args, **kwargs)
     return keywords
