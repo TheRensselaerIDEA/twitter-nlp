@@ -50,6 +50,11 @@ es_indices = {
         "example_query": "US should arm Ukraine with fighter jets.",
         "example_aspects": ["risks of getting involved", "Russian war crimes"]
     },
+    "ukraine-data-lite-mar23": {
+        "embedding_type": "sbert",
+        "example_query": "US should arm Ukraine with fighter jets.",
+        "example_aspects": ["risks of getting involved", "Russian war crimes"]
+    },
     "vaccine-data-pubhealth-quotes": {
         "embedding_type": "sbert",
         "example_query": "Pregnant women should get vaccinated.",
