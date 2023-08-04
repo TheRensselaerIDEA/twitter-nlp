@@ -1,0 +1,65 @@
+---
+title: "DARL Final Notebook"
+author: "Brandyn Sigouin"
+date: "16 December 2020"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+subtitle: "Covid Twitter"
+---
+## Submission Links
+Project Github repo: https://github.com/TheRensselaerIDEA/COVID-Twitter
+
+Github ID: Siggy37
+
+RCS ID: Sigoub
+
+Contributed Branches: sigoub/twitter-api, sigoub/twitter-test, sigoub/get-data-script, sigoub/data-update, sigoub/data-visualize, sigoub/data-viz
+  
+## Overview and Problems Tackled
+* This semester, main contributions involve dataset collection and dataset analytics. As the project is oriented towards anaylizing tweets and their responses, my job was to scope our dataset to relevent tweeters while retrieving new tweets as necessary from the Twitter API to complete the tweet-response pair representations in elasticsearch. This work established the data from which COVID-Twitter's results are derived.
+
+* My contributions provided the tweet-response data that is fed into our DialoGPT and BERT models for analyzing public response towards public health authorities in respect to COVID-19.
+
+* Utilized the Tweepy python library to interface with the Twitter Statuses API. Used existing data points in our elasticsearch index to find the ids of the original tweets and pull those tweets down from the Twitter API. Each call created a tweet-response pair that our DialoGPT and BERT models can use to analyze tweets. This method created roughly 40,000 new data points for our models. 
+
+## Data Description
+* Elasticsearch index is called coronavirus-data-pubhealth-quotes.
+
+* The data points that I personally retrieved were structured as Tweet-Response pairs. Within our new index, there also exists data points that are structured as Tweet-Quoted_Tweet pairs. The data points with quoted tweets are older data points that existed prior to my work with Tweepy. The new data points that I collected are a better representation of the relationship that we want to capture with generative modeling as direct replies are real replies, whereas quoted tweets are more of a context for an independent opinion and isn't necessarily a reply. 
+
+## Results
+
+* Collected a dataset of 78,147 data points consisting of 83,874 original tweets and their responses.
+
+* NOTE: When referring to a "data point" in our dataset, this means one singleton instance from our elasticsearch index. Each "data point" actually contains two tweets. An original tweet plus a direct reply or a quote tweet.
+
+* Over 40,000 brand new data points pulled directly from the Twitter API
+
+* Discovered that our dataset (on average) consists of 1 original Tweet to every 9 replies. This insight demonstrates the increased technical challenge associated with training a natural language generation model. Tradionally, machine learning models are a many-to-one problem where many data points map to a small set of classes. These results show that our dataset and our problem contradicts this as we have roughly 9 times more "classes" or targets that we do input data points. Thus, tasks such as fine-tuning DialoGPT on twitter data presents a unique difficulty as the model will have to generalize across a distribution of target responses instead of a single class.
+
+* Below are some visualizations capturing this one to many relationship which exists in our dataset:
+
+![](../tools/twitter-api/Original Tweet Distribution.png)
+
+![](../tools/twitter-api/Reply Distribution.png)
+
+* As you can see, for the WHO alone the relationship is about 5,000 tweets to 45,000 replies.
+
+* Also discovered that the top 10 screen names from public health organizations present in our dataset are 'WHO', 'CDCgov', 'CDCDirector', 'CDCemergency', 'ECDC_Outbreaks', 'ECDC_EU', 'CDCEnvironment', 'CDCFlu', 'CDCTobaccoFree', 'CDC_Cancer'. The tweets produced by these screen names and their interactions (replies and quotes) account for roughly 91% of the data.
+
+## Summary
+
+* My contributions to COVID-Twitter this semester are entirely dataset-involved. I personally contributed roughly 40,000 new datapoints to our elasticsearch index and established all data in the form tweet-reply. This contribution enabled the robustness of our model in respect to analyzing public responses to COVID-related tweets from major public health authorities. 
+
+* While it may appear that there is not much substance here, there were many high-consequence challenges that I faced while processing the data as it flowed in from the Twitter API. There were often many inconsistancies in the format of the incoming data such as order of data and missing information from random tweets (this could occur if a tweet was no longer public). Development of the data retrieval and formatting logic was an iterative process as I had to be extremely careful not to incorrectly process the data. Large scale data processing can be tricky as there is a high probability that some of the data is corrupted. I had to be extremely careful with such corrupted data to avoid any ripple that could cause corruption throughout the dataset. For example, if a request went to the Twitter API for 100 tweets and it only returned 98, then some data was lost and I had to ensure that the Tweet response-pairs still got properly aligned in this case as there was no longer a 1-1 relationship in the returned data. By taking a careful, iterative approach I ensured that the data we were going to feed into our analysis tools like DialoGPT properly represented the relationships that we were hoping to capture. This proved to be a success and worth the effort as all 40,000 new data points had been properly aligned and thus should not present potential for error during analysis. Nobody wants to spend hours debugging DialoGPT to discover that the error is in the data, not the model. The methodology that I developed for processing and packaging the Twitter Data minimized the likelyhood of such an occurance.
+
+## References
+
+1. Sanders, A., White, R., Severson, L., Ma, R., McQueen, R., Paulo, H. C. A., ... & Bennett, K. P. (2020). Unmasking the conversation on masks: Natural language processing for topical sentiment analysis of COVID-19 Twitter discourse. medRxiv 2020.08.28.20183863.
+
+## Appendix
+
+* Complete list of public health screen names used to retrieve data: ESCAIDE, ECDCPHT, ecdc_tb, ECDC_VPD, ECDC_HIVAIDS, ecdc_flu, ECDC_Outbreaks, ecdc_eu, WHO, cdcgov, cdcdirector, CDC_eHealth, CDCespanol, BRFSS, CDCasthma, CDC_DASH, CDCDiabetes, cdc_drh, CDCEnvironment, CDC_Cancer, CDC_EIDjournal, CDC_EPHTracking, CDC_Genomics, CDC_HIVAIDS, CDCMicrobeNet, CDC_NCBDDD, CDC_NCEZID, CDC_TB, CDC_AMD, CDCChronic, CDCEmergency, CDCFlu, CDCGlobal, CDCGreenHealthy, CDCHaiti, CDCHeart_Stroke, US_CDCIndia, CDChep, CDCInjury, CDCKenya, CDCMakeHealthEZ, CDCMMWR, CDCNPIN, CDCObesity, cdcpcd, CDCRwanda, CDCsouthafrica, CDCSTD, CDCTobaccofree, CDCTravel, CPSTF, DrDeanCDC, DrKhabbazCDC, DrMartinCDC, DrMerminCDC, DrNancyM_CDC, DrReddCDC, InjectionSafety, MillionHeartsUS, NCHStats, niosh, NIOSHMining, NIOSH_MVSafety, NIOSH_NPPTL, NIOSH_TWH, nioshbreathe, NIOSHConstruct, NIOSHespanol, NIOSHFACE, nioshfishing, nioshnoise, NIOSHoilandgas, WTCHealthPrgm

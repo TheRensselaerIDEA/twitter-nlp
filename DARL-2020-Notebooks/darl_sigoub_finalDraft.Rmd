@@ -1,0 +1,34 @@
+---
+title: "DARL Final Notebook Draft"
+author: "Brandyn Sigouin"
+date: "7 December 2020"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+subtitle: "Covid Twitter"
+---
+## Submission Links
+Project Github repo: https://github.com/TheRensselaerIDEA/COVID-Twitter
+
+Github ID: Siggy37
+
+RCS ID: Sigoub
+
+Contributed Branches: 
+  * sigoub/data-visualize
+  
+## Overview and Problems Tackled
+This semester, main contributions involve dataset collection and dataset analytics. As the project is oriented towards anaylizing tweets and their responses, my job was to scope our dataset to relevent tweeters while retrieving new tweets as necessary from the Twitter API to complete the tweet-response pair representations in elasticsearch.
+
+## Data Descrition
+
+## Results
+
+## Summary
+
+## References
+
+## Appendix
+
